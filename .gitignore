@@ -35,3 +35,8 @@ inc/
 /MANIFEST.bak
 /pm_to_blib
 /*.zip
+
+# Experimental
+Linux/unpacker/show_stat_struct
+Linux/unpacker/show_statvfs_struct
+Linux/unpacker/show_timex_struct

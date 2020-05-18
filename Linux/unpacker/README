@@ -1,0 +1,4 @@
+Generate Perl "unpack" strings for a range of syscall structs.
+
+Firstly, stat, lstat, stat64, lstat64, and fstatat; these use structs
+which depend strongly on the libc version and the target architecture.
