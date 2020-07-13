@@ -21,11 +21,13 @@ package Linux::Syscalls;
 use Config;
 
 BEGIN {
-use POSIX;      # find out if we clash with anything except the following
+                # When in checking mode, import everything from POSIX, to find
+                # out whether we clash with anything.
+use POSIX ();   POSIX->import() if $^C && $^W;
 use Errno ();   Errno->import('ENOSYS') if ! exists &ENOSYS;
                 Errno->import('EINVAL') if ! exists &EINVAL;
 use Fcntl ();   Fcntl->import('S_IFMT') if ! exists &S_IFMT;
-use POSIX ();   POSIX->import('uname' ) if ! exists &uname;
+                POSIX->import('uname' ) if ! exists &uname;
 }
 
 #use Scalar::Util 'blessed';
@@ -86,13 +88,16 @@ _export_tag qw{ _at AT_ =>
 # "not zero" will say whether subsecond timestamps are available, and the value
 # can also be used for %.*f formatting.
 #
-# Note that we provide both "µs" and "μs" symbols (which are homographs in most
-# fonts), because although 'µ' (\u00b5) is extremely common in existing
-# codebases, it has been deprecated by the Unicode Consortium in favour of 'μ'
-# (\u03bc).
+# We provide both "µs" and "μs" symbols (which are homographs in most fonts),
+# because Unicode release 6 deprecated 'µ' (\u00b5) in favour of 'μ' (\u03bc),
+# despite the former being the only codepoint provided by X11's and Windows's
+# "international" keyboard layouts, and therefore being the only codepoint used
+# in existing codebases.  We provide both to simplify editing of "old" and
+# "new" codebases, using "old" and "new" keyboard layouts.
 
 use constant {
     TIMERES_SECOND      =>  0,  res_s   =>  0,
+    TIMERES_DECISECOND  =>  2,  res_ds  =>  1,  # for human-scale delays
     TIMERES_CENTISECOND =>  2,  res_cs  =>  2,  # for TTY timers
     TIMERES_MILLISECOND =>  3,  res_ms  =>  3,  # unused, filler only
     TIMERES_MICROSECOND =>  6,  res_µs  =>  6,  res_μs  =>  6,
@@ -112,7 +117,8 @@ _export_tag qw{ res_ =>
 ################################################################################
 
 # FROM /usr/include/*-linux-gnu/bits/fcntl-linux.h
-use constant {
+BEGIN {
+my %o_const = (
 
     O_RDONLY    =>   0x000000,  #
     O_WRONLY    =>   0x000001,  #
@@ -140,7 +146,11 @@ use constant {
 
 #   O_FSYNC     =>   0x101000,  # == O_SYNC  Synchronize data & metadata
 
-};
+);
+    exists &$_ and delete $o_const{$_} and warn "Already have $_ (from POSIX)\n" for keys %o_const;
+    *O_NONBLOCK = *O_NDELAY{CODE}, delete $o_const{O_NONBLOCK} if ! exists &O_NONBLOCK && exists &O_NDELAY;
+    constant->import(\%o_const);
+}
 
 _export_tag qw{ o_ =>
     O_RDONLY O_WRONLY O_RDWR O_ACCMODE O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND
