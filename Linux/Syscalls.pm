@@ -25,7 +25,7 @@ BEGIN {
                 # out whether we clash with anything.
 use POSIX ();   POSIX->import() if $^C && $^W;
 use Errno ();   Errno->import('ENOSYS') if ! exists &ENOSYS;
-                Errno->import('EINVAL') if ! exists &EINVAL;
+                Errno->import('EBADF')  if ! exists &EBADF;
 use Fcntl ();   Fcntl->import('S_IFMT') if ! exists &S_IFMT;
                 POSIX->import('uname' ) if ! exists &uname;
 }
@@ -274,7 +274,8 @@ sub _resolve_dir_fd(\$) {
             return 1;
         }
     }
-    $! = EINVAL;
+    # It's not a valid filedescriptor
+    $! = EBADF;
     $$dir_fd = undef;
     return;
 }
