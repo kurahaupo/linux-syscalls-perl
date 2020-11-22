@@ -97,7 +97,7 @@ _export_tag qw{ _at AT_ =>
 
 use constant {
     TIMERES_SECOND      =>  0,  res_s   =>  0,
-    TIMERES_DECISECOND  =>  2,  res_ds  =>  1,  # for human-scale delays
+    TIMERES_DECISECOND  =>  1,  res_ds  =>  1,  # for human-scale delays
     TIMERES_CENTISECOND =>  2,  res_cs  =>  2,  # for TTY timers
     TIMERES_MILLISECOND =>  3,  res_ms  =>  3,  # unused, filler only
     TIMERES_MICROSECOND =>  6,  res_µs  =>  6,  res_μs  =>  6,
@@ -106,12 +106,12 @@ use constant {
 };
 
 _export_tag qw{ timeres_ =>
-    TIMERES_SECOND TIMERES_CENTISECOND TIMERES_MILLISECOND
+    TIMERES_SECOND TIMERES_DECISECOND TIMERES_CENTISECOND TIMERES_MILLISECOND
     TIMERES_MICROSECOND TIMERES_NANOSECOND TIMERES_PICOSECOND
 };
 
 _export_tag qw{ res_ =>
-    res_s res_cs res_ms res_µs res_μs res_ns res_ps
+    res_s res_ds res_cs res_ms res_µs res_μs res_ns res_ps
 };
 
 ################################################################################
