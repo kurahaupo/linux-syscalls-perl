@@ -147,7 +147,7 @@ my %o_const = (
 #   O_FSYNC     =>   0x101000,  # == O_SYNC  Synchronize data & metadata
 
 );
-    exists &$_ and delete $o_const{$_} and warn "Already have $_ (from POSIX)\n" for keys %o_const;
+    exists &$_ and delete $o_const{$_} and warn "Already have $_ (probably from POSIX)\n" for keys %o_const;
     *O_NONBLOCK = *O_NDELAY{CODE}, delete $o_const{O_NONBLOCK} if ! exists &O_NONBLOCK && exists &O_NDELAY;
     constant->import(\%o_const);
 }
