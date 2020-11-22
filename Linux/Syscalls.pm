@@ -2133,6 +2133,173 @@ sub lutimes($$$) {
     return &futimesat(undef, @_, AT_SYMLINK_NOFOLLOW);  # bypass parameter checking
 }
 
+################################################################################
+
+#
+# Exit
+#
+# Invoke the exit syscall directly, with no cleanup.
+# This may allow a process to return an exit status wider than 8 bits.
+#
+
+_export_tag qw{ proc => Exit };
+sub Exit($) {
+    my ($status) = @_;
+    state $syscall_id = _get_syscall_id 'exit_group';
+    return 0 == syscall $syscall_id, $status;
+}
+
+#
+# waitid
+#
+# Implement the POSIX waitid call and the Linux-specific extension
+# (which takes an additional parameter that has a stuct times to
+# record the time usage of any reaped processses). This extension
+# does not have any official name, so I simply call it "waitid5",
+# since the syscall takes 5 parameters, analoguously to wait3 & wait4.
+#
+# Note that unlike the C version, values are returned, rather than
+# modifying parameters through pointers.
+#
+
+BEGIN {
+my %o_const = (
+
+    # Values taken from /usr/include/asm-generic/siginfo.h
+    CLD_EXITED      =>  1, #   Child has exited.
+    CLD_KILLED      =>  2, #   Child was killed.
+    CLD_DUMPED      =>  3, #   Child was killed and dumped core.
+    CLD_TRAPPED     =>  4, #   Traced child has trapped (for debugging).
+    CLD_STOPPED     =>  5, #   Child has stopped (and can be resumed).
+    CLD_CONTINUED   =>  6, #   Stopped child has continued.
+
+    # Values taken from /usr/include/linux/wait.h
+    WNOHANG         =>  0x00000001,
+    WUNTRACED       =>  0x00000002, # alias for WSTOPPED
+    WSTOPPED        =>  0x00000002, #WUNTRACED
+    WEXITED         =>  0x00000004,
+    WCONTINUED      =>  0x00000008,
+    WNOWAIT         =>  0x01000000, # Don't reap, just poll status.
+    WNOTHREAD       =>  0x20000000, # (__WNOTHREAD) Don't wait on children of other threads in this group
+    WALLCHILDREN    =>  0x40000000, # (__WALL) Wait on all children, regardless of type
+    WCLONE          =>  0x80000000, # (__WCLONE) Wait only on non-SIGCHLD children
+
+    # Values taken from /usr/include/bits/waitflags.h
+    P_ALL           =>  0,         # Any child (ignoring ID)
+    P_PID           =>  1,         # A specific child by PID
+    P_PGID          =>  2,         # Any child within a process group, by PGID
+
+);
+    exists &$_ and delete $o_const{$_} and warn "Already have $_ (probably from POSIX)\n" for keys %o_const;
+    *O_NONBLOCK = *O_NDELAY{CODE}, delete $o_const{O_NONBLOCK} if ! exists &O_NONBLOCK && exists &O_NDELAY;
+    constant->import(\%o_const);
+};
+
+_export_tag qw{ proc si_codes =>
+                    CLD_EXITED
+                    CLD_KILLED
+                    CLD_DUMPED
+                    CLD_TRAPPED
+                    CLD_STOPPED
+                    CLD_CONTINUED };
+
+_export_tag qw{ proc wait_id_types =>
+                    P_ALL
+                    P_PID
+                    P_PGID };
+
+_export_tag qw{ proc wait_options =>
+                    WNOHANG
+                    WUNTRACED
+                    WSTOPPED
+                    WEXITED
+                    WCONTINUED
+                    WNOWAIT
+                    WNOTHREAD
+                    WALLCHILDREN
+                    WCLONE };
+_export_tag qw{ proc => waitid waitid5 Exit };
+
+# waitid returns a 5-element array
+
+sub waitid($$$) {
+    push @_, 0, 0;
+    goto &waitid_;
+}
+
+# waitid5 returns a 21-elment array, starting with the same 5 as waitid
+
+sub waitid5($$$) {
+    my ($id_type, $id, $options) = @_;
+    push @_, 1, 1;
+    goto &waitid_;
+}
+
+# _unpack_siginfo reurns a 5-element array
+
+sub _unpack_siginfo($) {
+    #my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = unpack 'Q5', $_[0];
+    #return $si_pid, $si_uid, $si_signo, $si_status, $si_code;
+    return unpack 'Q5', $_[0];
+}
+
+# _unpack_rusage returns a 16-element array, starting with the utime & stime as
+# floating-point seconds.
+
+sub _unpack_rusage($) {
+    my ($ru_utime, $ru_utime_µs, $ru_stime, $ru_stime_µs, $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+        $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+        $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw) = unpack 'Q18', shift;
+    return  _timeval_to_seconds($ru_utime, $ru_utime_µs),
+            _timeval_to_seconds($ru_stime, $ru_stime_µs),
+            $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+            $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+            $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
+}
+
+#use Data::Dumper;
+
+
+_export_ok 'waitid_';
+sub waitid_($$$$$) {
+    my ($id_type, $id, $options, $record_rusage, $record_siginfo) = @_;
+    #warn "WAITID: ".Dumper(\@_);
+    $id_type |= 0;
+    $id |= 0;
+    $options |= 0;
+    my $siginfo = pack 'Q32', (0) x 32;
+    my $rusage = pack 'Q32', (0) x 32;
+    state $syscall_id = _get_syscall_id 'waitid';
+    warn sprintf "Invoking waitid [syscall %d]\n\t type=%d id=%d\n\t rec_si=%s (%s)\n\t options=%#x\n\t rec_ru=%s (%s)\n",
+            $syscall_id,
+            $id_type,
+            $id,
+            $record_siginfo // '(undef)', join(' ', unpack 'Q*', $siginfo),
+            $options,
+            $record_rusage // '(undef)', join(' ', unpack 'Q*', $rusage),
+            ;
+    $! = 0;
+    my $rpid = syscall $syscall_id,
+                        $id_type,
+                        $id,
+                        $record_siginfo ? $siginfo : undef,
+                        $options,
+                        $record_rusage ? $rusage : undef;
+    warn "waitid returned $rpid $!\n";
+    #$rpid == -1 and return;
+    my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = _unpack_siginfo $siginfo;
+    #return $si_pid if !wantarray;
+    return $si_pid,
+           $si_uid,
+           $si_signo,
+           $si_status,
+           $si_code,
+           $record_rusage ? _unpack_rusage $rusage
+                          : ();
+}
+
+################################################################################
+
 #
 # Emulate a hangup on this process's controlling terminal, which should result
 # in all processes in this session being sent SIGHUP when they attempt to
