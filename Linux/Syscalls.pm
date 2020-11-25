@@ -10,7 +10,7 @@
 # have them built-in.
 #
 
-use 5.014;
+use 5.010;
 use utf8;       # allow $µs symbol
 use strict;
 use warnings;
@@ -27,6 +27,8 @@ use POSIX ();   POSIX->import() if $^C && $^W;
 use Errno ();   Errno->import('ENOSYS') if ! exists &ENOSYS;
                 Errno->import('EBADF')  if ! exists &EBADF;
 use Fcntl ();   Fcntl->import('S_IFMT') if ! exists &S_IFMT;
+                Fcntl->import('S_IFBLK') if ! exists &S_IFBLK;
+                Fcntl->import('S_IFCHR') if ! exists &S_IFCHR;
                 POSIX->import('uname' ) if ! exists &uname;
 }
 
@@ -250,33 +252,33 @@ sub _seconds_to_timespec($) {
 sub _resolve_dir_fd(\$) {
     my ($dir_fd) = @_;
     my $D = $$dir_fd;
-    if ( ! defined $D ) {
-        $$dir_fd = AT_FDCWD;
-        #warn "fileno of undef is $$dir_fd\n";
-        return 1;
-    }
-    eval {
-        $$dir_fd = fileno $D;
-        #warn "fileno of $D is $$dir_fd\n";
-        return 1;
-    };
-    eval {
-        $$dir_fd = $D->fileno;
-        #warn "$D"."->fileno is $$dir_fd\n";
-        return 1;
-    };
-    if ( ! ref $D ) {
-        if ( $D =~ /^\.?$/ ) {
-            $$dir_fd = AT_FDCWD;
-            #warn "fileno of fake $D is $$dir_fd\n";
+    if ( ref $D ) {
+        if ( defined ( my $DD = eval { fileno $D } ) ) {
+            # filehandle or glob ref
+            $$dir_fd = $DD;
+            return 1;
         }
-        if ( $D =~ /^-?\d\+$/ ) {
+        if ( defined ( my $DD = eval { $D->fileno } ) ) {
+            # other object that implements fileno
+            $$dir_fd = $DD;
+            return 1;
+        }
+    } else {
+        if ( ! defined $D || $D eq '' || $D eq '.' ) {
+            # Recommend undef to refer to AT_FDCWD.
+            # For convenience, "" and "." also work.
+            $$dir_fd = AT_FDCWD;
+            return 1;
+        }
+        if ( $D =~ /^\d\+$/ ) {
+            # It's a non-negative integer representable as an IV.
+            $$dir_fd = $D;
             return 1;
         }
     }
     # It's not a valid filedescriptor
-    $! = EBADF;
     $$dir_fd = undef;
+    $! = EBADF;
     return;
 }
 
@@ -1827,7 +1829,7 @@ sub linkat($$$$;$) {
 #
 #     STRUCT              SIZE    sys/stat.h          asm/stat.h  ARCH          UNPACK
 #     __old_kernel_stat   32      -                   asm         any           my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime)                                                            = unpack 'S7x2L4', $in;
-#     stat                64      -                   asm         i386_32       my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$blksize,$blocks,$atime,$atime_nsec,$mtime,$mtime_nsec,$ctime,$ctime_nsec)       = unpack 'L2S4L10', $in;
+#     stat                64      -                   asm         i386_32       my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$blksize,$blocks,$atime,$atime_nsec,$mtime,$mtime_nsec,$ctime,$ctime_nsec)       = unpack 'L2S4L4l6', $in;
 #     stat                80      -                   asm         x86_64_x32    my ($dev,$ino,$nlink,$mode,$uid,$gid,$rdev,$size,$blksize,$blocks,$atime,$atime_nsec,$mtime,$mtime_nsec,$ctime,$ctime_nsec)       = unpack 'L6x4L10', $in;
 #     stat                88      yes                 -           i386_32       my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$blksize,$blocks,$atime,$atime_nsec,$mtime,$mtime_nsec,$ctime,$ctime_nsec)       = unpack 'Qx4L5Qx4L9', $in;
 #     stat64              96      _LARGFILE64_SOURCE  yes         i386_32       my ($dev,$jno,$mode,$nlink,$uid,$gid,$rdev,$size,$blksize,$blocks,$atime,$atime_nsec,$mtime,$mtime_nsec,$ctime,$ctime_nsec,$ino)  = unpack 'Qx4L5Qx4QLQL6Q', $in;
@@ -1875,10 +1877,10 @@ sub _unpack_stat {
     $unpacking ||= sub {
         my ($os, undef, undef, undef, $hw, undef) = uname;
         if ($os eq 'Linux') {
-            return 1+$m32 if $hw eq 'x86_64';
-            return 3 if $hw eq 'x86_32' || $hw eq 'i386';
+            return 1+$m32 if $hw eq 'x86_64' || $hw eq 'i686';
+            return 3      if $hw eq 'x86_32' || $hw eq 'i386';
         }
-        warn "CANNOT UNPACK on this os / this hw\n" if $^C || $^W;
+        warn "CANNOT UNPACK on this OS ($os) and HW ($hw)\n" if $^C || $^W;
         return 0;
     }->() or return;
 
@@ -1891,10 +1893,26 @@ sub _unpack_stat {
          $rdev, $size, $blksize, $blocks,
          $atime, $atime_ns, $mtime, $mtime_ns, $ctime, $ctime_ns,
          @unused) = @unpacked;
-         $has_subsecond_resolution = 1;  # Has nanosecond-resolution timestamps.
+         $has_subsecond_resolution = TIMERES_NANOSECOND;    # Has nanosecond-resolution timestamps.
     } elsif ($unpacking == 2) {
-        # x86_32
-        die "Unimplemented";
+        # compiled with -mx32 ⇒ 32-bit mode on 64-bit CPU
+        # Buffer is filled to 64 bytes (128 nybbles)
+        # struct stat from asm/stat.h on x86_32
+
+        state $seen_subsecond_resolution;
+
+        @unpacked = unpack "L2S4L4l6"."l*", $buffer;
+
+        ( $dev, $ino,
+          $mode, $nlink, $uid, $gid,
+          $rdev, $size, $blksize, $blocks,
+          $atime, $atime_ns, $mtime, $mtime_ns, $ctime, $ctime_ns,
+          @unused ) = @unpacked;
+
+        # Syscall has room to report on subsecond resolution, but often the
+        # filesystem on old hosts doesn't have it turned on.
+        $seen_subsecond_resolution ||= $atime_ns || $mtime_ns || $ctime_ns;
+         $has_subsecond_resolution = $seen_subsecond_resolution ? TIMERES_NANOSECOND : TIMERES_SECOND;    # Has no sub-second-resolution timestamps.
     } elsif ($unpacking == 3) {
         # i386
         die "Unimplemented";
