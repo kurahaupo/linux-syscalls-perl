@@ -9,6 +9,8 @@ my $num_errors = 0;
 use Fcntl ();
 
 my @list = qw(
+    O_RDONLY O_WRONLY O_RDWR
+
     O_ACCMODE
     O_APPEND
     O_ASYNC
@@ -23,40 +25,41 @@ my @list = qw(
     O_NOCTTY
     O_NOFOLLOW
     O_NONBLOCK
-    O_RDONLY
-    O_RDWR
     O_RSYNC
     O_SYNC
     O_TRUNC
-    O_WRONLY
 );
 
 use Linux::Syscalls;
 
 for my $t (qw(
+    O_RDONLY
+    O_WRONLY
+    O_RDWR
 
     O_ACCMODE
-    O_APPEND
-    O_ASYNC
     O_CREAT
+    O_EXCL
+    O_NOCTTY
+    O_TRUNC
+
+    O_APPEND
+    O_NDELAY
+    O_NONBLOCK
+
+    O_DSYNC
+    O_ASYNC
+
     O_DIRECT
     O_LARGEFILE
     O_DIRECTORY
-    O_DSYNC
-    O_EXCL
-    O_NDELAY
-    O_NOATIME
-    O_NOCTTY
     O_NOFOLLOW
-    O_NONBLOCK
-    O_RDONLY
-    O_RDWR
+
+    O_NOATIME
+    O_CLOEXEC
     O_RSYNC
     O_SYNC
-    O_TRUNC
-    O_WRONLY
 
-    O_CLOEXEC
     O_PATH
 
     O_FSYNC
