@@ -1937,9 +1937,7 @@ sub lstatns($) {
     $path .= "";
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'lstat';
-    $! = 0;
-    my $r = syscall $syscall_id, $path, $buffer;
-    $! == 0 or return;
+    0 == syscall $syscall_id, $path, $buffer or return;
     return _unpack_stat($buffer);
 }
 
@@ -1962,9 +1960,7 @@ sub fstatat($$;$) {
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'newfstatat';
     #warn "syscall=$syscall_id, dir_fd=$dir_fd, path=$path, buffer=".length($buffer)."-bytes, flags=$flags\n";
-    $! = 0;
-    my $r = syscall $syscall_id, $dir_fd, $path, $buffer, $flags;
-    $! == 0 or return;
+    0 == syscall $syscall_id, $dir_fd, $path, $buffer, $flags or return;
     return _unpack_stat($buffer);
 }
 
@@ -2031,9 +2027,8 @@ sub readlinkat($$) {
     $path .= "";
     my $buffer = "\xa5" x 8192;
     state $syscall_id = _get_syscall_id 'readlinkat';
-    $! = 0;
     my $r = syscall $syscall_id, $dir_fd, $path, $buffer, length($buffer);
-    $! == 0 or return;
+    $r > 0 or return;
     return substr $buffer, 0, $r;
 }
 
