@@ -233,10 +233,10 @@ sub _seconds_to_timespec($) {
 # Standardized argument handling:
 #
 # * when dir_fd is:
-#     . undef or empty or ".", use AT_FDCWD; or
-#     . a glob or filehandle, use the fileno function to get its underlying
+#     - undef or empty or ".", use AT_FDCWD; or
+#     - a glob or filehandle, use the fileno function to get its underlying
 #       filedescriptor number; or
-#     . a blessed reference, use the fileno method to get its underlying
+#     - a blessed reference, use the fileno method to get its underlying
 #       filedescriptor number
 # * make sure the result is a number
 #
@@ -253,25 +253,25 @@ sub _resolve_dir_fd(\$) {
     my ($dir_fd) = @_;
     my $D = $$dir_fd;
     if ( ref $D ) {
+        # Try calling fileno builtin func on an IO::File or GLOB-ref
         if ( defined ( my $DD = eval { fileno $D } ) ) {
             # filehandle or glob ref
             $$dir_fd = $DD;
             return 1;
         }
+        # Try calling fileno method on any object that implements it
         if ( defined ( my $DD = eval { $D->fileno } ) ) {
-            # other object that implements fileno
             $$dir_fd = $DD;
             return 1;
         }
     } else {
+        # undef, '' and '.' refer to current directory
         if ( ! defined $D || $D eq '' || $D eq '.' ) {
-            # Recommend undef to refer to AT_FDCWD.
-            # For convenience, "" and "." also work.
             $$dir_fd = AT_FDCWD;
             return 1;
         }
+        # Keep the input value unchanged if it's an integer
         if ( $D =~ /^\d\+$/ ) {
-            # It's a non-negative integer representable as an IV.
             $$dir_fd = $D;
             return 1;
         }
