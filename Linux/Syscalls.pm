@@ -2281,8 +2281,8 @@ sub waitid_($$$$$) {
     $id_type |= 0;
     $id |= 0;
     $options |= 0;
-    my $siginfo = pack 'Q32', (0) x 32;
-    my $rusage = pack 'Q32', (0) x 32;
+    my $siginfo = pack 'Q32', (0) x 5;
+    my $rusage = pack 'Q32', (0) x 18;
     state $syscall_id = _get_syscall_id 'waitid';
     warn sprintf "Invoking waitid [syscall %d]\n\t type=%d id=%d\n\t rec_si=%s (%s)\n\t options=%#x\n\t rec_ru=%s (%s)\n",
             $syscall_id,
