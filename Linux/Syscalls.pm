@@ -2292,7 +2292,6 @@ sub waitid_($$$$$) {
             $options,
             $record_rusage // '(undef)', join(' ', unpack 'Q*', $rusage),
             ;
-    $! = 0;
     my $rpid = syscall $syscall_id,
                         $id_type,
                         $id,
@@ -2300,7 +2299,7 @@ sub waitid_($$$$$) {
                         $options,
                         $record_rusage ? $rusage : undef;
     warn "waitid returned $rpid $!\n";
-    #$rpid == -1 and return;
+    $rpid == -1 and return;
     my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = _unpack_siginfo $siginfo;
     #return $si_pid if !wantarray;
     return $si_pid,
