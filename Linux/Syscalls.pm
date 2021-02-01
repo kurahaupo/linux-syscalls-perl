@@ -2030,7 +2030,7 @@ sub readlinkat($$) {
     _resolve_dir_fd $dir_fd or return;
     $path .= "";
     my $buffer = "\xa5" x 8192;
-    state $syscall_id = _get_syscall_id 'newreadlinkat';
+    state $syscall_id = _get_syscall_id 'readlinkat';
     $! = 0;
     my $r = syscall $syscall_id, $dir_fd, $path, $buffer, length($buffer);
     $! == 0 or return;
