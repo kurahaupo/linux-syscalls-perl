@@ -1596,7 +1596,6 @@ sub adjtimex($;$$$$$$$$$$$$$$$$$$$) {
         $precision, $tolerance, $timenow, $tick, $ppsfreq, $jitter, $shift,
         $stabil, $jitcnt, $calcnt, $errcnt, $stbcnt, $tai) = @_;
 
-    state $syscall_id = _get_syscall_id 'adjtimex';
     my $pf = 'Lx4q4lx4q3q2q3lx4q5lx44';  # pack format; note everything except modes is signed
 
     my $buf = pack $pf,
@@ -1606,6 +1605,7 @@ sub adjtimex($;$$$$$$$$$$$$$$$$$$$) {
         $shift // 0, $stabil // 0, $jitcnt // 0, $calcnt // 0, $errcnt // 0,
         $stbcnt // 0, $tai // 0;
 
+    state $syscall_id = _get_syscall_id 'adjtimex';
     my $ret = syscall $syscall_id, $buf;
 
     ($modes, $offset, $freq, $maxerror, $esterror,
@@ -1629,8 +1629,8 @@ _export_ok 'statvfs';
 
 sub statvfs($) {
     my ($path) = @_;
-    state $syscall_id = _get_syscall_id 'statvfs';
     my $buf = '\x00' x 80;
+    state $syscall_id = _get_syscall_id 'statvfs';
     0 == syscall $syscall_id, $path, $buf or return ();
     return unpack "L2Q6Lx![Q]L2", $buf;
         #      unsigned long  f_bsize;    /* filesystem block size */
@@ -1659,10 +1659,10 @@ use POSIX ();
 eval q{
     sub lchown($$$) {
         my ($path, $uid, $gid) = @_;
-        state $syscall_id = _get_syscall_id "lchown";
         $path .= "";
         ($uid //= -1) += 0;
         ($gid //= -1) += 0;
+        state $syscall_id = _get_syscall_id "lchown";
         return 0 == syscall $syscall_id, $path, $uid, $gid;
     }
 } if ! eval { POSIX->import('lchown'); 1; };
@@ -1683,9 +1683,9 @@ _export_tag qw{ l_ => lchown };
 _export_tag qw{ _at => faccessat };
 sub faccessat($$$;$) {
     my ($dir_fd, $path, $mode, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'faccessat';
     _resolve_fd_path $dir_fd, $path, $flags or return;
     $mode += 0;
+    state $syscall_id = _get_syscall_id 'faccessat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode, $flags;
 }
 
@@ -1712,13 +1712,13 @@ BEGIN { *accessat = \&faccessat; }
 _export_tag qw{ _at => fchmodat };
 sub fchmodat($$$;$) {
     my ($dir_fd, $path, $perm, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'fchmodat';
     _resolve_fd_path $dir_fd, $path, $flags or return;
     if ($flags & AT_SYMLINK_NOFOLLOW) {
         $! = ENOSYS;
         return;
     }
     $perm &= CHMOD_MASK; # force int, and range-limit
+    state $syscall_id = _get_syscall_id 'fchmodat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $perm, $flags;
 }
 
@@ -1742,11 +1742,11 @@ sub lchmod($$) {
 
 #sub lchmod($$) {
 #    my ($path, $perm) = @_;
-#    state $syscall_id = _get_syscall_id 'fchmodat';
 #    my $dir_fd = 0|AT_FDCWD;
 #    $path .= "";    # force string
 #    $perm &= CHMOD_MASK; # force int, and range-limit
 #    my $flags = AT_SYMLINK_NOFOLLOW;
+#    state $syscall_id = _get_syscall_id 'fchmodat';
 #    return 0 == syscall $syscall_id, $dir_fd, $path, $perm, $flags;
 #}
 
@@ -1763,10 +1763,10 @@ sub lchmod($$) {
 _export_tag qw{ _at => fchownat };
 sub fchownat($$$$;$) {
     my ($dir_fd, $path, $uid, $gid, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'fchownat';
     _resolve_fd_path $dir_fd, $path, $flags or return;
     ($uid //= -1) += 0;
     ($gid //= -1) += 0;
+    state $syscall_id = _get_syscall_id 'fchownat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $uid, $gid, $flags;
 }
 
@@ -1784,9 +1784,9 @@ BEGIN { *chownat = \&fchownat; }
 _export_tag qw{ _at => linkat };
 sub linkat($$$$;$) {
     my ($olddir_fd, $oldpath, $newdir_fd, $newpath, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'linkat';
     _resolve_fd_path $olddir_fd, $oldpath, $flags, 0 or return; # without 0 → AT_SYMLINK_NOFOLLOW;
     _resolve_fd_path $newdir_fd, $newpath, $flags, 0 or return; # in effect, AT_SYMLINK_FOLLOW;
+    state $syscall_id = _get_syscall_id 'linkat';
     return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath, $flags;
 }
 
@@ -1934,9 +1934,9 @@ sub _unpack_stat {
 _export_ok qw{ lstatns };
 sub lstatns($) {
     my ($path) = @_;
-    state $syscall_id = _get_syscall_id 'lstat';
     $path .= "";
     my $buffer = "\xa5" x 160;
+    state $syscall_id = _get_syscall_id 'lstat';
     $! = 0;
     my $r = syscall $syscall_id, $path, $buffer;
     $! == 0 or return;
@@ -1958,9 +1958,9 @@ BEGIN {
 _export_tag qw{ _at => fstatat };
 sub fstatat($$;$) {
     my ($dir_fd, $path, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'newfstatat';
     _resolve_fd_path $dir_fd, $path, $flags or return;
     my $buffer = "\xa5" x 160;
+    state $syscall_id = _get_syscall_id 'newfstatat';
     #warn "syscall=$syscall_id, dir_fd=$dir_fd, path=$path, buffer=".length($buffer)."-bytes, flags=$flags\n";
     $! = 0;
     my $r = syscall $syscall_id, $dir_fd, $path, $buffer, $flags;
@@ -1981,10 +1981,10 @@ BEGIN { *statat = \&fstatat; }
 _export_tag qw{ _at => mkdirat };
 sub mkdirat($$$) {
     my ($dir_fd, $path, $mode) = @_;
-    state $syscall_id = _get_syscall_id 'mkdirat';
     _resolve_dir_fd $dir_fd or return;
     $path .= '';
     $mode //= 0777;
+    state $syscall_id = _get_syscall_id 'mkdirat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode;
 }
 
@@ -1998,10 +1998,10 @@ sub mkdirat($$$) {
 _export_tag qw{ _at => mknodat };
 sub mknodat($$$$) {
     my ($dir_fd, $path, $mode, $dev) = @_;
-    state $syscall_id = _get_syscall_id 'mknodat';
     _resolve_dir_fd $dir_fd or return;
     $path .= '';
     $mode //= 0666;
+    state $syscall_id = _get_syscall_id 'mknodat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode, $dev;
 }
 
@@ -2015,9 +2015,9 @@ sub mknodat($$$$) {
 _export_tag qw{ _at => openat };
 sub openat($$;$$) {
     my ($dir_fd, $path, $flags, $mode) = @_;
-    state $syscall_id = _get_syscall_id 'openat';
     _resolve_fd_path $dir_fd, $path, $flags or return;
     $mode //= 0666;
+    state $syscall_id = _get_syscall_id 'openat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $flags, $mode;
 }
 
@@ -2027,10 +2027,10 @@ sub openat($$;$$) {
 _export_tag qw{ _at => readlinkat };
 sub readlinkat($$) {
     my ($dir_fd, $path) = @_;
-    state $syscall_id = _get_syscall_id 'newreadlinkat';
     _resolve_dir_fd $dir_fd or return;
     $path .= "";
     my $buffer = "\xa5" x 8192;
+    state $syscall_id = _get_syscall_id 'newreadlinkat';
     $! = 0;
     my $r = syscall $syscall_id, $dir_fd, $path, $buffer, length($buffer);
     $! == 0 or return;
@@ -2049,11 +2049,11 @@ sub readlinkat($$) {
 _export_tag qw{ _at => renameat };
 sub renameat($$$$) {
     my ($olddir_fd, $oldpath, $newdir_fd, $newpath) = @_;
-    state $syscall_id = _get_syscall_id 'renameat';
     _resolve_dir_fd($olddir_fd) // return;
     $oldpath .= "";
     _resolve_dir_fd($newdir_fd) // return;
     $newpath .= "";
+    state $syscall_id = _get_syscall_id 'renameat';
     return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath;
 }
 
@@ -2069,9 +2069,9 @@ sub renameat($$$$) {
 _export_tag qw{ _at => symlinkat };
 sub symlinkat($$$) {
     my ($oldpath, $newdir_fd, $newpath) = @_;
-    state $syscall_id = _get_syscall_id 'symlinkat';
     $oldpath .= "";
     _resolve_fd_path $newdir_fd, $newpath or return;
+    state $syscall_id = _get_syscall_id 'symlinkat';
     return 0 == syscall $syscall_id, $oldpath, $newdir_fd, $newpath;
 }
 
@@ -2087,9 +2087,9 @@ sub symlinkat($$$) {
 _export_tag qw{ _at => unlinkat };
 sub unlinkat($$$) {
     my ($dir_fd, $path, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'unlinkat';
     _resolve_fd_path $dir_fd, $path, $flags, 0 or return;
     # consider AT_REMOVEDIR|AT_SYMLINK_NOFOLLOW;
+    state $syscall_id = _get_syscall_id 'unlinkat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $flags;
 }
 
@@ -2103,9 +2103,9 @@ sub unlinkat($$$) {
 _export_tag qw{ _at => rmdirat };
 sub rmdirat($$$) {
     my ($dir_fd, $path, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'unlinkat';
     _resolve_fd_path $dir_fd, $path, $flags, AT_SYMLINK_NOFOLLOW or return;
     $flags |= AT_REMOVEDIR;
+    state $syscall_id = _get_syscall_id 'unlinkat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $flags;
 }
 
@@ -2131,9 +2131,9 @@ sub _pack_utimes($$) {
 _export_tag qw{ _at => futimesat };
 sub futimesat($$$$$) {
     my ($dir_fd, $path, $atime, $mtime, $flags) = @_;
-    state $syscall_id = _get_syscall_id 'utimensat';
     _resolve_fd_path $dir_fd, $path, $flags or return;
     my $ts = _pack_utimes $atime, $mtime;
+    state $syscall_id = _get_syscall_id 'utimensat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $ts, $flags;
 }
 
