@@ -2241,7 +2241,7 @@ sub waitid($$$) {
     goto &waitid_;
 }
 
-# waitid5 returns a 21-elment array, starting with the same 5 as waitid
+# waitid5 returns a 21-element array, starting with the same 5 as waitid
 
 sub waitid5($$$) {
     my ($id_type, $id, $options) = @_;
