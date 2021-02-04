@@ -16,13 +16,12 @@ use strict;
 use warnings;
 use feature 'state';
 
-#use Scalar::Util 'blessed';
-
 package Linux::Syscalls;
 
 use Linux::Syscalls::base;
 
 use Config;
+use Scalar::Util qw( looks_like_number blessed );
 
 BEGIN {
                 # When in checking mode, import everything from POSIX, to find
@@ -236,10 +235,10 @@ sub _seconds_to_timespec($) {
 #
 # * when dir_fd is:
 #     - undef or empty or ".", use AT_FDCWD; or
+#     - a blessed reference with a fileno method, use that to get its
+#       underlying filedescriptor number
 #     - a glob or filehandle, use the fileno function to get its underlying
 #       filedescriptor number; or
-#     - a blessed reference, use the fileno method to get its underlying
-#       filedescriptor number
 # * make sure the result is a number
 #
 # * when flags is undef, use the given default, or AT_SYMLINK_NOFOLLOW if no
@@ -251,42 +250,34 @@ sub _seconds_to_timespec($) {
 # * make sure the result is a string
 #
 
-sub _resolve_dir_fd(\$) {
+sub _resolve_dir_fd_path(\$;\$\$$) {
     my ($dir_fd) = @_;
-    my $D = $$dir_fd;
-    if ( ref $D ) {
-        # Try calling fileno builtin func on an IO::File or GLOB-ref
-        if ( defined ( my $DD = eval { fileno $D } ) ) {
-            # filehandle or glob ref
-            $$dir_fd = $DD;
-            return 1;
+    while (1) {
+        # Only once, because it ends with "return"
+        my $D = $$dir_fd;
+        if ( ref $D ) {
+            # Try calling fileno method on any object that implements it
+            eval { $$dir_fd = $D->fileno; 1 } and last;
+        } else {
+            # undef, '' and '.' refer to current directory
+            if ( ! defined $D || $D eq '' || $D eq '.' ) {
+                $$dir_fd = AT_FDCWD;
+                last;
+            }
+            # Keep the input value unchanged if it's an integer
+            looks_like_number $D and last;
         }
-        # Try calling fileno method on any object that implements it
-        if ( defined ( my $DD = eval { $D->fileno } ) ) {
-            $$dir_fd = $DD;
-            return 1;
-        }
-    } else {
-        # undef, '' and '.' refer to current directory
-        if ( ! defined $D || $D eq '' || $D eq '.' ) {
-            $$dir_fd = AT_FDCWD;
-            return 1;
-        }
-        # Keep the input value unchanged if it's an integer
-        if ( $D =~ /^\d\+$/ ) {
-            $$dir_fd = $D;
-            return 1;
-        }
+        # Try calling fileno builtin func on an IO::File (ref) or GLOB-ref (ref) or
+        # GLOB (non-ref)
+        defined eval { $$dir_fd = fileno $D } and last;
+        # It's not a valid filedescriptor
+        $$dir_fd = undef;
+        $! = EBADF;
+        return;
     }
-    # It's not a valid filedescriptor
-    $$dir_fd = undef;
-    $! = EBADF;
-    return;
-}
 
-sub _resolve_fd_path(\$\$;\$$) {
-    &_resolve_dir_fd or return; # invoke using (initial) args of current sub
     shift;
+    @_ or return 1;
     my ($path, $flags, $default) = @_;
     if (defined $$path) {
         $$flags //= $default // AT_SYMLINK_NOFOLLOW if $flags;
@@ -306,6 +297,12 @@ sub _enum(@) {
 
 our $skip_syscall_ph;
 _export_tag qw{ skip_syscall_ph => $skip_syscall_ph };
+
+# TODO
+# arrange to avoid requiring syscall.ph by using
+#       use Linux::Syscalls ':xdebug_skip_syscall_ph';
+# ideally by using something like this:
+#       _export_pragma_tag xdebug_skip_syscall_ph => sub { $skip_syscall_ph = 1 };
 
 our $built_for_os;
 our $built_for_hw;
@@ -518,7 +515,7 @@ _export_tag qw{ l_ => lchown };
 _export_tag qw{ _at => faccessat };
 sub faccessat($$$;$) {
     my ($dir_fd, $path, $mode, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     $mode += 0;
     state $syscall_id = _get_syscall_id 'faccessat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode, $flags;
@@ -547,7 +544,7 @@ BEGIN { *accessat = \&faccessat; }
 _export_tag qw{ _at => fchmodat };
 sub fchmodat($$$;$) {
     my ($dir_fd, $path, $perm, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     if ($flags & AT_SYMLINK_NOFOLLOW) {
         $! = ENOSYS;
         return;
@@ -598,7 +595,7 @@ sub lchmod($$) {
 _export_tag qw{ _at => fchownat };
 sub fchownat($$$$;$) {
     my ($dir_fd, $path, $uid, $gid, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     ($uid //= -1) += 0;
     ($gid //= -1) += 0;
     state $syscall_id = _get_syscall_id 'fchownat';
@@ -619,8 +616,8 @@ BEGIN { *chownat = \&fchownat; }
 _export_tag qw{ _at => linkat };
 sub linkat($$$$;$) {
     my ($olddir_fd, $oldpath, $newdir_fd, $newpath, $flags) = @_;
-    _resolve_fd_path $olddir_fd, $oldpath, $flags, 0 or return; # without 0 → AT_SYMLINK_NOFOLLOW;
-    _resolve_fd_path $newdir_fd, $newpath, $flags, 0 or return; # in effect, AT_SYMLINK_FOLLOW;
+    _resolve_dir_fd_path $olddir_fd, $oldpath, $flags, 0 or return; # without 0 → AT_SYMLINK_NOFOLLOW;
+    _resolve_dir_fd_path $newdir_fd, $newpath, $flags, 0 or return; # in effect, AT_SYMLINK_FOLLOW;
     state $syscall_id = _get_syscall_id 'linkat';
     return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath, $flags;
 }
@@ -791,7 +788,7 @@ BEGIN {
 _export_tag qw{ _at => fstatat };
 sub fstatat($$;$) {
     my ($dir_fd, $path, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'newfstatat';
     #warn "syscall=$syscall_id, dir_fd=$dir_fd, path=$path, buffer=".length($buffer)."-bytes, flags=$flags\n";
@@ -812,7 +809,7 @@ BEGIN { *statat = \&fstatat; }
 _export_tag qw{ _at => mkdirat };
 sub mkdirat($$$) {
     my ($dir_fd, $path, $mode) = @_;
-    _resolve_dir_fd $dir_fd or return;
+    _resolve_dir_fd_path $dir_fd or return;
     $path .= '';
     $mode //= 0777;
     state $syscall_id = _get_syscall_id 'mkdirat';
@@ -829,7 +826,7 @@ sub mkdirat($$$) {
 _export_tag qw{ _at => mknodat };
 sub mknodat($$$$) {
     my ($dir_fd, $path, $mode, $dev) = @_;
-    _resolve_dir_fd $dir_fd or return;
+    _resolve_dir_fd_path $dir_fd or return;
     $path .= '';
     $mode //= 0666;
     state $syscall_id = _get_syscall_id 'mknodat';
@@ -846,7 +843,7 @@ sub mknodat($$$$) {
 _export_tag qw{ _at => openat };
 sub openat($$;$$) {
     my ($dir_fd, $path, $flags, $mode) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     $mode //= 0666;
     state $syscall_id = _get_syscall_id 'openat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $flags, $mode;
@@ -858,7 +855,7 @@ sub openat($$;$$) {
 _export_tag qw{ _at => readlinkat };
 sub readlinkat($$) {
     my ($dir_fd, $path) = @_;
-    _resolve_dir_fd $dir_fd or return;
+    _resolve_dir_fd_path $dir_fd or return;
     $path .= "";
     my $buffer = "\xa5" x 8192;
     state $syscall_id = _get_syscall_id 'readlinkat';
@@ -879,10 +876,10 @@ sub readlinkat($$) {
 _export_tag qw{ _at => renameat };
 sub renameat($$$$) {
     my ($olddir_fd, $oldpath, $newdir_fd, $newpath) = @_;
-    _resolve_dir_fd($olddir_fd) // return;
     $oldpath .= "";
-    _resolve_dir_fd($newdir_fd) // return;
     $newpath .= "";
+    _resolve_dir_fd_path $olddir_fd or return;
+    _resolve_dir_fd_path $newdir_fd or return;
     state $syscall_id = _get_syscall_id 'renameat';
     return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath;
 }
@@ -900,7 +897,7 @@ _export_tag qw{ _at => symlinkat };
 sub symlinkat($$$) {
     my ($oldpath, $newdir_fd, $newpath) = @_;
     $oldpath .= "";
-    _resolve_fd_path $newdir_fd, $newpath or return;
+    _resolve_dir_fd_path $newdir_fd, $newpath or return;
     state $syscall_id = _get_syscall_id 'symlinkat';
     return 0 == syscall $syscall_id, $oldpath, $newdir_fd, $newpath;
 }
@@ -917,7 +914,7 @@ sub symlinkat($$$) {
 _export_tag qw{ _at => unlinkat };
 sub unlinkat($$$) {
     my ($dir_fd, $path, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags, 0 or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags, 0 or return;
     # consider AT_REMOVEDIR|AT_SYMLINK_NOFOLLOW;
     state $syscall_id = _get_syscall_id 'unlinkat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $flags;
@@ -933,7 +930,7 @@ sub unlinkat($$$) {
 _export_tag qw{ _at => rmdirat };
 sub rmdirat($$$) {
     my ($dir_fd, $path, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags, AT_SYMLINK_NOFOLLOW or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags, AT_SYMLINK_NOFOLLOW or return;
     $flags |= AT_REMOVEDIR;
     state $syscall_id = _get_syscall_id 'unlinkat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $flags;
@@ -961,7 +958,7 @@ sub _pack_utimes($$) {
 _export_tag qw{ _at => futimesat };
 sub futimesat($$$$$) {
     my ($dir_fd, $path, $atime, $mtime, $flags) = @_;
-    _resolve_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     my $ts = _pack_utimes $atime, $mtime;
     state $syscall_id = _get_syscall_id 'utimensat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $ts, $flags;
