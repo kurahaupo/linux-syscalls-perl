@@ -16,6 +16,8 @@ use strict;
 use warnings;
 use feature 'state';
 
+#use Scalar::Util 'blessed';
+
 package Linux::Syscalls;
 
 use Linux::Syscalls::base;
@@ -342,8 +344,7 @@ BEGIN {
 
 sub _get_syscall_id($) {
     my ($name) = @_;
-    warn "looking up syscall number for '$name'\n" if $^C;
-
+    warn "looking up syscall number for '$name'\n" if $^C || $^W;
     if ( !$skip_syscall_ph ) {
         my $func = 'SYS_' . $name;
         require 'syscall.ph';
@@ -352,10 +353,10 @@ sub _get_syscall_id($) {
         if (exists &$func) {
             #goto &$func;
             my $r = &$func();
-            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C;
+            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C || $^W;
             return $r;
         }
-        warn "syscall.ph doesn't define $func, having to guess...\n";
+        warn "syscall.ph doesn't define $func, having to guess...\n" if $^C || $^W;
     }
 
     my $s = $syscall_map{$name};
@@ -410,7 +411,7 @@ _export_tag qw{ adjtime_mask adjtime_ =>
     ADJTIME_MASK_TICK ADJTIME_MASK_SINGLESHOT
 };
 
-_export_tag qw{ adjtime_res adjtime =>
+_export_tag qw{ adjtime_res adjtime_ =>
     ADJTIME_RES_OK ADJTIME_RES_INS ADJTIME_RES_DEL
     ADJTIME_RES_OOP ADJTIME_RES_WAIT ADJTIME_RES_BAD
 };
@@ -1068,18 +1069,117 @@ _export_tag qw{ proc wait_options =>
                     WCLONE };
 _export_tag qw{ proc => waitid waitid5 Exit };
 
+# wait3 and wait4 return:
+#   empty-list (and sets $!) when there are no children, or on error
+#   0 when WNOHANG prevents immediate reaping
+#   a 17-element list otherwise
+# (always include rusage, since otherwise one could simply use waitpid)
+
+_export_tag qw{ proc => wait3 } if _get_syscall_id 'wait3';
+sub wait3($) {
+#   unshift @_, -1;
+#   goto &wait4;
+    my ($options) = @_;
+    my $status = pack 'I*', (0) x 1;
+    my $rusage = pack 'Q*', (0) x 18;
+    state $syscall_id = _get_syscall_id 'wait3';
+    $! = 0;
+    my $rpid = syscall $syscall_id,
+                       $status,
+                       $options,
+                       $rusage;
+    warn sprintf "Invoked\tsyscall  %u WAIT3\n"
+                ."\targs     options=%#x\n"
+                ."\treturned rpid=%d, status=%s, rusage=(%s)\n"
+                ."\terrno    %s\n",
+            $syscall_id, $options, $rpid, unpack("Q",$status), join(' ', unpack 'Q*', $rusage), $!;
+    $rpid > 0 or return $rpid && ();    # 0->0, -1->empty
+    $status = unpack 'I', $status;
+    my ( $ru_utime, $ru_stime,
+         $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+         $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+         $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw) = _unpack_rusage $rusage;
+    return $rpid,
+           $status,
+           $ru_utime, $ru_stime,
+           $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+           $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+           $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
+}
+
+_export_tag qw{ proc => wait4 } if _get_syscall_id 'wait4';
+sub wait4($$) {
+    my ($cpid, $options) = @_;
+    my $status = pack 'I*', (0) x 1;
+    my $rusage = pack 'Q*', (0) x 18;
+    state $syscall_id = _get_syscall_id 'wait4';
+    $! = 0;
+    my $rpid = syscall $syscall_id,
+                       $cpid,
+                       $status,
+                       $options,
+                       $rusage;
+    warn sprintf "Invoked\tsyscall  %u WAIT4\n"
+                ."\targs     cpid=%d, options=%#x\n"
+                ."\treturned rpid=%d, status=(%s), rusage=(%s)\n"
+                ."\terrno    %s\n",
+                $syscall_id,
+                $cpid, $options,
+                $rpid, join(' ', unpack 'Q',$status), join(' ', unpack 'Q*', $rusage),
+                $!;
+    $rpid > 0 or return $rpid && ();    # 0->0, -1->empty
+    $status = unpack 'I', $status;
+    my ( $ru_utime, $ru_stime,
+         $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+         $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+         $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw) = _unpack_rusage $rusage;
+    return $rpid,
+           $status,
+           $ru_utime, $ru_stime,
+           $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+           $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+           $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
+}
+
+# waitpid2 is like the waitpid builtin, except that it returns the pid & status
+# instead of setting $?, and returns empty (and sets $!) on error.
+
+_export_ok qw{ proc => waitpid2 } if _get_syscall_id 'waitpid';
+sub waitpid2($$) {
+    my ($cpid, $options) = @_;
+    my $status = pack 'I*', (0) x 1;
+    state $syscall_id = _get_syscall_id 'waitpid';
+    $! = 0;
+    my $rpid = syscall $syscall_id,
+                       $cpid,
+                       $status,
+                       $options;
+    warn sprintf "Invoked\tsyscall  %u WAITPID\n"
+                ."\targs     cpid=%d, options=%#x\n"
+                ."\treturned rpid=%d, status=%s\n"
+                ."\terrno    %s\n",
+            $syscall_id, $cpid, $options, $rpid, unpack("H*",$status), $!;
+    $rpid > 0 or return $rpid && ();    # 0->0, -1->empty
+    $status = unpack 'I', $status;
+    return $rpid,
+           $status;
+}
+
 # waitid returns a 5-element array
 
-sub waitid($$$) {
-    push @_, 0, 0;
+sub waitid($$;$) {
+#   my ($id_type, $id, $options) = @_;
+    $_[2] //= WEXITED;
+    $_[3] = 0;
     goto &waitid_;
 }
 
 # waitid5 returns a 21-element array, starting with the same 5 as waitid
 
-sub waitid5($$$) {
-    my ($id_type, $id, $options) = @_;
-    push @_, 1, 1;
+sub waitid5($$;$) {
+#   my ($id_type, $id, $options) = @_;
+    $_[2] //= WEXITED;
+    $_[3] = 1;
     goto &waitid_;
 }
 
@@ -1088,54 +1188,76 @@ sub waitid5($$$) {
 sub _unpack_siginfo($) {
     #my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = unpack 'Q5', $_[0];
     #return $si_pid, $si_uid, $si_signo, $si_status, $si_code;
-    return unpack 'Q5', $_[0];
+    return unpack 'lx[l]Lx[l]LLL', $_[0];
 }
 
 # _unpack_rusage returns a 16-element array, starting with the utime & stime as
 # floating-point seconds.
 
 sub _unpack_rusage($) {
-    my ($ru_utime, $ru_utime_µs, $ru_stime, $ru_stime_µs, $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
-        $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
-        $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw) = unpack 'Q18', shift;
+    my ($ru_utime, $ru_utime_µs, $ru_stime, $ru_stime_µs, @ru) = unpack 'Q18', $_[0];
     return  _timeval_to_seconds($ru_utime, $ru_utime_µs),
             _timeval_to_seconds($ru_stime, $ru_stime_µs),
-            $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
-            $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
-            $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
+            @ru;
 }
 
 #use Data::Dumper;
 
 
 _export_ok 'waitid_';
-sub waitid_($$$$$) {
+sub waitid_($$$;$$) {
     my ($id_type, $id, $options, $record_rusage, $record_siginfo) = @_;
+    $record_siginfo //= 1;          # normally wanted
+    $record_rusage //= 0;           # normally unwanted
+    $record_rusage &&= !wantarray;  # functionally unwanted
     #warn "WAITID: ".Dumper(\@_);
     $id_type |= 0;
     $id |= 0;
     $options |= 0;
-    my $siginfo = pack 'Q32', (0) x 5;
-    my $rusage = pack 'Q32', (0) x 18;
+    my $siginfo = pack 'qQ*', -1, (0) x 15 if $record_siginfo;
+    my $rusage = pack 'Q*', (0) x 18 if $record_rusage;
     state $syscall_id = _get_syscall_id 'waitid';
-    warn sprintf "Invoking waitid [syscall %d]\n\t type=%d id=%d\n\t rec_si=%s (%s)\n\t options=%#x\n\t rec_ru=%s (%s)\n",
+    $! = 0;
+    my $r = syscall $syscall_id,
+                    $id_type,
+                    $id,
+                    $record_siginfo ? $siginfo : undef,
+                    $options,
+                    $record_rusage ? $rusage : undef;
+    warn sprintf "Invoked\tsyscall  %u WAITID\n"
+                ."\targs     type=%d, id=%d, options=%#x rec_si=%s rec_ru=%s\n"
+                ."\treturned result=%d si=(%s) rusage=(%s)\n"
+                ."\terrno    %s\n",
             $syscall_id,
             $id_type,
             $id,
-            $record_siginfo // '(undef)', join(' ', unpack 'Q*', $siginfo),
             $options,
-            $record_rusage // '(undef)', join(' ', unpack 'Q*', $rusage),
-            ;
-    my $rpid = syscall $syscall_id,
-                        $id_type,
-                        $id,
-                        $record_siginfo ? $siginfo : undef,
-                        $options,
-                        $record_rusage ? $rusage : undef;
-    warn "waitid returned $rpid $!\n";
-    $rpid == -1 and return;
-    my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = _unpack_siginfo $siginfo;
-    #return $si_pid if !wantarray;
+            $record_siginfo // '(undef)',
+            $record_rusage // '(undef)',
+            $r,
+            join(' ', unpack 'qQ*', $siginfo),
+            join(' ', unpack 'Q*', $rusage),
+            $!;
+    warn "waitid returned $r $!\n";
+    $r == -1 and return;
+
+    my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = _unpack_siginfo $siginfo
+        if $record_siginfo;
+    warn sprintf "\tsiginfo: pid=%d uid=%d signo=%d status=%d code=%d\n",
+                $si_pid, $si_uid, $si_signo, $si_status, $si_code
+        if $record_siginfo;
+
+    return $si_pid if !wantarray;
+
+    my @ru = _unpack_rusage $rusage
+        if $record_rusage;
+
+#   my (
+#          $ru_utime, $ru_stime,
+#          $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+#          $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+#          $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw) = _unpack_rusage $rusage
+#       if $record_rusage;
     return $si_pid,
            $si_uid,
            $si_signo,
@@ -1143,6 +1265,11 @@ sub waitid_($$$$$) {
            $si_code,
            $record_rusage ? _unpack_rusage $rusage
                           : ();
+#          $ru_utime, $ru_stime,
+#          $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+#          $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+#          $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
+#          $record_rusage ? _unpack_rusage $rusage
 }
 
 ################################################################################
