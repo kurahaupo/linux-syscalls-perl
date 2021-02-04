@@ -251,7 +251,7 @@ sub _seconds_to_timespec($) {
 sub _resolve_dir_fd_path(\$;\$\$$) {
     my ($dir_fd) = @_;
     while (1) {
-        # Only once, because it ends with "return"
+        # Only "loop" once; either fail with "return", or succeed with "last"
         my $D = $$dir_fd;
         if ( ref $D ) {
             # Try calling fileno method on any object that implements it
