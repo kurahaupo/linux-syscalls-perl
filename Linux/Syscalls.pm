@@ -34,8 +34,6 @@ use Fcntl ();   Fcntl->import('S_IFMT') if ! exists &S_IFMT;
                 POSIX->import('uname' ) if ! exists &uname;
 }
 
-#use Scalar::Util 'blessed';
-
 use base 'Exporter';
 
 sub _unique_sorted(\@@) {
@@ -342,7 +340,6 @@ BEGIN {
     sub _get_syscall_id($);
 };
 
-BEGIN { sub _get_syscall_id($); }
 sub _get_syscall_id($) {
     my ($name) = @_;
     warn "looking up syscall number for '$name'\n" if $^C;
@@ -389,14 +386,14 @@ use constant {
 # Namespaced names for constants
 use constant {
     # Bitmask
-    ADJTIME_MASK_OFFSET      =>  ADJ_OFFSET,
-    ADJTIME_MASK_FREQUENCY   =>  ADJ_FREQUENCY,
-    ADJTIME_MASK_MAXERROR    =>  ADJ_MAXERROR,
-    ADJTIME_MASK_ESTERROR    =>  ADJ_ESTERROR,
-    ADJTIME_MASK_STATUS      =>  ADJ_STATUS,
-    ADJTIME_MASK_TIMECONST   =>  ADJ_TIMECONST,
-    ADJTIME_MASK_TICK        =>  ADJ_TICK,
-    ADJTIME_MASK_SINGLESHOT  =>  ADJ_SINGLESHOT,
+    ADJTIME_MASK_OFFSET     =>  ADJ_OFFSET,
+    ADJTIME_MASK_FREQUENCY  =>  ADJ_FREQUENCY,
+    ADJTIME_MASK_MAXERROR   =>  ADJ_MAXERROR,
+    ADJTIME_MASK_ESTERROR   =>  ADJ_ESTERROR,
+    ADJTIME_MASK_STATUS     =>  ADJ_STATUS,
+    ADJTIME_MASK_TIMECONST  =>  ADJ_TIMECONST,
+    ADJTIME_MASK_TICK       =>  ADJ_TICK,
+    ADJTIME_MASK_SINGLESHOT =>  ADJ_SINGLESHOT,
     # Enum
     ADJTIME_RES_OK          =>  TIME_OK,
     ADJTIME_RES_INS         =>  TIME_INS,
