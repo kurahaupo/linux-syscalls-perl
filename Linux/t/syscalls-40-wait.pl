@@ -80,19 +80,9 @@ if ($cpid) {
             @r = ($r, $ex = $?);
         }
     } elsif ($waitmode == WM_WAIT3) {
-        my $r = wait3(\$ex, $options, $with_rusage);
-        if ($r < 0) {
-            @r = ();
-        } else {
-            @r = ($r, $ex);
-        }
+        my @r = wait3($options);
     } elsif ($waitmode == WM_WAIT4) {
-        my $r = wait4($cpid, \$ex, $options, $with_rusage);
-        if ($r < 0) {
-            @r = ();
-        } else {
-            @r = ($r, $ex);
-        }
+        my @r = wait4($cpid, $options);
     } elsif ($waitmode == WM_WAITID) {
         @r = waitid P_PID, $cpid, $options;
     } elsif ($waitmode == WM_WAITID5) {
