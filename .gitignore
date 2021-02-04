@@ -37,6 +37,8 @@ inc/
 /*.zip
 
 # Experimental
+Linux/unpacker/linux-exit-status-test-c
 Linux/unpacker/show_stat_struct
 Linux/unpacker/show_statvfs_struct
 Linux/unpacker/show_timex_struct
+Linux/unpacker/show_waitid
