@@ -18,8 +18,6 @@ use feature 'state';
 
 package Linux::Syscalls;
 
-use Linux::Syscalls::base;
-
 use Config;
 use Scalar::Util qw( looks_like_number blessed );
 
