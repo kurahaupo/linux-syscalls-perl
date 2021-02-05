@@ -690,17 +690,12 @@ sub linkat($$$$;$) {
 #                                                                                                                                                                 #                       x86_64_x32  <sys/stat.h>                        -_LARGEFILE64_SOURCE    *-__USE_LARGEFILE64    *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -mx32 -DUSE_x32
 #                                                                                                                                                                 # 144 stat64            x86_64_64   <sys/stat.h>                        +_LARGEFILE64_SOURCE=1  *+__USE_LARGEFILE64=1  *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -m64  -DUSE_x64 -D_LARGEFILE64_SOURCE
 #                                                                                                                                                                 #                       x86_64_x32  <sys/stat.h>                        +_LARGEFILE64_SOURCE=1  *+__USE_LARGEFILE64=1  *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -mx32 -DUSE_x32 -D_LARGEFILE64_SOURCE
+{ package Linux::Syscalls::bless::stat; }
 
 sub _unpack_stat {
     my ($buffer) = @_;
 
-    my ($dev, $ino, $nlink,
-        $mode, $uid, $gid, $U1,
-        $rdev, $size, $blksize, $blocks,
-        $atime, $atime_ns, $mtime, $mtime_ns, $ctime, $ctime_ns,
-        @unused);
-
-    my $has_subsecond_resolution = 0;
+    my $time_resolution = TIMERES_SECOND;
 
     state $m32 = ! $Config{use64bitint};
     state $unpacking;
@@ -714,16 +709,13 @@ sub _unpack_stat {
         return 0;
     }->() or return;
 
-    my @unpacked;
+    my $unpack_fmt;
     if ($unpacking == 1) {
         # x86_64
-        @unpacked = unpack "Q3L4Qq3Q6q*", $buffer;
-        ($dev, $ino, $nlink,
-         $mode, $uid, $gid, $U1,
-         $rdev, $size, $blksize, $blocks,
-         $atime, $atime_ns, $mtime, $mtime_ns, $ctime, $ctime_ns,
-         @unused) = @unpacked;
-         $has_subsecond_resolution = TIMERES_NANOSECOND;    # Has nanosecond-resolution timestamps.
+        $unpack_fmt = 'Q2'
+                     .'x[Q]LX[QL]Qx[L]'
+                     .'LLx[L]Qq3Q6'.'q*';
+        $time_resolution = TIMERES_NANOSECOND;    # Has nanosecond-resolution timestamps.
     } elsif ($unpacking == 2) {
         # compiled with -mx32 ⇒ 32-bit mode on 64-bit CPU
         # Buffer is filled to 64 bytes (128 nybbles)
@@ -731,34 +723,61 @@ sub _unpack_stat {
 
         state $seen_subsecond_resolution;
 
-        @unpacked = unpack "L2S4L4l6"."l*", $buffer;
+        $unpack_fmt = 'L2S4L4l6'.'l*';
 
-        ( $dev, $ino,
-          $mode, $nlink, $uid, $gid,
-          $rdev, $size, $blksize, $blocks,
-          $atime, $atime_ns, $mtime, $mtime_ns, $ctime, $ctime_ns,
-          @unused ) = @unpacked;
-
-        # Syscall has room to report on subsecond resolution, but often the
-        # filesystem on old hosts doesn't have it turned on.
-        $seen_subsecond_resolution ||= $atime_ns || $mtime_ns || $ctime_ns;
-         $has_subsecond_resolution = $seen_subsecond_resolution ? TIMERES_NANOSECOND : TIMERES_SECOND;    # Has no sub-second-resolution timestamps.
+        $time_resolution = TIMERES_NANOSECOND;
     } elsif ($unpacking == 3) {
         # i386
         die "Unimplemented";
     }
 
-    unshift @unused, $U1;
+    my ( $dev, $ino,
+         $mode, $nlink,  # Take care when unpacking, these are swapped in later versions of the syscall
+         $uid, $gid,
+         $rdev,
+         $size, $blksize, $blocks,
+         $atime, $atime_ns, $mtime, $mtime_ns, $ctime, $ctime_ns ) = unpack $unpack_fmt, $buffer;
 
-    $atime += $atime_ns*1E-9;
-    $mtime += $mtime_ns*1E-9;
-    $ctime += $ctime_ns*1E-9;
+    $atime = _timespec_to_seconds $atime, $atime_ns;
+    $mtime = _timespec_to_seconds $mtime, $mtime_ns;
+    $ctime = _timespec_to_seconds $ctime, $ctime_ns;
 
-    return $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size,
-           $atime, $mtime, $ctime,
-           $blksize, $blocks,
-           $has_subsecond_resolution,
-#          \@unused, $buffer, \@unpacked;   # extra debug info
+    return  $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size,
+            $atime, $mtime, $ctime,
+            $blksize, $blocks,
+            # the following extend the normal stat call
+            $time_resolution,
+        if wantarray;
+    #
+    return bless [
+            $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size,
+            $atime, $mtime, $ctime,
+            $blksize, $blocks,
+            # the following extend the normal stat call
+            $time_resolution,
+           ], Linux::Syscalls::bless::stat::
+        if defined wantarray;
+}
+
+{
+    package Linux::Syscalls::bless::stat;
+    use parent File::stat::;
+    sub dev             { $_[0]->[0]  }
+    sub ino             { $_[0]->[1]  }
+    sub mode            { $_[0]->[2]  }
+    sub nlink           { $_[0]->[3]  }
+    sub uid             { $_[0]->[4]  }
+    sub gid             { $_[0]->[5]  }
+    sub rdev            { $_[0]->[6]  }
+    sub size            { $_[0]->[7]  }
+    sub atime           { $_[0]->[8]  }
+    sub mtime           { $_[0]->[9]  }
+    sub ctime           { $_[0]->[10] }
+    sub blksize         { $_[0]->[11] }
+    sub blocks          { $_[0]->[12] }
+
+    sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
+    sub perm            { $_[0]->[2] & 07777  }
 }
 
 _export_ok qw{ lstatns };
