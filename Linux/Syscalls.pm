@@ -858,7 +858,7 @@ sub _unpack_stat {
 
 {
     package Linux::Syscalls::bless::stat;
-    use parent File::stat::;
+    use parent 'File::stat';
     sub dev             { $_[0]->[0]  }
     sub ino             { $_[0]->[1]  }
     sub mode            { $_[0]->[2]  }
