@@ -302,7 +302,7 @@ BEGIN { CHMOD_MASK == 07777 or die "Internal Error; for details read source code
 # Older-style "timeval" contains tv_sec & tv_usec (µs precision)
 sub _timeval_to_seconds($$) {
     my ($s, $µs) = @_;
-    return $s + $µs * 1E-6;
+    return $s + $µs / 1E6;
 }
 
 sub _seconds_to_timeval($) {
@@ -315,7 +315,7 @@ sub _seconds_to_timeval($) {
 # Newer-style "timespec" contains tv_sec & tv_nsec (ns precision)
 sub _timespec_to_seconds($$) {
     my ($s, $ns) = @_;
-    return $s + $ns * 1E-9;
+    return $s + $ns / 1E9;
 }
 
 sub _seconds_to_timespec($) {
