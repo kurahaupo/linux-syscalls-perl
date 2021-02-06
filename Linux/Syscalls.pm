@@ -21,6 +21,44 @@ package Linux::Syscalls;
 use Config;
 use Scalar::Util qw( looks_like_number blessed );
 
+################################################################################
+#
+# Fetch a constant without deoptimizing it.
+#
+# Since Perl v5.9.2, "use constant" has been able to create true compile-time
+# constants that participate in compile-time constant folding, and dead code
+# elimination.
+#
+# However the mechanism for doing so is brittle: if the symbol table for the
+# package does not contain an entry for the name, then instead of creating a
+# GLOB, it puts a reference to constant value instead, which is recognized by
+# the compilation phase.
+#
+# The GLOB may be forced into existence by &constname or &{$symtab::{name}},
+# whereupon it gets converted to a GLOB, where the CODE element is (as was the
+# case before perl v5.9.2) a reference to sub { $constant_value }. This results
+# in de-optimization because thenceforth it is no longer treated as a
+# compile-time constant. So this code tries hard to avoid doing that.
+#
+
+sub _get_scalar_constant($) {
+    my ($name) = @_;
+    my $us = do { no strict 'refs'; \%{ caller . '::' }; };
+    my $p = $us->{$name} or return; # non-existent
+    my $r = ref $p;
+    return $$p if $r eq 'SCALAR';   # still optimized
+
+    # Any other kind of reference isn't allowed, but ref(*some_glob) and
+    # ref($symtab::{$name}) both return empty string.
+    return $p, $r if $r;            # error signalling
+
+    # Already deoptimized to a GLOB, so we aren't making it any worse...
+    return if ! exists &$r;         # non-existent
+    return scalar &$p;
+}
+
+################################################################################
+
 BEGIN {
                 # When in checking mode, import everything from POSIX, to find
                 # out whether we clash with anything.
@@ -119,36 +157,93 @@ _export_tag qw{ res_ =>
 
 # FROM /usr/include/*-linux-gnu/bits/fcntl-linux.h
 BEGIN {
+#
+# These O_* constants can also be provided by POSIX.pm and/or Fcntl.pm, so
+# only define them here if they're /not/ provided by those.
+#
+# They all be specified to open*(), but some are applicable
+# to other calls, notably the *_at() family.
+#
+# On Linux fcntl(F_SETFL,...) can change only the O_APPEND, O_ASYNC, O_DIRECT,
+# O_NOATIME, and O_NONBLOCK flags, and fcnl(F_SETFD,...) can only change the
+# FD_CLOEXEC flag).
 my %o_const = (
 
+    # Open-time flags - control what open() will do, and not visible later (inaccessible to fcntl)
+    # (in the order listed in https://www.gnu.org/software/libc/manual/html_node/Open_002dtime-Flags.html)
+    O_CREAT     =>   0x000040,  #
+    O_EXCL      =>   0x000080,  #
+    O_DIRECTORY =>   0x010000,  # Must be a directory
+    O_NOFOLLOW  =>   0x020000,  # Do not follow links
+    O_TMPFILE   =>   0x410000,  # Atomically create nameless file
+#   O_NONBLOCK & O_NDELAY -- see below
+    O_NOCTTY    =>   0x000100,  #
+#   O_IGNORE_CTTY               # (not in Linux)
+    O_NOLINK    =>   0x220000,  # (not native to Linux, but approximated by O_NOFOLLOW|O_PATH)
+#   O_NOTRANS                   # (not in Linux)
+    O_TRUNC     =>   0x000200,  #
+#   O_SHLOCK                    # (not in Linux)
+#   O_EXLOCK                    # (not in Linux)
+
+    # Linux-only open-time flags
+    O_LARGEFILE =>   0x008000,  # Allow open on files whose size does not fit into an offset_t, and permit a file to grow beyond 4GiB. On Linux there's no open64 syscall; it's emulated by setting this bit when calling open.
+
+    # Multi-action flag
+    # Don't block waiting for the entity to be ready.
+    #   - When opening, return success immediately even if a device or pipe isn't connected;
+    #   - When reading, return 0 ("empty") if no data is available from a connection (device, pipe, or socket)
+    #   - When writing, return EAGAIN if the minimum size could not be written; it's permissible to truncate longer writes.
+    O_NONBLOCK  =>   0x000800,
+    O_NDELAY    =>   0x000800,  # == O_NONBLOCK
+
+    # Access modes - which operations will be subsequently be allowed; visible but unchangible after open()
+    # (in the order listed in https://www.gnu.org/software/libc/manual/html_node/Access-Modes.html)
     O_RDONLY    =>   0x000000,  #
     O_WRONLY    =>   0x000001,  #
     O_RDWR      =>   0x000002,  #
+#   O_READ  == O_RDONLY
+#   O_WRITE == O_WRONLY
+#   O_EXEC (not on Linux!?)
     O_ACCMODE   =>   0x000003,  #
-    O_CREAT     =>   0x000040,  # (not fcntl)
-    O_EXCL      =>   0x000080,  # (not fcntl)
-    O_NOCTTY    =>   0x000100,  # (not fcntl)
-    O_TRUNC     =>   0x000200,  # (not fcntl)
-    O_APPEND    =>   0x000400,  #
-    O_NONBLOCK  =>   0x000800,  #
-    O_NDELAY    =>   0x000800,  # ==O_NONBLOCK
-    O_DSYNC     =>   0x001000,  # Synchronize data
-    O_ASYNC     =>   0x002000,  #
-    O_DIRECT    =>   0x004000,  # Direct disk access
-    O_LARGEFILE =>   0x008000,  #
-    O_DIRECTORY =>   0x010000,  # Must be a directory
-    O_NOFOLLOW  =>   0x020000,  # Do not follow links
-    O_NOATIME   =>   0x040000,  # Do not set atime
-    O_CLOEXEC   =>   0x080000,  # Set close_on_exec
-    O_SYNC      =>   0x101000,  #
-    O_RSYNC     =>   0x101000,  # == O_SYNC  Synchronize read operations
-    O_PATH      =>   0x200000,  # Resolve pathname but do not open file
-    O_TMPFILE   =>   0x410000,  # Atomically create nameless file
 
-#   O_FSYNC     =>   0x101000,  # == O_SYNC  Synchronize data & metadata
+    # Linux-only access modes
+    O_PATH      =>   0x200000,  # Resolve pathname but do not open file
+
+    # Operating modes - affects the subsequent operations; can be seen and changed by fcntl
+    # (in the order listed in https://www.gnu.org/software/libc/manual/html_node/Operating-Modes.html)
+    O_APPEND    =>   0x000400,  #
+#   O_NONBLOCK & O_NDELAY -- see above
+    O_ASYNC     =>   0x002000,  #
+    O_FSYNC     =>   0x101000,  # == O_SYNC Synchronize writing of file data; each write call will make sure the data is reliably stored on disk before returning. By implication metadata is also uptodate before returning.
+    O_SYNC      =>   0x101000,  #
+    O_NOATIME   =>   0x040000,  # Do not set atime when reading (useful for backups)
+
+    # Linux-only operating modes
+    O_DIRECT    =>   0x004000,  # Direct disk access
+    O_DSYNC     =>   0x001000,  # Synchronize data (but not metadata)
+    O_RSYNC     =>   0x101000,  # Should be its own bit, but currently == O_SYNC. When reading from cache, ensure that it's written TO disk before returning.
+
+    # Filedescriptor flags, not shared through dup()
+    # Arrange for fd will be closed upon execve using
+    # fcntl(F_SETFD,...|FD_CLOEXEC) rather than
+    # fcntl(F_SETFL,...|O_CLOEXEC).  Note the different numeric values!
+    O_CLOEXEC   =>   0x080000,  # Set FD_CLOEXEC
 
 );
-    exists &$_ and delete $o_const{$_} and warn "Already have $_ (probably from POSIX)\n" for keys %o_const;
+    for my $k (keys %o_const) {
+        my @ov = _get_scalar_constant $k;
+        # empty indicates not defined, singleton indicates defined value
+        # (though it may be undef)
+        @ov or next;
+        # constant $k already exists (probably from POSIX) so delete it from
+        # the list that we're about to add.
+        my $nv = delete $o_const{$k};
+        # But first, check that we would provide the same numeric value.
+        @ov == 1 or die "Symbol $k already defined with a $ov[1] value!\n";
+        $ov[0] == $nv or
+            die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
+        warn "Already have $k (probably from POSIX)\n" if $^C || $^W;
+    }
     *O_NONBLOCK = *O_NDELAY{CODE}, delete $o_const{O_NONBLOCK} if ! exists &O_NONBLOCK && exists &O_NDELAY;
     constant->import(\%o_const);
 }
@@ -156,8 +251,10 @@ my %o_const = (
 _export_tag qw{ o_ =>
     O_RDONLY O_WRONLY O_RDWR O_ACCMODE O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND
     O_NONBLOCK O_NDELAY O_DSYNC O_ASYNC O_DIRECT O_LARGEFILE O_DIRECTORY
-    O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_RSYNC O_PATH O_TMPFILE
+    O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_FSYNC O_RSYNC O_PATH O_TMPFILE
 };
+
+_export_ok qw{ };   # not officially Linux, so not exported by default
 
 ################################################################################
 
