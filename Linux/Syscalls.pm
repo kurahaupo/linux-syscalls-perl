@@ -818,8 +818,6 @@ sub _unpack_stat {
         # Buffer is filled to 64 bytes (128 nybbles)
         # struct stat from asm/stat.h on x86_32
 
-        state $seen_subsecond_resolution;
-
         $unpack_fmt = 'L2S4L4l6'.'l*';
 
         $time_resolution = TIMERES_NANOSECOND;
@@ -829,7 +827,7 @@ sub _unpack_stat {
     }
 
     my ( $dev, $ino,
-         $mode, $nlink,  # Take care when unpacking, these are swapped in later versions of the syscall
+         $mode, $nlink, # Take care when unpacking, these are swapped in later versions of the syscall
          $uid, $gid,
          $rdev,
          $size, $blksize, $blocks,
@@ -874,7 +872,6 @@ sub _unpack_stat {
     sub blocks          { $_[0]->[12] }
 
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
-    sub perm            { $_[0]->[2] & 07777  }
 }
 
 _export_ok qw{ lstatns };
