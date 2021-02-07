@@ -194,16 +194,16 @@ my %o_const = (
     #   - When reading, return 0 ("empty") if no data is available from a connection (device, pipe, or socket)
     #   - When writing, return EAGAIN if the minimum size could not be written; it's permissible to truncate longer writes.
     O_NONBLOCK  =>   0x000800,
-    O_NDELAY    =>   0x000800,  # == O_NONBLOCK
+    O_NDELAY    =>   0x000800,  # == O_NONBLOCK (deprecated)
 
     # Access modes - which operations will be subsequently be allowed; visible but unchangible after open()
     # (in the order listed in https://www.gnu.org/software/libc/manual/html_node/Access-Modes.html)
     O_RDONLY    =>   0x000000,  #
     O_WRONLY    =>   0x000001,  #
     O_RDWR      =>   0x000002,  #
-#   O_READ  == O_RDONLY
-#   O_WRITE == O_WRONLY
-#   O_EXEC (not on Linux!?)
+    O_READ      =>   0x000000,  # == O_RDONLY (non-standard)
+    O_WRITE     =>   0x000001,  # == O_WRONLY (non-standard)
+#   O_EXEC                      # (not in Linux!?)
     O_ACCMODE   =>   0x000003,  #
 
     # Linux-only access modes
@@ -221,25 +221,24 @@ my %o_const = (
     # Linux-only operating modes
     O_DIRECT    =>   0x004000,  # Direct disk access
     O_DSYNC     =>   0x001000,  # Synchronize data (but not metadata)
-    O_RSYNC     =>   0x101000,  # Should be its own bit, but currently == O_SYNC. When reading from cache, ensure that it's written TO disk before returning.
+    O_RSYNC     =>   0x101000,  # Should be its own bit, but currently == O_SYNC. When reading from cache, ensure that it's synch'ed to disk before returning.
 
     # Filedescriptor flags, not shared through dup()
-    # Arrange for fd will be closed upon execve using
-    # fcntl(F_SETFD,...|FD_CLOEXEC) rather than
-    # fcntl(F_SETFL,...|O_CLOEXEC).  Note the different numeric values!
+    # Arrange for fd to be closed upon execve by using
+    #  fcntl(F_SETFD,...|FD_CLOEXEC) rather than
+    #  fcntl(F_SETFL,...|O_CLOEXEC).  Note the different numeric values!
     O_CLOEXEC   =>   0x080000,  # Set FD_CLOEXEC
 
 );
     for my $k (keys %o_const) {
-        my @ov = _get_scalar_constant $k;
-        # empty indicates not defined, singleton indicates defined value
-        # (though it may be undef)
-        @ov or next;
+        # empty list indicates that the constant is not defined; a singleton
+        # indicates defined value; a pair indicates an error...
+        my @ov = _get_scalar_constant $k or next;
+        @ov == 1 or die "Symbol $k already defined with a $ov[1] value!\n";
         # constant $k already exists (probably from POSIX) so delete it from
         # the list that we're about to add.
         my $nv = delete $o_const{$k};
-        # But first, check that we would provide the same numeric value.
-        @ov == 1 or die "Symbol $k already defined with a $ov[1] value!\n";
+        # But verify that we would provide the same numeric value.
         $ov[0] == $nv or
             die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
         warn "Already have $k (probably from POSIX)\n" if $^C || $^W;
@@ -251,10 +250,11 @@ my %o_const = (
 _export_tag qw{ o_ =>
     O_RDONLY O_WRONLY O_RDWR O_ACCMODE O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND
     O_NONBLOCK O_NDELAY O_DSYNC O_ASYNC O_DIRECT O_LARGEFILE O_DIRECTORY
-    O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_FSYNC O_RSYNC O_PATH O_TMPFILE
+    O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_RSYNC O_PATH O_TMPFILE
 };
 
-_export_ok qw{ };   # not officially Linux, so not exported by default
+# Not in Linux, so not exported by default
+_export_ok qw{ O_FSYNC O_NOLINK O_READ O_WRITE };
 
 ################################################################################
 
