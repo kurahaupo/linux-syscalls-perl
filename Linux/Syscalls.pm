@@ -431,12 +431,12 @@ BEGIN {
     }
     no diagnostics;
     @e and die "@e\n";
-    sub _get_syscall_id($);
+    sub _get_syscall_id($;$);
 };
 
-sub _get_syscall_id($) {
-    my ($name) = @_;
-    warn "looking up syscall number for '$name'\n" if $^C || $^W;
+sub _get_syscall_id($;$) {
+    my ($name, $quiet) = @_;
+    warn "looking up syscall number for '$name'\n" if $^C || $^W and ! $quiet;
     if ( !$skip_syscall_ph ) {
         my $func = 'SYS_' . $name;
         require 'syscall.ph';
@@ -445,14 +445,14 @@ sub _get_syscall_id($) {
         if (exists &$func) {
             #goto &$func;
             my $r = &$func();
-            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C || $^W;
+            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C || $^W and ! $quiet;
             return $r;
         }
-        warn "syscall.ph doesn't define $func, having to guess...\n" if $^C || $^W;
+        warn "syscall.ph doesn't define $func, having to guess...\n" if $^C || $^W and ! $quiet;
     }
 
     my $s = $syscall_map{$name};
-    $s // warn "Syscall $name not known for @{[$running_on_os // ()]} / @{[$running_on_hw // ()]}\n" if $^C || $^W;
+    $s // warn "Syscall $name not known for @{[$running_on_os // ()]} / @{[$running_on_hw // ()]}\n" if $^C || $^W and ! $quiet;
     return $s;
 }
 
@@ -1186,7 +1186,7 @@ _export_tag qw{ proc => waitid waitid5 Exit };
 #   a 17-element list otherwise
 # (always include rusage, since otherwise one could simply use waitpid)
 
-_export_tag qw{ proc => wait3 } if _get_syscall_id 'wait3';
+_export_tag qw{ proc => wait3 } if _get_syscall_id 'wait3', 1;
 sub wait3($) {
 #   unshift @_, -1;
 #   goto &wait4;
@@ -1218,7 +1218,7 @@ sub wait3($) {
            $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
 }
 
-_export_tag qw{ proc => wait4 } if _get_syscall_id 'wait4';
+_export_tag qw{ proc => wait4 } if _get_syscall_id 'wait4', 1;
 sub wait4($$) {
     my ($cpid, $options) = @_;
     my $status = pack 'I*', (0) x 1;
@@ -1255,7 +1255,7 @@ sub wait4($$) {
 # waitpid2 is like the waitpid builtin, except that it returns the pid & status
 # instead of setting $?, and returns empty (and sets $!) on error.
 
-_export_ok qw{ proc => waitpid2 } if _get_syscall_id 'waitpid';
+_export_ok qw{ proc => waitpid2 } if _get_syscall_id 'waitpid', 1;
 sub waitpid2($$) {
     my ($cpid, $options) = @_;
     my $status = pack 'I*', (0) x 1;
