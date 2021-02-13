@@ -18,8 +18,14 @@ use feature 'state';
 
 package Linux::Syscalls;
 
+use base 'Exporter';
+
 use Config;
 use Scalar::Util qw( looks_like_number blessed );
+
+use Errno qw( ENOSYS EBADF );
+use Fcntl qw( S_IFMT );
+use POSIX qw( uname );
 
 ################################################################################
 #
@@ -39,7 +45,6 @@ use Scalar::Util qw( looks_like_number blessed );
 # case before perl v5.9.2) a reference to sub { $constant_value }. This results
 # in de-optimization because thenceforth it is no longer treated as a
 # compile-time constant. So this code tries hard to avoid doing that.
-#
 
 sub _get_scalar_constant($) {
     my ($name) = @_;
@@ -50,28 +55,24 @@ sub _get_scalar_constant($) {
 
     # Any other kind of reference isn't allowed, but ref(*some_glob) and
     # ref($symtab::{$name}) both return empty string.
+    return if $r && ! wantarray;
     return $p, $r if $r;            # error signalling
 
     # Already deoptimized to a GLOB, so we aren't making it any worse...
-    return if ! exists &$r;         # non-existent
+    return if ! exists &$p;         # non-existent
     return scalar &$p;
 }
+
+sub _listlen(@) { return 0+@_; }
 
 ################################################################################
 
 BEGIN {
-                # When in checking mode, import everything from POSIX, to find
-                # out whether we clash with anything.
-use POSIX ();   POSIX->import() if $^C && $^W;
-use Errno ();   Errno->import('ENOSYS') if ! exists &ENOSYS;
-                Errno->import('EBADF')  if ! exists &EBADF;
-use Fcntl ();   Fcntl->import('S_IFMT') if ! exists &S_IFMT;
-                Fcntl->import('S_IFBLK') if ! exists &S_IFBLK;
-                Fcntl->import('S_IFCHR') if ! exists &S_IFCHR;
-                POSIX->import('uname' ) if ! exists &uname;
+    # When in checking mode, import everything from POSIX, to find out whether
+    # we clash with anything. Do this after all other modules are imported, so
+    # POSIX won't complain if we've already defined something that it provides.
+    POSIX->import() if $^C && $^W;
 }
-
-use base 'Exporter';
 
 sub _unique_sorted(\@@) {
     my $r = shift;
@@ -102,7 +103,7 @@ sub _export_finish {
 
 ################################################################################
 
-# Magic numbers for Linux
+# Magic numbers for Linux; these should be (but aren't) in Fcntl
 use constant {
     AT_FDCWD            => -100,        # internal use only; use undef in client code
 };
@@ -268,9 +269,9 @@ use constant {
 #   CHMOD_MASK  => 07777,
 #
 ## S_ISVTX & S_ISTXT may not be defined
-#   CHMOD_MASK  => S_ISUID | S_ISGID | ( defined &S_ISVTX ? &S_ISVTX
-#                                        defined &S_ISTXT ? &S_ISTXT
-#                                                         : 01000 )
+#   CHMOD_MASK  => S_ISUID | S_ISGID | ( exists &S_ISVTX ? &S_ISVTX
+#                                        exists &S_ISTXT ? &S_ISTXT
+#                                                        : 01000 )
 #                | S_IRWXU | S_IRWXG | S_IRWXO;
 };
 
@@ -441,7 +442,6 @@ sub _get_syscall_id($;$) {
         my $func = 'SYS_' . $name;
         require 'syscall.ph';
         no strict 'refs';
-        #require 'syscall.ph' if ! exists &$func;
         if (exists &$func) {
             #goto &$func;
             my $r = &$func();
@@ -1120,7 +1120,7 @@ sub Exit($) {
 #
 
 BEGIN {
-my %o_const = (
+my %w_const = (
 
     # Values taken from /usr/include/asm-generic/siginfo.h
     CLD_EXITED      =>  1, #   Child has exited.
@@ -1147,9 +1147,8 @@ my %o_const = (
     P_PGID          =>  2,         # Any child within a process group, by PGID
 
 );
-    exists &$_ and delete $o_const{$_} and warn "Already have $_ (probably from POSIX)\n" for keys %o_const;
-    *O_NONBLOCK = *O_NDELAY{CODE}, delete $o_const{O_NONBLOCK} if ! exists &O_NONBLOCK && exists &O_NDELAY;
-    constant->import(\%o_const);
+    exists &$_ and delete $w_const{$_} and warn "Already have $_ (probably from POSIX)\n" for keys %w_const;
+    constant->import(\%w_const);
 };
 
 _export_tag qw{ proc si_codes =>
