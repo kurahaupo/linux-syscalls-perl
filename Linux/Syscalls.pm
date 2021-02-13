@@ -244,7 +244,6 @@ my %o_const = (
             die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
         warn "Already have $k (probably from POSIX)\n" if $^C || $^W;
     }
-    *O_NONBLOCK = *O_NDELAY{CODE}, delete $o_const{O_NONBLOCK} if ! exists &O_NONBLOCK && exists &O_NDELAY;
     constant->import(\%o_const);
 }
 
