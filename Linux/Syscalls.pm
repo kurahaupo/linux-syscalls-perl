@@ -1146,7 +1146,19 @@ my %w_const = (
     P_PGID          =>  2,         # Any child within a process group, by PGID
 
 );
-    exists &$_ and delete $w_const{$_} and warn "Already have $_ (probably from POSIX)\n" for keys %w_const;
+    for my $k (keys %w_const) {
+        # empty list indicates that the constant is not defined; a singleton
+        # indicates defined value; a pair indicates an error...
+        my @ov = _get_scalar_constant $k or next;
+        @ov == 1 or die "Symbol $k already defined with a $ov[1] value!\n";
+        # constant $k already exists (probably from POSIX) so delete it from
+        # the list that we're about to add.
+        my $nv = delete $w_const{$k};
+        # But verify that we would provide the same numeric value.
+        $ov[0] == $nv or
+            die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
+        warn "Already have $k (probably from POSIX)\n" if $^C || $^W;
+    }
     constant->import(\%w_const);
 };
 
