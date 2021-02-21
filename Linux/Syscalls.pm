@@ -71,7 +71,7 @@ BEGIN {
     # When in checking mode, import everything from POSIX, to find out whether
     # we clash with anything. Do this after all other modules are imported, so
     # POSIX won't complain if we've already defined something that it provides.
-    POSIX->import() if $^C && $^W;
+    POSIX->import() if $^C;
 }
 
 sub _unique_sorted(\@@) {
@@ -242,7 +242,7 @@ my %o_const = (
         # But verify that we would provide the same numeric value.
         $ov[0] == $nv or
             die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
-        warn "Already have $k (probably from POSIX)\n" if $^C || $^W;
+        warn "Already have $k (probably from POSIX)\n" if $^C;
     }
     constant->import(\%o_const);
 }
@@ -419,7 +419,7 @@ BEGIN {
         'generic',
     } ) {
         my $m = "${built_for_os}::Syscalls::$mm";
-        warn "Trying to load $m" if $^C || $^W;
+        warn "Trying to load $m" if $^C;
         eval qq{
             use $m qw( %syscall_map %pack_map );
           # printf "syscall_map=%s\\n", scalar %syscall_map;
@@ -427,7 +427,7 @@ BEGIN {
             1;
         } and last;
         push @e, $@;
-        warn "Failed to load $m; $@" if $^C || $^W;
+        warn "Failed to load $m; $@" if $^C;
     }
     no diagnostics;
     @e and die "@e\n";
@@ -436,7 +436,7 @@ BEGIN {
 
 sub _get_syscall_id($;$) {
     my ($name, $quiet) = @_;
-    warn "looking up syscall number for '$name'\n" if $^C || $^W and ! $quiet;
+    warn "looking up syscall number for '$name'\n" if $^C && ! $quiet;
     if ( !$skip_syscall_ph ) {
         my $func = 'SYS_' . $name;
         require 'syscall.ph';
@@ -444,14 +444,14 @@ sub _get_syscall_id($;$) {
         if (exists &$func) {
             #goto &$func;
             my $r = &$func();
-            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C || $^W and ! $quiet;
+            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C && ! $quiet;
             return $r;
         }
-        warn "syscall.ph doesn't define $func, having to guess...\n" if $^C || $^W and ! $quiet;
+        warn "syscall.ph doesn't define $func, having to guess...\n" if $^C && ! $quiet;
     }
 
     my $s = $syscall_map{$name};
-    $s // warn "Syscall $name not known for @{[$running_on_os // ()]} / @{[$running_on_hw // ()]}\n" if $^C || $^W and ! $quiet;
+    $s // warn "Syscall $name not known for @{[$running_on_os // ()]} / @{[$running_on_hw // ()]}\n" if ! $quiet;
     return $s;
 }
 
@@ -801,7 +801,7 @@ sub _unpack_stat {
             return 1+$m32 if $hw eq 'x86_64' || $hw eq 'i686';
             return 3      if $hw eq 'x86_32' || $hw eq 'i386';
         }
-        warn "CANNOT UNPACK on this OS ($os) and HW ($hw)\n" if $^C || $^W;
+        warn "Cannot unpack stat buffer on this OS ($os) and HW ($hw)\n" if $^C || $^W;
         return 0;
     }->() or return;
 
@@ -1157,7 +1157,7 @@ my %w_const = (
         # But verify that we would provide the same numeric value.
         $ov[0] == $nv or
             die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
-        warn "Already have $k (probably from POSIX)\n" if $^C || $^W;
+        warn "Already have $k (probably from POSIX)\n" if $^C;
     }
     constant->import(\%w_const);
 };
