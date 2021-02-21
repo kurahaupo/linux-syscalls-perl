@@ -35,16 +35,18 @@ use POSIX qw( uname );
 # constants that participate in compile-time constant folding, and dead code
 # elimination.
 #
-# However the mechanism for doing so is brittle: if the symbol table for the
-# package does not contain an entry for the name, then instead of creating a
-# GLOB, it puts a reference to constant value instead, which is recognized by
-# the compilation phase.
+# If the symbol table for the package does not contain an entry for the name,
+# then instead of creating a GLOB, it puts a reference to the constant value
+# instead, which is recognized by the compilation phase, and can participate in
+# constant folding and dead code elimination.
 #
-# The GLOB may be forced into existence by &constname or &{$symtab::{name}},
-# whereupon it gets converted to a GLOB, where the CODE element is (as was the
-# case before perl v5.9.2) a reference to sub { $constant_value }. This results
-# in de-optimization because thenceforth it is no longer treated as a
-# compile-time constant. So this code tries hard to avoid doing that.
+# However this mechanism is brittle: the GLOB can be forced into existence
+# merely encountering "&constname" at compile time (even as "exists
+# &constname"), or "&{$symtab::{name}}".  The reference-to-constant reverts to
+# a normal GLOB whose CODE element is a reference to "sub { $constant_value }",
+# and it ceases to participate in compile-time optimization.
+#
+# So this sub tries hard to avoid breaking the optimizer.
 
 sub _get_scalar_constant($) {
     my ($name) = @_;
@@ -421,7 +423,7 @@ BEGIN {
         my $m = "${built_for_os}::Syscalls::$mm";
         warn "Trying to load $m" if $^C;
         eval qq{
-            use $m qw( %syscall_map %pack_map );
+            use $m;
           # printf "syscall_map=%s\\n", scalar %syscall_map;
           # printf "pack_map=%s\\n", scalar %pack_map;
             1;
@@ -1404,6 +1406,8 @@ sub vhangup() {
     state $syscall_id = _get_syscall_id 'vhangup';
     return 0 == syscall $syscall_id;
 }
+
+################################################################################
 
 _export_finish;
 
