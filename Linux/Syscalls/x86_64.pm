@@ -345,14 +345,21 @@ our %syscall_map = (
 );
 
 our %pack_map = (
-    adjtimex => 'Lx4q4lx4q3q2q3lx4q5lx44',
-                # modes offset freq maxerror esterror status constant precision
-                # tolerance timenow tick ppsfreq jitter shift stabil jitcnt
-                # calcnt errcnt stbcnt tai (everything except modes is signed)
+    struct_timex => 'Lx![q]'    # modes (padded)
+                   .'q4'        # offset freq maxerror esterror
+                   .'lx![q]'    # status (padded)
+                   .'q3'        # constant precision tolerance
+                   .'q2'        # timenow (sec & µsec)
+                   .'q3'        # tick ppsfreq jitter
+                   .'lx![q]'    # shift (padded)
+                   .'q5'        # stabil jitcnt calcnt errcnt stbcnt
+                   .'l'         # tai
+                   .'x[L11]',   # pad 11 more 32-bit integers
+                    # (everything except modes is signed, which is why lx![q] instead of q)
 
-    time_t   => $x32 ? 'l'  : 'q',      # seconds
-    timespec => $x32 ? 'lL' : 'qLx4',   # seconds, nanoseconds
-    timeval  => $x32 ? 'lL' : 'qLx4',   # seconds, microseconds
+    time_t       => $x32 ? 'l'  : 'q',          # seconds
+    timespec     => $x32 ? 'lL' : 'qLx![q]',    # seconds, nanoseconds
+    timeval      => $x32 ? 'lL' : 'qLx![q]',    # seconds, microseconds
 );
 
 if ( $x32 ) {
