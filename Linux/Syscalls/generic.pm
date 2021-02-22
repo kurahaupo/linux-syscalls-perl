@@ -5,6 +5,9 @@ use warnings;
 
 package Linux::Syscalls::generic;
 
+# Generic variables, constants, and methods, which are architecture-
+# independent, or common to the majority of architectures.
+
 use base 'Linux::Syscalls::base';
 use base 'Exporter';
 
@@ -453,6 +456,12 @@ our %syscall_map = (
     ) : (), ## $use_arch_want_syscall_deprecated
 );
 
+our %pack_map = (
+    time_t   => 'q',
+    timespec => 'qLx4',
+    timeval  => 'qLx4',
+);
+
 our @EXPORT = qw(
 
     $have_MMU
@@ -462,7 +471,9 @@ our @EXPORT = qw(
     $use_arch_want_syscall_deprecated
     $use_arch_want_syscall_no_at
     $use_arch_want_syscall_no_flags
+
     %syscall_map
+    %pack_map
 
 );
 
