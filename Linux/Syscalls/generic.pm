@@ -484,8 +484,8 @@ sub unpack_dent($$) {
 
 our %pack_map = (
     time_t   => 'q',
-    timespec => 'qLx4',
-    timeval  => 'qLx4',
+    timespec => 'qLx![q]',
+    timeval  => 'qLx![q]',
 );
 
 our @EXPORT = qw(
