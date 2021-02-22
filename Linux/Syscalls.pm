@@ -105,6 +105,11 @@ sub _export_finish {
 
 ################################################################################
 
+# Internal magic numbers
+use constant {
+    default_getdents_bufsize => 0x4000, # a multiple of the file allocation block size
+};
+
 # Magic numbers for Linux; these should be (but aren't) in Fcntl
 use constant {
     AT_FDCWD            => -100,        # internal use only; use undef in client code
@@ -1090,6 +1095,84 @@ sub lutimes($$$) {
   # return futimesat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
     return &futimesat(undef, @_, AT_SYMLINK_NOFOLLOW);  # bypass parameter checking
 }
+
+################################################################################
+
+#
+# Read entries from a directory
+#
+# Although opendir/readdir/closedir are a standard part of Perl, opendir does
+# not understand "<&=$fd", so it's impossible to use fopenat and then readdir
+# from that; conversely, dirfd is not available in core Perl before about
+# v5.26, so it's impossible to go the other way as well.
+#
+# This can also be used in conjunction with sysopen, systell, sysseek, etc.
+#
+# Takes a filedescriptor and an optional buffer size.
+# Returns:
+#   a list of arrays, each blessed as dirent entry; or
+#   an empty list at EOF; or
+#   an undef on error (a non-empty list).
+#
+# NB:
+#  1. The kernel call may return as many dirent entries as fit in the buffer,
+#     and there is no direct mechanism to limit the number of entries returned.
+#
+#  2. When a fd is open on a directory, the position reported by systell (and
+#     used by sysseek) is an opaque tokens, not a computable integer.
+#
+
+use constant {
+    DT_UNKNOWN  => 0,
+    DT_FIFO     => 1,
+    DT_CHR      => 2,
+    DT_DIR      => 4,
+    DT_BLK      => 6,
+    DT_REG      => 8,
+    DT_LNK      => 10,
+    DT_SOCK     => 12,
+    DT_WHT      => 14,
+};
+
+{
+    package Linux::Syscalls::bless::dirent;
+    sub name  { $_[0]->[0]  }
+    sub inode { $_[0]->[1]  }
+    sub type  { $_[0]->[2]  }
+    sub hash  { $_[0]->[3]  }
+}
+
+sub getdents($;$) {
+    my ($fd, $bufsize) = @_;
+    # Keep track of this usage:
+    #   $bufsize is the size of the buffer passed to the kernel
+    #   $blksize is the size of the received data block
+    #   $entsize is the size of each entry
+    # however the buffer size and the received size have non-ov
+    state $syscall_id = _get_syscall_id 'getdents64';
+    state $packfmt = $pack_map{getdents64};    # 'QQSC'
+    state $packlen = length pack $packfmt, (0) x 5;
+    $bufsize ||= default_getdents_bufsize;
+    my $buffer = ' ' x $bufsize;
+    my $blksize = syscall $syscall_id, $fd, $buffer, $bufsize;
+    return undef if $blksize < 0;
+  # substr($buffer, $blksize) = '';  # cut off unfilled tail of buffer
+
+    my @r;
+    for (my $offset = 0 ; $offset < $blksize ;) {
+        my ($entsize, @e) = unpack_dent $buffer;
+        $entsize or last;    # can't get anything more out of this block
+        push @r, bless \@e, Linux::Syscalls::bless::dirent::;
+        $offset += $entsize;
+    }
+    return @r;
+}
+
+_export_tag qw( DT_ dirent  =>  getdents
+                                DT_UNKNOWN
+                                DT_FIFO DT_CHR DT_DIR DT_BLK
+                                DT_REG DT_LNK DT_SOCK DT_WHT
+              );
 
 ################################################################################
 
