@@ -342,12 +342,15 @@ our %syscall_map = (
     seccomp                 => 317,
 );
 
-my $pack_time_t = $x32 ? 'L' : 'Q';
-my $pack_timespec =
-my $pack_timeval = $x32 ? 'LL' : 'QQ';
-
 our %pack_map = (
-    adjtimex => 'Lx4q4lx4q3q2q3lx4q5lx44'  # modes offset freq maxerror esterror status constant precision tolerance timenow tick ppsfreq jitter shift stabil jitcnt calcnt errcnt stbcnt tai; everything except modes is signed
+    adjtimex => 'Lx4q4lx4q3q2q3lx4q5lx44',
+                # modes offset freq maxerror esterror status constant precision
+                # tolerance timenow tick ppsfreq jitter shift stabil jitcnt
+                # calcnt errcnt stbcnt tai (everything except modes is signed)
+
+    time_t   => $x32 ? 'l'  : 'q',      # seconds
+    timespec => $x32 ? 'lL' : 'qLx4',   # seconds, nanoseconds
+    timeval  => $x32 ? 'lL' : 'qLx4',   # seconds, microseconds
 );
 
 if ( $x32 ) {
