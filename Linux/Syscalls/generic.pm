@@ -2,6 +2,7 @@
 
 use strict;
 use warnings;
+use feature 'state';
 
 package Linux::Syscalls::generic;
 
@@ -456,6 +457,31 @@ our %syscall_map = (
     ) : (), ## $use_arch_want_syscall_deprecated
 );
 
+#
+# Knowing how far to advance to get to the next dirent entry depends on which
+# fields are actually available.
+#   (1) use d_reclen, if available, or
+#   (2) use the length of the name
+#       (a) use d_namelen, if available, or
+#       (b) use strlen(d_name),
+#       add 1 for the null terminator,
+#       add another 1 if it has a "late" d_type field
+#
+# Also, the fields may be present in different orders.
+#
+# Rather than try and code all of that in one function, simply provide a
+# default version that assumes d_reclen, and let each architecture provide its
+# own version.
+#
+sub unpack_dent($$) {
+    my ($buf, $offset) = @_;
+    state $dent_packlen = 19; #length pack 'QQSC', (0) x 4;
+    $offset = '@'.int($offset+0);
+    my ($inode, $hash, $reclen, $type) = unpack $offset.'QQSC', $buf;
+    my ($name) = unpack $offset.'x19U0Z', $buf;
+    return $reclen, $name, $inode, $type, $hash;
+}
+
 our %pack_map = (
     time_t   => 'q',
     timespec => 'qLx4',
@@ -474,6 +500,8 @@ our @EXPORT = qw(
 
     %syscall_map
     %pack_map
+
+    unpack_dent
 
 );
 
