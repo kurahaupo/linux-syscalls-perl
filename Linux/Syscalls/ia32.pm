@@ -372,8 +372,24 @@ our %syscall_map = (
 
 );
 
+our %pack_map = (
+    adjtimex => 'Lx4q4lx4q3q2q3lx4q5lx44',
+                # modes offset freq maxerror esterror status constant precision
+                # tolerance timenow tick ppsfreq jitter shift stabil jitcnt
+                # calcnt errcnt stbcnt tai; everything except modes is signed
+
+    time_t   => 'L',    # seconds
+    timespec => 'LL',   # seconds, nanoseconds
+    timeval  => 'LL',   # seconds, microseconds
+);
+
 our @EXPORT = qw(
+
+    %pack_map
     %syscall_map
+
+    unpack_dent
+
 );
 
 1;
