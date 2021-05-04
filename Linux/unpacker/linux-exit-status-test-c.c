@@ -124,8 +124,8 @@ int main(int argc, char**argv) {
     if (cpid<0) { printf("Can't fork; %m\n"); return EX_UNAVAILABLE; }
 
     if (cpid) {
-        printf("parent process is %zu\n", (intmax_t) getpid());
-        printf("child process is %zu\n",  (intmax_t) cpid);
+        printf("parent process is %ju\n", (intmax_t) getpid());
+        printf("child process is %ju\n",  (intmax_t) cpid);
         printf("wait mode %u\n",  wm);
         siginfo_t sif;
         memset(&sif, 0, sizeof sif);
@@ -228,20 +228,20 @@ int main(int argc, char**argv) {
         if (with_rusage) {
             printf("RUSAGE: %p\n", &rus);
             printf("\tutime=%.6f\n",     tv2f(rus.ru_utime));
-            printf("\tmaxrss=%zd KiB\n", (intmax_t) rus.ru_maxrss);
-            printf("\tixrss=%zd KiB  ",  (intmax_t) rus.ru_ixrss);
-            printf("\tidrss=%zd KiB  ",  (intmax_t) rus.ru_idrss);
-            printf("\tisrss=%zd KiB\n",  (intmax_t) rus.ru_isrss);
-            printf("\tminflt=%zd  ",     (intmax_t) rus.ru_minflt);
-            printf("\tmajflt=%zd\n",     (intmax_t) rus.ru_majflt);
-            printf("\tnswap=%zd\n",      (intmax_t) rus.ru_nswap);
-            printf("\tinblock=%zd  ",    (intmax_t) rus.ru_inblock);
-            printf("\toublock=%zd\n",    (intmax_t) rus.ru_oublock);
-            printf("\tmsgsnd=%zd  ",     (intmax_t) rus.ru_msgsnd);
-            printf("\tmsgrcv=%zd\n",     (intmax_t) rus.ru_msgrcv);
-            printf("\tnsignals=%zd\n",   (intmax_t) rus.ru_nsignals);
-            printf("\tnvcsw=%zd  ",      (intmax_t) rus.ru_nvcsw);
-            printf("\tnivcsw=%zd\n",     (intmax_t) rus.ru_nivcsw);
+            printf("\tmaxrss=%jd KiB\n", (intmax_t) rus.ru_maxrss);
+            printf("\tixrss=%jd KiB  ",  (intmax_t) rus.ru_ixrss);
+            printf("\tidrss=%jd KiB  ",  (intmax_t) rus.ru_idrss);
+            printf("\tisrss=%jd KiB\n",  (intmax_t) rus.ru_isrss);
+            printf("\tminflt=%jd  ",     (intmax_t) rus.ru_minflt);
+            printf("\tmajflt=%jd\n",     (intmax_t) rus.ru_majflt);
+            printf("\tnswap=%jd\n",      (intmax_t) rus.ru_nswap);
+            printf("\tinblock=%jd  ",    (intmax_t) rus.ru_inblock);
+            printf("\toublock=%jd\n",    (intmax_t) rus.ru_oublock);
+            printf("\tmsgsnd=%jd  ",     (intmax_t) rus.ru_msgsnd);
+            printf("\tmsgrcv=%jd\n",     (intmax_t) rus.ru_msgrcv);
+            printf("\tnsignals=%jd\n",   (intmax_t) rus.ru_nsignals);
+            printf("\tnvcsw=%jd  ",      (intmax_t) rus.ru_nvcsw);
+            printf("\tnivcsw=%jd\n",     (intmax_t) rus.ru_nivcsw);
         }
     } else {
         int j = 1000;
