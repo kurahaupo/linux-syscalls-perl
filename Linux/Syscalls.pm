@@ -1287,6 +1287,96 @@ _export_tag qw{ proc wait_options =>
                     WCLONE };
 _export_tag qw{ proc => waitid waitid5 Exit };
 
+{
+# Internal subs for unpacking complex proc-related structs
+
+# _unpack_siginfo returns a 6-element array: si_status, si_errno, si_code,
+# si_pid, si_uid, si_signo.
+#
+# By prefilling the struct with a known bit-pattern, we can observe that the
+# x86_64 kernel call currently writes to bytes 0~11 and 16~27, so a 28-byte or
+# 7-qword buffer is required, but <asm-generic/siginfo.h> sets SI_MAX_SIZE to
+# 128, presumably for future expansion, making the whole 140 bytes.
+#
+# si_errno only gets filled in when the waitid syscall succeeds, so it's always
+# 0, but may be observable on other syscalls.
+#
+# The bytes 12~15 are left untouched; they appear to be alignment padding.
+
+# From man (2) waitid:
+#
+#   Upon successful return, waitid() fills in the following fields of the
+#   siginfo_t structure pointed to by infop:
+#
+#   si_pid      The process ID of the child.
+#
+#   si_uid      The real user ID of the child.
+#               (This field is not set on most other implementations.)
+#
+#   si_signo    Always set to SIGCHLD.
+#
+#   si_status   Either the exit status of the child, as given to _exit(2) (or
+#               exit(3)), or the signal that caused the child to terminate,
+#               stop, or continue. The si_code field can be used to determine
+#               how to interpret this field.
+#
+#   si_code     Set  to  one  of:
+#               CLD_EXITED  (child  called _exit(2));
+#               CLD_KILLED (child killed by signal);
+#               CLD_DUMPED (child killed by signal, and dumped core);
+#               CLD_STOPPED (child stopped by signal);
+#               CLD_TRAPPED (traced child has trapped); or
+#               CLD_CONTINUED (child continued by SIGCONT).
+#
+# however the order above is misleading, as in
+# /usr/include/asm-generic/siginfo.h the order is:
+#
+#       #define SI_MAX_SIZE 128
+#       ...
+#       typedef struct siginfo {
+#           int si_signo;
+#           int si_errno;
+#           int si_code;
+#
+#           union {
+#               int _pad[SI_PAD_SIZE];
+#       ...
+#               /* SIGCHLD */
+#               struct {
+#                   __kernel_pid_t _pid;    /* which child */
+#                   __ARCH_SI_UID_T _uid;   /* sender's uid */
+#                   int _status;        /* exit code */
+#                   __ARCH_SI_CLOCK_T _utime;
+#                   __ARCH_SI_CLOCK_T _stime;
+#               } _sigchld;
+#       ...
+#           } _sifields;
+#       } __ARCH_SI_ATTRIBUTES siginfo_t;
+#
+# si_errno doesn't get mentioned because not applicable to this case: it's
+# 0 when the syscall succeeds, and untouched when the syscall fails.
+
+use constant UNPACK_SIGINFO => 'llLx[L]LLL';
+use constant EMPTY_SIGINFO  => pack UNPACK_SIGINFO, (-1) x 6;
+
+sub _unpack_siginfo($) {
+    return unpack UNPACK_SIGINFO, $_[0];
+}
+
+# _unpack_rusage returns a 16-element array, starting with the utime & stime as
+# floating-point seconds.
+
+use constant UNPACK_RUSAGE => 'Q18';
+use constant EMPTY_RUSAGE  => pack UNPACK_RUSAGE, (-1) x 18;
+
+sub _unpack_rusage($) {
+    my ($ru_utime, $ru_utime_µs, $ru_stime, $ru_stime_µs, @ru) = unpack UNPACK_RUSAGE, $_[0];
+    return  _timeval_to_seconds($ru_utime, $ru_utime_µs),
+            _timeval_to_seconds($ru_stime, $ru_stime_µs),
+            @ru;
+}
+}
+
 # wait3 and wait4 return:
 #   empty-list (and sets $!) when there are no children, or on error
 #   0 when WNOHANG prevents immediate reaping
@@ -1401,93 +1491,57 @@ sub waitid5($$;$) {
     goto &waitid_;
 }
 
-# _unpack_siginfo reurns a 5-element array
-
-sub _unpack_siginfo($) {
-    #my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = unpack 'Q5', $_[0];
-    #return $si_pid, $si_uid, $si_signo, $si_status, $si_code;
-    return unpack 'lx[l]Lx[l]LLL', $_[0];
-}
-
-# _unpack_rusage returns a 16-element array, starting with the utime & stime as
-# floating-point seconds.
-
-sub _unpack_rusage($) {
-    my ($ru_utime, $ru_utime_µs, $ru_stime, $ru_stime_µs, @ru) = unpack 'Q18', $_[0];
-    return  _timeval_to_seconds($ru_utime, $ru_utime_µs),
-            _timeval_to_seconds($ru_stime, $ru_stime_µs),
-            @ru;
-}
-
-#use Data::Dumper;
-
-
+# Assume that since you're calling waitid, you have an interest in the siginfo,
+# but since the rusage is a Linux syscall extension, only include it if you
+# explicitly ask for it.
 _export_ok 'waitid_';
 sub waitid_($$$;$$) {
-    my ($id_type, $id, $options, $record_rusage, $record_siginfo) = @_;
-    $record_siginfo //= 1;          # normally wanted
-    $record_rusage //= 0;           # normally unwanted
-    $record_rusage &&= !wantarray;  # functionally unwanted
-    #warn "WAITID: ".Dumper(\@_);
-    $id_type |= 0;
-    $id |= 0;
-    $options |= 0;
-    my $siginfo = pack 'qQ*', -1, (0) x 15 if $record_siginfo;
-    my $rusage = pack 'Q*', (0) x 18 if $record_rusage;
+    my ($id_type, $id, $options, $record_wrusage, $record_siginfo) = @_;
+    $id_type |= 0;  # force numeric
+    $id |= 0;       # force numeric
+    $options |= 0;  # force numeric
+    my $siginfo = EMPTY_SIGINFO if $record_siginfo // 1 and wantarray;
+    my $wrusage = EMPTY_RUSAGE  if $record_wrusage // 0 and wantarray;
     state $syscall_id = _get_syscall_id 'waitid';
     $! = 0;
     my $r = syscall $syscall_id,
                     $id_type,
                     $id,
-                    $record_siginfo ? $siginfo : undef,
+                    $siginfo // undef,
                     $options,
-                    $record_rusage ? $rusage : undef;
-    warn sprintf "Invoked\tsyscall  %u WAITID\n"
+                    $wrusage // undef;
+    state $debug_waitid = $ENV{PERL5_DEBUG_WAITID};
+    warn sprintf "waitid_ invoked\n"
+                ."\tsyscall  %u\n"
                 ."\targs     type=%d, id=%d, options=%#x rec_si=%s rec_ru=%s\n"
-                ."\treturned result=%d si=(%s) rusage=(%s)\n"
-                ."\terrno    %s (%d)\n",
+                ."\treturned result=%d si=%s rusage=%s\n"
+                ."\t\t errno %s (%d)\n",
             $syscall_id,
             $id_type,
             $id,
             $options,
-            $record_siginfo // '(undef)',
-            $record_rusage // '(undef)',
+            $record_siginfo ? wantarray ? defined $record_siginfo ? 'record' : 'record-default' : 'omit-notwantarray' : 'omit',
+            $record_wrusage ? wantarray ? 'record' : 'omit-notwantarray' : defined $record_wrusage  ? 'omit' : 'omit-default',
             $r,
-            join(' ', unpack 'qQ*', $siginfo // ''),
-            join(' ', unpack 'Q*', $rusage // ''),
-            $!, $!;
-    warn "waitid returned $r $!\n";
+            defined $siginfo ? '<'.unpack('H*', $siginfo).'> ('.join(',', _unpack_siginfo $siginfo).')' : '(omitted)',
+            defined $wrusage ? '<'.unpack('H*', $wrusage).'> ('.join(',', _unpack_rusage  $wrusage).')' : '(omitted)',
+            $!, $!
+        if $^C || $debug_waitid;
     $r == -1 and return;
 
-    my ($si_pid, $si_uid, $si_signo, $si_status, $si_code) = _unpack_siginfo $siginfo
-        if $record_siginfo;
-    warn sprintf "\tsiginfo: pid=%d uid=%d signo=%d status=%d code=%d\n",
-                $si_pid, $si_uid, $si_signo, $si_status, $si_code
-        if $record_siginfo;
+    # ignore si_errno, because it must be 0 if we get here.
+    my ($si_status, undef, $si_code, $si_pid, $si_uid, $si_signo, ) =
+    my @si = _unpack_siginfo $siginfo
+        if $record_siginfo && $r != -1;
 
     return $si_pid if !wantarray;
 
-    my @ru = _unpack_rusage $rusage
-        if $record_rusage;
+    my @wru = _unpack_rusage $wrusage
+        if defined $wrusage;
 
-#   my (
-#          $ru_utime, $ru_stime,
-#          $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
-#          $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
-#          $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw) = _unpack_rusage $rusage
-#       if $record_rusage;
-    return $si_pid,
-           $si_uid,
-           $si_signo,
-           $si_status,
-           $si_code,
-           $record_rusage ? _unpack_rusage $rusage
-                          : ();
-#          $ru_utime, $ru_stime,
-#          $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
-#          $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
-#          $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
-#          $record_rusage ? _unpack_rusage $rusage
+    # Note pid & stat first, to be more consistent with other wait* calls
+    return $si_status, $si_code, $si_pid, $si_uid, $si_signo,
+           @wru;
 }
 
 ################################################################################
