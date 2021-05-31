@@ -1209,7 +1209,7 @@ sub Exit($) {
 # waitid
 #
 # Implement the POSIX waitid call and the Linux-specific extension
-# (which takes an additional parameter that has a stuct times to
+# (which takes an additional parameter that has a struct times to
 # record the time usage of any reaped processses). This extension
 # does not have any official name, so I simply call it "waitid5",
 # since the syscall takes 5 parameters, analoguously to wait3 & wait4.
@@ -1445,7 +1445,7 @@ sub waitid_($$$;$$) {
     warn sprintf "Invoked\tsyscall  %u WAITID\n"
                 ."\targs     type=%d, id=%d, options=%#x rec_si=%s rec_ru=%s\n"
                 ."\treturned result=%d si=(%s) rusage=(%s)\n"
-                ."\terrno    %s\n",
+                ."\terrno    %s (%d)\n",
             $syscall_id,
             $id_type,
             $id,
@@ -1453,9 +1453,9 @@ sub waitid_($$$;$$) {
             $record_siginfo // '(undef)',
             $record_rusage // '(undef)',
             $r,
-            join(' ', unpack 'qQ*', $siginfo),
-            join(' ', unpack 'Q*', $rusage),
-            $!;
+            join(' ', unpack 'qQ*', $siginfo // ''),
+            join(' ', unpack 'Q*', $rusage // ''),
+            $!, $!;
     warn "waitid returned $r $!\n";
     $r == -1 and return;
 
