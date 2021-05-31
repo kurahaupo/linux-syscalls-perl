@@ -31,6 +31,19 @@ use constant {
     WM_last     => 9,
 };
 
+my @wm_name = (
+    'none',
+    'WM1',
+    'waitpid2',
+    'wait3',
+    'wait4',
+    'waitid',
+    'waitid5',
+    'waitidx',
+    'wait_builtin',
+    'waitpid_builtin',
+);
+
 my $waitmode = WM_WAIT_BUILTIN;
 
 sub N($) { my $r = \$_[0]; return sub { $$r = ! $_[1] } }
@@ -79,104 +92,106 @@ sub one($) {
 
     defined $cpid or die "Can't fork; $!\n";
 
-    if ($cpid) {
-        my $unpack_mode = WU_none;
-
-        warn "Waiting for $cpid\n";
-        my @r = 'NOSYS';
-        $! = 38; #ENOSYS;
-        if      ($waitmode == WM_NONE) {
-            @r = 'NOWAIT';
-            $! = 0;
-        } elsif ($waitmode == WM_WAIT_BUILTIN) {
-            my $r = wait;
-            if ($r < 0) {
-                @r = ();
-            } else {
-                @r = ($r, $?);
-                $unpack_mode = WU_pid_stat;
-            }
-        } elsif ($waitmode == WM_WAITPID_BUILTIN) {
-            $options //= 0;
-            my $r = waitpid $cpid, $options;
-            if ($r < 0) {
-                @r = ();
-            } else {
-                @r = ($r, $?);
-                $unpack_mode = WU_pid_stat;
-            }
-        } elsif ($waitmode == WM_WAITPID2) {
-            $options //= 0;
-            @r = waitpid2($cpid, $options) if exists &waitpid2;
-            $unpack_mode = WU_pid_stat;
-        } elsif ($waitmode == WM_WAIT3) {
-            $options //= 0;
-            @r = wait3($options) if exists &wait3;
-            $unpack_mode = WU_pid_stat | WU_rusage;
-        } elsif ($waitmode == WM_WAIT4) {
-            $options //= 0;
-            @r = wait4($cpid, $options) if exists &wait4;
-            $unpack_mode = WU_pid_stat | WU_rusage;
-        } elsif ($waitmode == WM_WAITID) {
-            $options //= WEXITED;
-            @r = waitid P_PID, $cpid, $options;
-            $unpack_mode = WU_siginfo | WU_rusage;
-        } elsif ($waitmode == WM_WAITID5) {
-            $options //= WEXITED;
-            @r = waitid5 P_PID, $cpid, $options;
-            $unpack_mode = WU_siginfo | WU_rusage;
-        } elsif ($waitmode == WM_WAITIDX) {
-            $options //= WEXITED;
-            @r = waitid_ P_PID, $cpid, $options, $with_rusage, $with_siginfo;
-            $unpack_mode = WU_siginfo | WU_rusage;
-        } else {
-            die "Can't happen: waitmode=$waitmode";
-        }
-
-        @r or die "Couldn't wait for $cpid using wm=$waitmode; $!\n";
-
-        my ( $rpid, $status )
-            = splice @r, 0, 2
-            if $unpack_mode & WU_pid_stat;
-        my ( $si_pid, $si_uid, $si_signo, $si_status, $si_code )
-            = splice @r, 0, 5
-            if $unpack_mode & WU_siginfo;
-        my ( $ru_utime, $ru_stime, $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
-             $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
-             $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw )
-            = splice @r, 0, 16
-            if $unpack_mode & WU_rusage;
-
-        #my $options = WNOHANG|WUNTRACED|WCONTINUED;
-        #$options = 0;
-        warn "Results:\n".Dumper(\@r);
-        warn sprintf "\trpid=%d, status=%#x\n", $rpid, $status;
-        warn sprintf "\tsiginfo: si_pid=%d, si_uid=%d, si_signo=%d, si_status=%d, si_code=%d\n",
-                    $si_pid, $si_uid, $si_signo, $si_status, $si_code
-            if defined $si_pid;
-        warn sprintf  "\trusage: utime=%.9f, stime=%.9f\n"
-                     ."\t\tru_maxrss=%d, ru_ixrss=%d, ru_idrss=%d, ru_isrss=%d,\n"
-                     ."\t\tru_minflt=%d, ru_majflt=%d, ru_nswap=%d, ru_inblock=%d, ru_oublock=%d,\n"
-                     ."\t\tru_msgsnd=%d, ru_msgrcv=%d, ru_nsignals=%d, ru_nvcsw=%d, ru_nivcsw=%d,\n",
-                    $ru_utime, $ru_stime,
-                    $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
-                    $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
-                    $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw,
-          if defined $ru_utime;
-
-    } else {
-        sleep 1;
-        Exit int(0x1234567);
-        die "exit failed; $!\n";
+    if (!$cpid) {
+        # Created as a dummy child
+        sleep 0.125;
+        Exit 0x1234567;
+        die "Exit failed; $!\n";
     }
+
+    my $unpack_mode = WU_none;
+
+    warn "Waiting for $cpid using $waitmode $wm_name[$waitmode]\n";
+    my @r;
+    if      ($waitmode == WM_NONE) {
+        @r = (undef, 'running in NOWAIT mode');
+        $! = 0;
+    } elsif ($waitmode == WM_WAIT_BUILTIN) {
+        my $r = CORE::wait;
+        if ($r < 0) {
+            #@r = (undef, $!);
+        } else {
+            @r = ($r, $?);
+            $unpack_mode = WU_pid_stat;
+        }
+    } elsif ($waitmode == WM_WAITPID_BUILTIN) {
+        my $r = CORE::waitpid $cpid, $options // 0;
+        if ($r < 0) {
+            #@r = (undef, $!);
+        } else {
+            @r = ($r, $?);
+            $unpack_mode = WU_pid_stat;
+        }
+    } elsif ($waitmode == WM_WAITPID2 && exists &waitpid2) {
+        @r = waitpid2($cpid, $options // 0);
+        $unpack_mode = WU_pid_stat;
+    } elsif ($waitmode == WM_WAIT3 && exists &wait3) {
+        @r = wait3($options // 0);
+        $unpack_mode = WU_pid_stat | WU_rusage;
+    } elsif ($waitmode == WM_WAIT4 && exists &wait4) {
+        @r = wait4($cpid, $options // 0);
+        $unpack_mode = WU_pid_stat | WU_rusage;
+    } elsif ($waitmode == WM_WAITID) {
+        @r = waitid P_PID, $cpid, $options // WEXITED;
+        $unpack_mode = WU_siginfo | WU_rusage;
+    } elsif ($waitmode == WM_WAITID5) {
+        @r = waitid5 P_PID, $cpid, $options // WEXITED;
+        $unpack_mode = WU_siginfo | WU_rusage;
+    } elsif ($waitmode == WM_WAITIDX) {
+        @r = waitid_ P_PID, $cpid, $options // WEXITED, $with_rusage, $with_siginfo;
+        $unpack_mode = WU_siginfo | WU_rusage;
+    } else {
+        warn "Unimplemented syscall $wm_name[$waitmode]\n";
+        @r = (undef, 'syscall not implemented');
+        $! = 38; #ENOSYS;
+        return 1;
+    }
+
+    @r or die "Couldn't wait for $cpid using wm=$waitmode $wm_name[$waitmode]; $!\n";
+
+    my ( $rpid, $status )
+        = splice @r, 0, 2
+        if $unpack_mode & WU_pid_stat;
+    my ( $si_status, $si_code, $si_pid, $si_uid, $si_signo )
+        = splice @r, 0, 5
+        if $unpack_mode & WU_siginfo;
+    my ( $ru_utime, $ru_stime, $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+         $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+         $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw )
+        = splice @r, 0, 16
+        if $unpack_mode & WU_rusage;
+
+    warn "Results:\n".join(', ', @r);
+    if (defined $rpid) {
+        warn sprintf "\trpid=%d, status=%#x\n", $rpid, $status;
+    } elsif (defined $status) {
+        warn sprintf "\tpid=none, errno=%s\n", $status;
+    }
+    warn sprintf "\tsiginfo: si_pid=%d, si_uid=%d, si_signo=%d, si_status=%d, si_code=%d\n",
+                $si_pid, $si_uid, $si_signo, $si_status, $si_code
+        if defined $si_pid;
+    warn sprintf  "\trusage: utime=%.9f, stime=%.9f\n"
+                 ."\t\tru_maxrss=%d, ru_ixrss=%d, ru_idrss=%d, ru_isrss=%d,\n"
+                 ."\t\tru_minflt=%d, ru_majflt=%d, ru_nswap=%d, ru_inblock=%d, ru_oublock=%d,\n"
+                 ."\t\tru_msgsnd=%d, ru_msgrcv=%d, ru_nsignals=%d, ru_nvcsw=%d, ru_nivcsw=%d,\n",
+                $ru_utime, $ru_stime,
+                $ru_maxrss, $ru_ixrss, $ru_idrss, $ru_isrss,
+                $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
+                $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw,
+      if defined $ru_utime;
+
+    1;
+}
+
+sub all {
+    my $errors = 0;
+    eval { one $_; 1 } or do { ++$errors; warn $@ } for WM_first .. WM_last;
+    warn "\n$errors errors\n";
+    $errors == 0;
 }
 
 if ($waitmode == WM_ALL) {
-    my $errors = 0;
-    eval { one $_; 1 } or ++$errors for WM_first .. WM_last;
-    0;
-    1 if $errors == 0;
+    all;
 } else {
     one $waitmode;
-    1;
 }
