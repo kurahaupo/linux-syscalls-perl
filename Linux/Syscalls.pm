@@ -1246,6 +1246,125 @@ _export_tag qw( DT_ dirent  =>  getdents
 
 ################################################################################
 
+# fiemap - a wrapper for ioctl(fd, FS_IOC_FIEMAP, &buffer);
+# see https://github.com/torvalds/linux/blob/b9f5dba225aede4518ab0a7374c2dc38c7c049ce/Documentation/filesystems/fiemap.txt
+#
+# Constants from /usr/include/linux/fiemap.h
+
+use constant {
+
+    FIEMAP_FLAG_SYNC             => 0x00000001, # sync file data before map
+    FIEMAP_FLAG_XATTR            => 0x00000002, # map extended attribute tree
+    FIEMAP_FLAGS_COMPAT          => 0x00000003, # = FIEMAP_FLAG_SYNC | FIEMAP_FLAG_XATTR
+    FIEMAP_FLAG_CACHE            => 0x00000004, # request caching of the extents
+
+    FIEMAP_EXTENT_LAST           => 0x00000001, # Last extent in file.
+    FIEMAP_EXTENT_UNKNOWN        => 0x00000002, # Data location unknown.
+    FIEMAP_EXTENT_DELALLOC       => 0x00000004, # Location still pending. Sets EXTENT_UNKNOWN.
+    FIEMAP_EXTENT_ENCODED        => 0x00000008, # Data can not be read while fs is unmounted
+    FIEMAP_EXTENT_DATA_ENCRYPTED => 0x00000080, # Data is encrypted by fs. Sets EXTENT_NO_BYPASS.
+    FIEMAP_EXTENT_NOT_ALIGNED    => 0x00000100, # Extent offsets may not be block aligned.
+    FIEMAP_EXTENT_DATA_INLINE    => 0x00000200, # Data mixed with metadata. Sets EXTENT_NOT_ALIGNED.
+    FIEMAP_EXTENT_DATA_TAIL      => 0x00000400, # Multiple files in block. Sets EXTENT_NOT_ALIGNED.
+    FIEMAP_EXTENT_UNWRITTEN      => 0x00000800, # Space allocated, but no data (i.e. zero).
+    FIEMAP_EXTENT_MERGED         => 0x00001000, # File does not natively support extents. Result merged for efficiency.
+    FIEMAP_EXTENT_SHARED         => 0x00002000, # Space shared with other files.
+
+    FIEMAP_MAX_OFFSET            => ~0,         # UINT64_MAX = 0xffffffffffffffff
+
+    FIEMAP_FLAG_PARTIAL          => (~0 ^ (~0>>1)),
+
+};
+
+#     # struct fiemap {
+#  Q  #     __u64 fm_start;             /* logical offset (inclusive) at which to start mapping (in) */
+#  Q  #     __u64 fm_length;            /* logical length of mapping which userspace wants (in) */
+#  L  #     __u32 fm_flags;             /* FIEMAP_FLAG_* flags for request (in/out) */
+#  L  #     __u32 fm_mapped_extents;    /* number of extents that were mapped (out) */
+#  L  #     __u32 fm_extent_count;      /* size of fm_extents array (in) */
+#x[L] #     __u32 fm_reserved;
+#     #     struct fiemap_extent {
+#  Q  #         __u64 fe_logical;       /* logical offset in bytes for the start of the extent from the beginning of the file */
+#  Q  #         __u64 fe_physical;      /* physical offset in bytes for the start of the extent from the beginning of the disk */
+#  Q  #         __u64 fe_length;        /* length in bytes for this extent */
+#x[Q2]#         __u64 fe_reserved64[2];
+#  L  #         __u32 fe_flags;         /* FIEMAP_EXTENT_* flags for this extent */
+#x[L3]#         __u32 fe_reserved[3];
+#     #     } fm_extents[];             /* array of mapped extents (out) */
+#     # };
+
+use constant fiemap_header_packfmt  => 'QQLLLx[L]';
+use constant fiemap_header_size     => length pack fiemap_header_packfmt, (0) x length fiemap_header_packfmt;   # = 32 = 2×8+4×4
+use constant fiemap_header_elements => scalar @{[ unpack fiemap_header_packfmt, 'x' x fiemap_header_size ]};    # = 5
+
+use constant fiemap_extent_packfmt  => 'QQQx[Q2]Lx[L3]';
+use constant fiemap_extent_size     => length pack fiemap_extent_packfmt, (0) x length fiemap_extent_packfmt;   # = 56 = 5×8+4×4
+use constant fiemap_extent_elements => scalar @{[ unpack fiemap_extent_packfmt, 'x' x fiemap_extent_size ]};    # = 4
+
+use constant fiemap_default_bufcount => 1;
+
+use constant FS_IOC_FIEMAP => Linux::Syscalls::ioctl::_IOWR(ord 'f', 11, fiemap_header_size);
+
+{
+    package Linux::Syscalls::bless::fiemap_extent;
+    sub logical  { $_[0]->[0]  }
+    sub physical { $_[0]->[1]  }
+    sub length   { $_[0]->[2]  }
+    sub flags    { $_[0]->[3]  }
+}
+
+sub fiemap($;$$) {
+    my ($fd, $bufcount, $in_flags) = @_;
+    state $syscall_id = _get_syscall_id 'ioctl';
+    state $packfmt = 'QQLLLL';
+    state $extent_fmt = 'QQQQLL';
+    $bufcount ||= fiemap_default_bufcount;
+    my $fm_start = 0;
+    my $fm_length = FIEMAP_MAX_OFFSET;
+    $in_flags //= 0;
+    my $fm_ext_count = 0;
+    my $buffer = pack( $packfmt, $fm_start, $fm_length, $in_flags, 0xeeeeeeee, $bufcount ) . (  "\xee" x ( $bufcount * fiemap_extent_size ) );
+    my $res = ioctl $fd, FS_IOC_FIEMAP, $buffer;
+    #my $res = syscall $syscall_id, $fd, $buffer;
+    printf STDERR "ioctl(%d, FS_IOC_FIEMAP, [%s]) -> %s\n", $fd, unpack("H*",$buffer), $res // '(undef)';
+    $res >= 0 or return;
+    my (undef, undef, $out_flags, $fm_mapped_extents ) = unpack fiemap_header_packfmt, $buffer;
+    my @r = map {
+            bless [ unpack fiemap_extent_packfmt,
+                           substr $buffer,
+                                  fiemap_header_size + $_ * fiemap_extent_size, fiemap_extent_size
+                  ], Linux::Syscalls::bless::fiemap_extent::
+        } 0 .. $fm_mapped_extents - 1;
+    @r && $r[-1]->flags & FIEMAP_EXTENT_LAST or $out_flags |= FIEMAP_FLAG_PARTIAL;
+    return $out_flags, \@r;
+}
+
+_export_tag qw( fiemap =>
+
+    fiemap
+
+    FIEMAP_FLAG_SYNC FIEMAP_FLAG_XATTR FIEMAP_FLAGS_COMPAT FIEMAP_FLAG_CACHE
+
+    FIEMAP_EXTENT_LAST FIEMAP_EXTENT_UNKNOWN FIEMAP_EXTENT_DELALLOC
+    FIEMAP_EXTENT_ENCODED FIEMAP_EXTENT_DATA_ENCRYPTED
+    FIEMAP_EXTENT_NOT_ALIGNED FIEMAP_EXTENT_DATA_INLINE FIEMAP_EXTENT_DATA_TAIL
+    FIEMAP_EXTENT_UNWRITTEN FIEMAP_EXTENT_MERGED FIEMAP_EXTENT_SHARED
+
+    FIEMAP_MAX_OFFSET
+
+    FIEMAP_FLAG_PARTIAL
+
+);
+
+if ($^C) {
+    fiemap_header_size     == 32 or die;
+    fiemap_header_elements ==  5 or die;
+    fiemap_extent_size     == 56 or die;
+    fiemap_extent_elements ==  4 or die;
+}
+
+################################################################################
+
 #
 # Emulate a hangup on this process's controlling terminal, which should result
 # in all processes in this session being sent SIGHUP when they attempt to
