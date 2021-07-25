@@ -64,7 +64,7 @@ package Time::Nanosecond::ts;
 BEGIN { $INC{'Time/Nanosecond/ts.pm'} = __FILE__ }
 use parent Time::Nanosecond::base::;
 
-use constant _prec => 9;
+use constant _prec => undef;
 
 sub _normalize {
     my ($t) = @_;
@@ -126,24 +126,18 @@ sub from_timespec($$) {
 sub add {
     my ($t, $u) = @_;
     my @t = @$t;
-    if (ref $u) {
-        $t[0] += $u->[0];
-        $t[1] += $u->[1];
-    } else {
-        $t[0] += $u
-    }
+    $u = ref($t)->from_seconds($u) if ! ref $u;
+    $t[0] += $u->_sec;
+    $t[1] += $u->_nsec;
     return _normalize bless \@t;
 }
 
 sub subtract {
     my ($t, $u, $swap) = @_;
     my @t = @$t;
-    if (ref $u) {
-        $t[0] += $u->[0];
-        $t[1] += $u->[1];
-    } else {
-        $t[0] += $u
-    }
+    $u = ref($t)->from_seconds($u) if ! ref $u;
+    $t[0] -= $u->_sec;
+    $t[1] -= $u->_nsec;
     if ($swap) {
         $t[0] = -$t[0];
         $t[1] = -$t[1];
@@ -157,14 +151,25 @@ use overload
     ;
 
 sub compare {
-    my ($t, $u) = @_;
-    return $t->[0] <=> $u->[0]
-        || $t->[1] <=> $u->[1];
+    my ($t, $u, $swap) = @_;
+    $u = ref($t)->from_seconds($u) if ! ref $u;
+    my $r;
+    if (ref $u) {
+        $r = $t->[0] <=> $u->_sec
+          || $t->[1] <=> $u->_nsec;
+    } else {
+        no integer;
+        my $u0 = floor($u);
+        $r = $t->[0] <=> $u0
+          || $t->[1] <=> ($u - $u0) * 1E9;
+    }
+    $r = -$r if $swap;
+    return $r;
 }
 
 sub copy {
     my ($t) = @_;
-    return bless [ @$t ];
+    return bless [ @$t ], ref $t;
 }
 
 use overload
@@ -183,6 +188,13 @@ use overload
     bool    => \&boolify,
     ;
 
+}
+
+{
+# Same but with default precision of 9 digits (nanoseconds)
+package Time::Nanosecond::ts9;
+use parent Time::Nanosecond::ts::;
+use constant _prec => 9;
 }
 
 {
@@ -220,16 +232,20 @@ use parent Time::Nanosecond::ts::;
 use constant _prec => 0;
 }
 
-{
+BEGIN { if (0x80000000 << 31) { eval q{
 # Represent a time as an integer number of nanoseconds
+#
+# This entire class will be elided if integers are narrower than 62 bits.
 package Time::Nanosecond::ns;
 use parent Time::Nanosecond::base::;
+
+use POSIX qw(floor);
 
 # constructor
 sub from_seconds($) {
     my $class = shift;
     no integer;     # needed to map [0.0,1.0) to [0,999999999]
-    my $ns = int( $_[0] * 1E9 );
+    my $ns = floor( $_[0] * 1E9 );
     return bless \$ns, $class;
 }
 
@@ -277,13 +293,13 @@ sub microseconds($) {
 
 sub add {
     my ($t, $u) = @_;
-    my $r = $$t + $$u;
+    my $r = $$t + ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
     return bless \$r;
 }
 
 sub subtract {
     my ($t, $u, $swap) = @_;
-    my $r = $$t - $$u;
+    my $r = $$t - ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
     $r = -$r if $swap;
     return bless \$r;
 }
@@ -295,13 +311,15 @@ use overload
 
 sub compare {
     my ($t, $u) = @_;
-    return $$t <=> $$u;
+    my $r = $$t <=> ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
+    $r = -$r if $swap;
+    return $r;
 }
 
 sub copy {
     my ($t) = @_;
     my $r = $$t;
-    return bless \$r;
+    return bless \$r, ref $t;
 }
 
 use overload
@@ -320,30 +338,55 @@ use overload
     bool    => \&boolify,
     ;
 
-}
+}}}
 
 {
 package Time::Nanosecond::base;
 
 use Carp qw(cluck);
+use POSIX qw(floor);
 
 # constructor
 sub from_timeval($$) {
-    my ($class, $sec, $µsec) = @_;
-    return $class->from_timespec($sec, $µsec * 1000);
+    my ($class, $sec, $µs) = @_;
+    return $class->from_timespec($sec, $µs * 1000);
+}
+
+# constructor
+sub from_seconds($) {
+    my ($class, $sec) = @_;
+    return $class->from_nanoseconds($sec * 1E9);
+}
+
+# constructor
+sub from_deciseconds($) {
+    my ($class, $ds) = @_;
+    return $class->from_nanoseconds($ds * 1E8);
+}
+
+# constructor
+sub from_centiseconds($) {
+    my ($class, $cs) = @_;
+    return $class->from_nanoseconds($cs * 1E7);
+}
+
+# constructor
+sub from_milliseconds($) {
+    my ($class, $ms) = @_;
+    return $class->from_nanoseconds($ms * 1E6);
 }
 
 # constructor
 sub from_microseconds($) {
-    my ($class, $µsec) = @_;
-    return $class->from_nanoseconds($µsec * 1000);
+    my ($class, $µs) = @_;
+    return $class->from_nanoseconds($µs * 1E3);
 }
 
 # Fallback output conversions; you MUST override at least one.
 
 sub _fsec($) { no integer; return $_[0]->_nsec / 1E9 }
 sub _µsec($) {             return $_[0]->_nsec / 1E3 }
-sub _nsec($) { no integer; return int( $_[0]->_fsec * 1E9 ) }
+sub _nsec($) { no integer; return floor( $_[0]->_fsec * 1E9 + 0.5 ) }
 
 # Default conversions; good for most uses.
 
@@ -385,7 +428,7 @@ sub microseconds($) {
 # on a 32-bit integer.
 sub nanoseconds($) {
     my ($t) = @_;
-    return $t->_sec * 1E9 + $t->_nsec if 0x80000000 << 1;
+    return $t->_sec * 1E9 + $t->_nsec if 0x80000000 << 31;
     no integer;
     return $t->_sec * 1E9 + $t->_nsec;
 }
@@ -506,20 +549,44 @@ our @EXPORT_OK;
 
 sub localtime {
     return $_[0]->localtime if UNIVERSAL::can($_[0], 'localtime');
+    goto &Time::localtime::localtime if exists &Time::localtime::localtime;
     goto &CORE::localtime;
-    goto &CORE::localtime::localtime;
 }
-push @EXPORT, 'localtime';
+push @EXPORT_OK, 'localtime';
 
 sub gmtime {
     return $_[0]->gmtime if UNIVERSAL::can($_[0], 'gmtime');
+    goto &Time::gmtime::gmtime if exists &Time::gmtime::gmtime;
     goto &CORE::gmtime;
-    goto &Time::gmtime::gmtime;
 }
-push @EXPORT, 'gmtime';
+push @EXPORT_OK, 'gmtime';
 
-sub new_timeval  { return Time::Nanosecond::ts6->from_timeval(@_); } push @EXPORT, qw( new_timeval  );
-sub new_timespec { return Time::Nanosecond::ts->from_timespec(@_); } push @EXPORT, qw( new_timespec );
+sub new_timeval($$)  {
+    return Time::Nanosecond::ts6->from_timeval(@_) if @_ >= 2;
+    return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
+}
+push @EXPORT_OK, qw( new_timeval  );
+
+sub new_timespec($$) {
+    return Time::Nanosecond::ts->from_timespec(@_) if @_ >= 2;
+    return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
+}
+push @EXPORT_OK, qw( new_timespec );
+
+sub new_seconds($) {
+    return Time::Nanosecond::ts0->from_microseconds($_[0] * 1E6) if @_;
+}
+push @EXPORT_OK, qw( new_seconds );
+
+sub new_milliseconds($) {
+    return Time::Nanosecond::ts3->from_microseconds($_[0] * 1E3) if @_;
+}
+push @EXPORT_OK, qw( new_milliseconds );
+
+sub new_microseconds($) {
+    return Time::Nanosecond::ts6->from_microseconds($_[0]) if @_;
+}
+push @EXPORT_OK, qw( new_microseconds );
 
 ################################################################################
 #
@@ -532,9 +599,12 @@ sub new_timespec { return Time::Nanosecond::ts->from_timespec(@_); } push @EXPOR
 #   2.  A new 'N' conversion provides the fractional part of the second; if a
 #       width is specified, this acts the same as the precision (mimicking
 #       behaviour of GNU "date") but without a leading decimal point. When the
-#       '.' modifier is used with the 'N' conversion, it turns on the leading
-#       decimal point, making it consistent with precision used elsewhere. If
-#       the '.' modifier is used, a width should _not_ be used.
+#       precision is used with the 'N' conversion, it turns on the leading
+#       decimal point, making it consistent with precision used elsewhere.
+#
+#       Do not use both width and precision; the behaviour is subject to change
+#       without notice. (In the current implementation, even an empty precision
+#       will cause width to be ignored.)
 #
 #       %.N   - nanoseconds padded to 9 digits, with leading '.'
 #       %N    - nanoseconds padded to 9 digits, without leading '.'
@@ -565,7 +635,7 @@ sub new_timespec { return Time::Nanosecond::ts->from_timespec(@_); } push @EXPOR
 #   Normally the '.' is excluded if trailing 0 suppression results in no digits
 #   after the decimal point, or if the precision is 0.
 #
-#   Only ρ values 1..9 are guaranteed to be supported, and in particular:
+#   Only Ρ VALUES 1..9 are guaranteed to be supported, and in particular:
 #       %.1χ (deciseconds)
 #       %.2χ (centiseconds)
 #       %.3χ (milliseconds)
@@ -670,7 +740,7 @@ sub strftime {
     $fmt =~ /%/ or return $fmt;
     return POSIX::strftime( $fmt, @r[0..8] );
 }
-push @EXPORT, 'strftime';
+push @EXPORT_OK, 'strftime';
 }
 
 1;
@@ -759,10 +829,8 @@ add anything beyond what GNU libc offers.
 The format specifiers for strftime are similar to those for printf; they
 comprise a '%' followed by flags, precision, options, and finally a selector.
 
-"≥2d" at least 2 digits
-"≥3d" at least 3 digits
-"≥4d" at least 4 digits
-
+The following are all the formatting options recognized by C, POSIX, GNU-date,
+and GNU-strftime:
 
     %%      a literal '%'  (C, POSIX, GNU-date, GNU-strftime)
     %A      localized full weekday name ("Sunday")  (GNU-date, GNU-strftime)
