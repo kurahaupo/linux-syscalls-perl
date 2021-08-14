@@ -52,695 +52,687 @@ use POSIX();
 #
 # The base class also provides implementations for localtime & gmtime.
 
-{ package Time::Nanosecond::base;
-  BEGIN { $INC{'Time/Nanosecond/base.pm'} = __FILE__ }
+package Time::Nanosecond::base {
+    BEGIN { $INC{'Time/Nanosecond/base.pm'} = __FILE__ }
 }
 
-{
-# Represent a time as a struct timespec, which contains two integers: a number
-# of seconds, and 0..999999999 nanoseconds. Also use this when a struct timeval
-# is desired, as there's no performance improvement in providing two classes.
-package Time::Nanosecond::ts;
-BEGIN { $INC{'Time/Nanosecond/ts.pm'} = __FILE__ }
-use parent Time::Nanosecond::base::;
+package Time::Nanosecond::ts {
+    # Represent a time as a struct timespec, which contains two integers: a number
+    # of seconds, and 0..999999999 nanoseconds. Also use this when a struct timeval
+    # is desired, as there's no performance improvement in providing two classes.
 
-use constant _prec => undef;
+    BEGIN { $INC{'Time/Nanosecond/ts.pm'} = __FILE__ }
+    use parent Time::Nanosecond::base::;
 
-sub _normalize {
-    my ($t) = @_;
+    use constant _prec => undef;
 
-    #
-    # On many CPUs, integer remainder is calculated such that the sign of the
-    # remainder matches the sign of the numerator, rather than the sign of the
-    # denominator, and integer division is defined as "truncate towards zero"
-    # so that a%b = a-(a∕b×b) or equivalently a∕b = (a-a%b)∕b
-    #
-    # This does not match the meaning of the mathematical modulus, because
-    # relationship
-    #      (a-b)∕b = a∕b-1
-    # fails when 0<a<b.
-    #
-    # The expression ((-7)/8 > -1) tells us whether we need to adjust for this,
-    # given the current arithmetic mode; with any luck this will be treated as
-    # a compile-time constant thus eliminating the $ns < 0 test when it's not
-    # needed.
-    #
+    sub _normalize {
+        my ($t) = @_;
 
-    if ( my $r = ((-7)/8 > -1) &&
-                 $t->[1] < 0 ? -((1E9-1 - $t->[1]) / 1E9)
-                             :            $t->[1]  / 1E9 ) {
-        $t->[0] += $r;
-        $t->[1] -= $r * 1E9;
+        #
+        # On many CPUs, integer remainder is calculated such that the sign of the
+        # remainder matches the sign of the numerator, rather than the sign of the
+        # denominator, and integer division is defined as "truncate towards zero"
+        # so that a%b = a-(a∕b×b) or equivalently a∕b = (a-a%b)∕b
+        #
+        # This does not match the meaning of the mathematical modulus, because
+        # relationship
+        #      (a-b)∕b = a∕b-1
+        # fails when 0<a<b.
+        #
+        # The expression ((-7)/8 > -1) tells us whether we need to adjust for this,
+        # given the current arithmetic mode; with any luck this will be treated as
+        # a compile-time constant thus eliminating the $ns < 0 test when it's not
+        # needed.
+        #
+
+        if ( my $r = ((-7)/8 > -1) &&
+                     $t->[1] < 0 ? -((1E9-1 - $t->[1]) / 1E9)
+                                 :            $t->[1]  / 1E9 ) {
+            $t->[0] += $r;
+            $t->[1] -= $r * 1E9;
+        }
+        return $t;
     }
-    return $t;
-}
 
-sub _sec($)  { my ($t) = @_; return $t->[0]; }
-sub _nsec($) { my ($t) = @_; return $t->[1]; }
-sub _µsec($) { my ($t) = @_; return $t->[1] / 1E3; }
-sub _msec($) { my ($t) = @_; return $t->[1] / 1E6; }
+    sub _sec($)  { my ($t) = @_; return $t->[0]; }
+    sub _nsec($) { my ($t) = @_; return $t->[1]; }
+    sub _µsec($) { my ($t) = @_; return $t->[1] / 1E3; }
+    sub _msec($) { my ($t) = @_; return $t->[1] / 1E6; }
 
-# constructor
-sub from_seconds($) {
-    my $class = shift;
-    my $s = int $_[0];
-    no integer;     # needed to map [0.0,1.0) to [0,999999999]
-    my $ns = ($_[0] - $s) * 1E9;
-    return _normalize bless [ $s, $ns ], $class;
-}
-
-# constructor
-sub from_nanoseconds($) {
-    my $class = shift;
-    my $s = $_[0] / 1E9;
-    my $ns = $_[0] % 1E9;
-    return _normalize bless [ $s, $ns ], $class;
-}
-
-# constructor
-sub from_timespec($$) {
-    my $class = shift;
-    return _normalize bless [ @_ ], $class;
-}
-
-sub add {
-    my ($t, $u) = @_;
-    my @t = @$t;
-    $u = ref($t)->from_seconds($u) if ! ref $u;
-    $t[0] += $u->_sec;
-    $t[1] += $u->_nsec;
-    return _normalize bless \@t;
-}
-
-sub subtract {
-    my ($t, $u, $swap) = @_;
-    my @t = @$t;
-    $u = ref($t)->from_seconds($u) if ! ref $u;
-    $t[0] -= $u->_sec;
-    $t[1] -= $u->_nsec;
-    if ($swap) {
-        $t[0] = -$t[0];
-        $t[1] = -$t[1];
+    # constructor
+    sub from_seconds($) {
+        my $class = shift;
+        my $s = int $_[0];
+        no integer;     # needed to map [0.0,1.0) to [0,999999999]
+        my $ns = ($_[0] - $s) * 1E9;
+        return _normalize bless [ $s, $ns ], $class;
     }
-    return _normalize bless \@t;
-}
 
-use overload
-    '+'     => \&add,
-    '-'     => \&subtract,
-    ;
-
-sub compare {
-    my ($t, $u, $swap) = @_;
-    $u = ref($t)->from_seconds($u) if ! ref $u;
-    my $r;
-    if (ref $u) {
-        $r = $t->[0] <=> $u->_sec
-          || $t->[1] <=> $u->_nsec;
-    } else {
-        no integer;
-        my $u0 = floor($u);
-        $r = $t->[0] <=> $u0
-          || $t->[1] <=> ($u - $u0) * 1E9;
+    # constructor
+    sub from_nanoseconds($) {
+        my $class = shift;
+        my $s = $_[0] / 1E9;
+        my $ns = $_[0] % 1E9;
+        return _normalize bless [ $s, $ns ], $class;
     }
-    $r = -$r if $swap;
-    return $r;
+
+    # constructor
+    sub from_timespec($$) {
+        my $class = shift;
+        return _normalize bless [ @_ ], $class;
+    }
+
+    sub add {
+        my ($t, $u) = @_;
+        my @t = @$t;
+        $u = ref($t)->from_seconds($u) if ! ref $u;
+        $t[0] += $u->_sec;
+        $t[1] += $u->_nsec;
+        return _normalize bless \@t;
+    }
+
+    sub subtract {
+        my ($t, $u, $swap) = @_;
+        my @t = @$t;
+        $u = ref($t)->from_seconds($u) if ! ref $u;
+        $t[0] -= $u->_sec;
+        $t[1] -= $u->_nsec;
+        if ($swap) {
+            $t[0] = -$t[0];
+            $t[1] = -$t[1];
+        }
+        return _normalize bless \@t;
+    }
+
+    use overload
+        '+'     => \&add,
+        '-'     => \&subtract,
+        ;
+
+    sub compare {
+        my ($t, $u, $swap) = @_;
+        $u = ref($t)->from_seconds($u) if ! ref $u;
+        my $r;
+        if (ref $u) {
+            $r = $t->[0] <=> $u->_sec
+              || $t->[1] <=> $u->_nsec;
+        } else {
+            no integer;
+            my $u0 = floor($u);
+            $r = $t->[0] <=> $u0
+              || $t->[1] <=> ($u - $u0) * 1E9;
+        }
+        $r = -$r if $swap;
+        return $r;
+    }
+
+    sub copy {
+        my ($t) = @_;
+        return bless [ @$t ], ref $t;
+    }
+
+    use overload
+        '<=>'   => \&compare,
+        '='     => \&copy,
+        ;
+
+    # Conversions
+
+    sub boolify {
+        my $t = shift;
+        return $t->[0] || $t->[1];
+    }
+
+    use overload
+        bool    => \&boolify,
+        ;
+
 }
 
-sub copy {
-    my ($t) = @_;
-    return bless [ @$t ], ref $t;
+package Time::Nanosecond::ts9 {
+    # Same but with default precision of 9 digits (nanoseconds)
+    use parent Time::Nanosecond::ts::;
+    use constant _prec => 9;
 }
 
-use overload
-    '<=>'   => \&compare,
-    '='     => \&copy,
-    ;
-
-# Conversions
-
-sub boolify {
-    my $t = shift;
-    return $t->[0] || $t->[1];
+package Time::Nanosecond::ts6 {
+    # Same but with default precision of 6 digits (microseconds)
+    use parent Time::Nanosecond::ts::;
+    use constant _prec => 6;
 }
 
-use overload
-    bool    => \&boolify,
-    ;
-
+package Time::Nanosecond::ts3 {
+    # Same but with default precision of 3 digits (milliseconds)
+    use parent Time::Nanosecond::ts::;
+    use constant _prec => 3;
 }
 
-{
-# Same but with default precision of 9 digits (nanoseconds)
-package Time::Nanosecond::ts9;
-use parent Time::Nanosecond::ts::;
-use constant _prec => 9;
+package Time::Nanosecond::ts2 {
+    # Same but with default precision of 2 digits (centiseconds)
+    use parent Time::Nanosecond::ts::;
+    use constant _prec => 2;
 }
 
-{
-# Same but with default precision of 6 digits (microseconds)
-package Time::Nanosecond::ts6;
-use parent Time::Nanosecond::ts::;
-use constant _prec => 6;
+package Time::Nanosecond::ts1 {
+    # Same but with default precision of 1 digit (deciseconds)
+    use parent Time::Nanosecond::ts::;
+    use constant _prec => 1;
 }
 
-{
-# Same but with default precision of 3 digits (milliseconds)
-package Time::Nanosecond::ts3;
-use parent Time::Nanosecond::ts::;
-use constant _prec => 3;
-}
-
-{
-# Same but with default precision of 2 digits (centiseconds)
-package Time::Nanosecond::ts2;
-use parent Time::Nanosecond::ts::;
-use constant _prec => 2;
-}
-
-{
-# Same but with default precision of 1 digit (deciseconds)
-package Time::Nanosecond::ts1;
-use parent Time::Nanosecond::ts::;
-use constant _prec => 1;
-}
-
-{
-# Same but with default precision of 0 digit (whole seconds)
-package Time::Nanosecond::ts0;
-use parent Time::Nanosecond::ts::;
-use constant _prec => 0;
+package Time::Nanosecond::ts0 {
+    # Same but with default precision of 0 digit (whole seconds)
+    use parent Time::Nanosecond::ts::;
+    use constant _prec => 0;
 }
 
 BEGIN { if (0x80000000 << 31) { eval q{
-# Represent a time as an integer number of nanoseconds
-#
 # This entire class will be elided if integers are narrower than 62 bits.
-package Time::Nanosecond::ns;
-use parent Time::Nanosecond::base::;
 
-use POSIX qw(floor);
+package Time::Nanosecond::ns {
+    # Represent a time as an integer number of nanoseconds
 
-# constructor
-sub from_seconds($) {
-    my $class = shift;
-    no integer;     # needed to map [0.0,1.0) to [0,999999999]
-    my $ns = floor( $_[0] * 1E9 );
-    return bless \$ns, $class;
+    use parent Time::Nanosecond::base::;
+
+    use POSIX qw(floor);
+
+    # constructor
+    sub from_seconds($) {
+        my $class = shift;
+        no integer;     # needed to map [0.0,1.0) to [0,999999999]
+        my $ns = floor( $_[0] * 1E9 );
+        return bless \$ns, $class;
+    }
+
+    # constructor
+    sub from_nanoseconds($) {
+        my $class = shift;
+        my $ns = $_[0];
+        return bless \$ns, $class;
+    }
+
+    # constructor
+    sub from_timespec($$) {
+        my $class = shift;
+        my $ns = $_[0] * 1E9 + $_[1];
+        return bless \$ns, $class;
+    }
+
+    sub _nsec($) {
+        my ($t) = @_;
+        my $r = $$t % 1E9;
+        $r += 1E9 if $r<0;
+        return
+    }
+
+    sub _sec($) {
+        my ($t) = @_;
+        return $$t / 1E9 - ( $$t % 1E9 < 0 );
+    }
+
+    sub seconds($) {
+        my ($t) = @_;
+        no integer;
+        return $$t / 1E9;
+    }
+
+    sub nanoseconds($) {
+        my ($t) = @_;
+        return $$t;
+    }
+
+    sub microseconds($) {
+        my ($t) = @_;
+        return $$t / 1E3;
+    }
+
+    sub add {
+        my ($t, $u) = @_;
+        my $r = $$t + ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
+        return bless \$r;
+    }
+
+    sub subtract {
+        my ($t, $u, $swap) = @_;
+        my $r = $$t - ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
+        $r = -$r if $swap;
+        return bless \$r;
+    }
+
+    use overload
+        '+'     => \&add,
+        '-'     => \&subtract,
+        ;
+
+    sub compare {
+        my ($t, $u) = @_;
+        my $r = $$t <=> ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
+        $r = -$r if $swap;
+        return $r;
+    }
+
+    sub copy {
+        my ($t) = @_;
+        my $r = $$t;
+        return bless \$r, ref $t;
+    }
+
+    use overload
+        '<=>'   => \&compare,
+        '='     => \&copy,
+        ;
+
+    # Conversions; we can do this MUCH more effectively
+
+    sub boolify {
+        my $t = shift;
+        return $$t;
+    }
+
+    use overload
+        bool    => \&boolify,
+        ;
+
 }
-
-# constructor
-sub from_nanoseconds($) {
-    my $class = shift;
-    my $ns = $_[0];
-    return bless \$ns, $class;
-}
-
-# constructor
-sub from_timespec($$) {
-    my $class = shift;
-    my $ns = $_[0] * 1E9 + $_[1];
-    return bless \$ns, $class;
-}
-
-sub _nsec($) {
-    my ($t) = @_;
-    my $r = $$t % 1E9;
-    $r += 1E9 if $r<0;
-    return
-}
-
-sub _sec($) {
-    my ($t) = @_;
-    return $$t / 1E9 - ( $$t % 1E9 < 0 );
-}
-
-sub seconds($) {
-    my ($t) = @_;
-    no integer;
-    return $$t / 1E9;
-}
-
-sub nanoseconds($) {
-    my ($t) = @_;
-    return $$t;
-}
-
-sub microseconds($) {
-    my ($t) = @_;
-    return $$t / 1E3;
-}
-
-sub add {
-    my ($t, $u) = @_;
-    my $r = $$t + ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
-    return bless \$r;
-}
-
-sub subtract {
-    my ($t, $u, $swap) = @_;
-    my $r = $$t - ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
-    $r = -$r if $swap;
-    return bless \$r;
-}
-
-use overload
-    '+'     => \&add,
-    '-'     => \&subtract,
-    ;
-
-sub compare {
-    my ($t, $u) = @_;
-    my $r = $$t <=> ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
-    $r = -$r if $swap;
-    return $r;
-}
-
-sub copy {
-    my ($t) = @_;
-    my $r = $$t;
-    return bless \$r, ref $t;
-}
-
-use overload
-    '<=>'   => \&compare,
-    '='     => \&copy,
-    ;
-
-# Conversions; we can do this MUCH more effectively
-
-sub boolify {
-    my $t = shift;
-    return $$t;
-}
-
-use overload
-    bool    => \&boolify,
-    ;
-
 }}}
 
-{
-package Time::Nanosecond::base;
+package Time::Nanosecond::base {
 
-use Carp qw(cluck);
-use POSIX qw(floor);
+    use Carp qw(cluck);
+    use POSIX qw(floor);
 
-# constructor
-sub from_timeval($$) {
-    my ($class, $sec, $µs) = @_;
-    return $class->from_timespec($sec, $µs * 1000);
-}
-
-# constructor
-sub from_seconds($) {
-    my ($class, $sec) = @_;
-    return $class->from_nanoseconds($sec * 1E9);
-}
-
-# constructor
-sub from_deciseconds($) {
-    my ($class, $ds) = @_;
-    return $class->from_nanoseconds($ds * 1E8);
-}
-
-# constructor
-sub from_centiseconds($) {
-    my ($class, $cs) = @_;
-    return $class->from_nanoseconds($cs * 1E7);
-}
-
-# constructor
-sub from_milliseconds($) {
-    my ($class, $ms) = @_;
-    return $class->from_nanoseconds($ms * 1E6);
-}
-
-# constructor
-sub from_microseconds($) {
-    my ($class, $µs) = @_;
-    return $class->from_nanoseconds($µs * 1E3);
-}
-
-# Fallback output conversions; you MUST override at least one.
-
-sub _fsec($) { no integer; return $_[0]->_nsec / 1E9 }
-sub _µsec($) {             return $_[0]->_nsec / 1E3 }
-sub _nsec($) { no integer; return floor( $_[0]->_fsec * 1E9 + 0.5 ) }
-
-# Default conversions; good for most uses.
-
-sub seconds($) {
-    my ($t) = @_;
-    no integer;
-    return $t->_sec + $t->_nsec / 1E9;
-}
-
-sub deciseconds($) {
-    my ($t) = @_;
-    no integer;
-    return $t->_sec * 1E1 + $t->_nsec / 1E8;
-}
-
-sub centiseconds($) {
-    my ($t) = @_;
-    no integer;
-    return $t->_sec * 1E2 + $t->_nsec / 1E7;
-}
-
-sub milliseconds($) {
-    my ($t) = @_;
-    no integer;
-    return $t->_sec * 1E3 + $t->_nsec / 1E6;
-}
-
-# TODO: should this be double or int64_t?
-# Standard "double" cannot represent microsecond precision outside the range
-# 1684-07-28 00:12:26 to 2255-06-05 23:47:34 +0000
-sub microseconds($) {
-    my ($t) = @_;
-    no integer;
-    return $t->_sec * 1E6 + $t->_nsec / 1E3;
-}
-
-# The return value from nanoseconds() is a 64-bit integer where available;
-# otherwise it's floating point, which loses precision but avoids wrap-around
-# on a 32-bit integer.
-sub nanoseconds($) {
-    my ($t) = @_;
-    return $t->_sec * 1E9 + $t->_nsec if 0x80000000 << 31;
-    no integer;
-    return $t->_sec * 1E9 + $t->_nsec;
-}
-
-sub timespec($) {
-    my ($t) = @_;
-    return $t->_sec, $t->_nsec if wantarray;
-    cluck 'timespec called in non-array context';
-    return;
-    if (ref $t && $t->isa(Time::Nanosecond::ts::)) { return $t }
-    return Time::Nanosecond::ts->from_timespec($t->_sec, $t->_nsec);
-}
-
-sub timeval($) {
-    my ($t) = @_;
-    return $t->_sec, $t->_µsec if wantarray;
-    cluck 'timeval called in non-array context';
-    return;
-    if (ref $t && $t->isa(Time::Nanosecond::ts::) && $t->_nsec % 1000 == 0) { return $t }
-    return Time::Nanosecond::ts->from_timeval($t->_sec, $t->_µsec);
-}
-
-sub to_timespec($) {
-    my ($t) = @_;
-    return $t->timespec if ! wantarray;
-    return $t->_sec, $t->_nsec;
-}
-
-sub to_timeval($) {
-    my ($t) = @_;
-    return $t->timeval if ! wantarray;
-    return $t->_sec, $t->_µsec;
-}
-
-sub stringify {
-    my $t = shift;
-    my $s = $t->_sec;
-    my $ns = $t->_nsec;
-    my $q = '';
-    if ($s < 0) {
-        $q = '-';
-        $s = -$s;
-        if ($ns) {
-            $ns = 1E9-$ns;
-            $s--;
-        }
+    # constructor
+    sub from_timeval($$) {
+        my ($class, $sec, $µs) = @_;
+        return $class->from_timespec($sec, $µs * 1000);
     }
-    return sprintf '%s%d.%09u', $q, $s, $ns;
-}
 
-sub boolify {
-    my $t = shift;
-    return $t->_sec || $t->_nsec;
-}
+    # constructor
+    sub from_seconds($) {
+        my ($class, $sec) = @_;
+        return $class->from_nanoseconds($sec * 1E9);
+    }
 
-use overload
-    '""'    => \&stringify,
-    bool    => \&boolify,
-    '0+'    => \&seconds,
-    ;
+    # constructor
+    sub from_deciseconds($) {
+        my ($class, $ds) = @_;
+        return $class->from_nanoseconds($ds * 1E8);
+    }
 
-sub localtime {
-    my $t = shift;
-    my $s = $t->_sec;
-    my @r = CORE::localtime $s;
-    { no integer; $r[0] += $t->_fsec; }
-    $r[9] = $t->_prec;
-    return @r if wantarray;
-    # This bit of magic copied from Time::localtime::populate
-    my $r = Time::tm->new();
-    @$r = @r;
-    return $r;
-}
+    # constructor
+    sub from_centiseconds($) {
+        my ($class, $cs) = @_;
+        return $class->from_nanoseconds($cs * 1E7);
+    }
 
-sub gmtime {
-    my $t = shift;
-    my @r = CORE::gmtime $t->_sec;
-    { no integer; $r[0] += $t->_fsec; }
-    $r[9] = $t->_prec;
-    return @r if wantarray;
-    # This bit of magic copied from Time::gmtime::populate
-    my $r = Time::tm->new();
-    @$r = @r;
-    return $r;
-}
+    # constructor
+    sub from_milliseconds($) {
+        my ($class, $ms) = @_;
+        return $class->from_nanoseconds($ms * 1E6);
+    }
 
-# Mutating operators; These are optional
+    # constructor
+    sub from_microseconds($) {
+        my ($class, $µs) = @_;
+        return $class->from_nanoseconds($µs * 1E3);
+    }
 
-#sub increment { $_[0]->[0]++ }
-#sub decrement { $_[0]->[0]-- }
-#use overload
-#   '++'    => \&increment,
-#   '--'    => \&decrement;
+    # Fallback output conversions; you MUST override at least one.
 
-}
+    sub _fsec($) { no integer; return $_[0]->_nsec / 1E9 }
+    sub _µsec($) {             return $_[0]->_nsec / 1E3 }
+    sub _nsec($) { no integer; return floor( $_[0]->_fsec * 1E9 + 0.5 ) }
 
-{
-package Time::Nanosecond;
+    # Default conversions; good for most uses.
 
-our $VERSION = '0.01';
+    sub seconds($) {
+        my ($t) = @_;
+        no integer;
+        return $t->_sec + $t->_nsec / 1E9;
+    }
 
-use Exporter 'import';
-our @EXPORT;
-our @EXPORT_OK;
+    sub deciseconds($) {
+        my ($t) = @_;
+        no integer;
+        return $t->_sec * 1E1 + $t->_nsec / 1E8;
+    }
 
-################################################################################
-#
-# localtime and gmtime (above) work as methods, but the following are intended
-# as replacements for CORE::localtime and CORE::gmtime that recognize values
-# from this package and adjust their behaviour appropriately.
-#
-# In array context, element 0 of the returned list is a floating-point value,
-# but are otherwise indistinguishable from the regular versions.
-#
-# However in a scalar context they will emulate Time::localtime::localtime and
-# Time::gmtime::gmtime (except that they populate the tm_sec field with a float
-# rather than an int), rather than returning a "ctime" string.
+    sub centiseconds($) {
+        my ($t) = @_;
+        no integer;
+        return $t->_sec * 1E2 + $t->_nsec / 1E7;
+    }
 
-sub localtime {
-    return $_[0]->localtime if UNIVERSAL::can($_[0], 'localtime');
-    goto &Time::localtime::localtime if exists &Time::localtime::localtime;
-    goto &CORE::localtime;
-}
-push @EXPORT_OK, 'localtime';
+    sub milliseconds($) {
+        my ($t) = @_;
+        no integer;
+        return $t->_sec * 1E3 + $t->_nsec / 1E6;
+    }
 
-sub gmtime {
-    return $_[0]->gmtime if UNIVERSAL::can($_[0], 'gmtime');
-    goto &Time::gmtime::gmtime if exists &Time::gmtime::gmtime;
-    goto &CORE::gmtime;
-}
-push @EXPORT_OK, 'gmtime';
+    # TODO: should this be double or int64_t?
+    # Standard "double" cannot represent microsecond precision outside the range
+    # 1684-07-28 00:12:26 to 2255-06-05 23:47:34 +0000
+    sub microseconds($) {
+        my ($t) = @_;
+        no integer;
+        return $t->_sec * 1E6 + $t->_nsec / 1E3;
+    }
 
-sub new_timeval($$)  {
-    return Time::Nanosecond::ts6->from_timeval(@_) if @_ >= 2;
-    return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
-}
-push @EXPORT_OK, qw( new_timeval  );
+    # The return value from nanoseconds() is a 64-bit integer where available;
+    # otherwise it's floating point, which loses precision but avoids wrap-around
+    # on a 32-bit integer.
+    sub nanoseconds($) {
+        my ($t) = @_;
+        return $t->_sec * 1E9 + $t->_nsec if 0x80000000 << 31;
+        no integer;
+        return $t->_sec * 1E9 + $t->_nsec;
+    }
 
-sub new_timespec($$) {
-    return Time::Nanosecond::ts->from_timespec(@_) if @_ >= 2;
-    return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
-}
-push @EXPORT_OK, qw( new_timespec );
+    sub timespec($) {
+        my ($t) = @_;
+        return $t->_sec, $t->_nsec if wantarray;
+        cluck 'timespec called in non-array context';
+        return;
+        if (ref $t && $t->isa(Time::Nanosecond::ts::)) { return $t }
+        return Time::Nanosecond::ts->from_timespec($t->_sec, $t->_nsec);
+    }
 
-sub new_seconds($) {
-    return Time::Nanosecond::ts0->from_microseconds($_[0] * 1E6) if @_;
-}
-push @EXPORT_OK, qw( new_seconds );
+    sub timeval($) {
+        my ($t) = @_;
+        return $t->_sec, $t->_µsec if wantarray;
+        cluck 'timeval called in non-array context';
+        return;
+        if (ref $t && $t->isa(Time::Nanosecond::ts::) && $t->_nsec % 1000 == 0) { return $t }
+        return Time::Nanosecond::ts->from_timeval($t->_sec, $t->_µsec);
+    }
 
-sub new_milliseconds($) {
-    return Time::Nanosecond::ts3->from_microseconds($_[0] * 1E3) if @_;
-}
-push @EXPORT_OK, qw( new_milliseconds );
+    sub to_timespec($) {
+        my ($t) = @_;
+        return $t->timespec if ! wantarray;
+        return $t->_sec, $t->_nsec;
+    }
 
-sub new_microseconds($) {
-    return Time::Nanosecond::ts6->from_microseconds($_[0]) if @_;
-}
-push @EXPORT_OK, qw( new_microseconds );
+    sub to_timeval($) {
+        my ($t) = @_;
+        return $t->timeval if ! wantarray;
+        return $t->_sec, $t->_µsec;
+    }
 
-################################################################################
-#
-# We extend Perl's version of strftime as follows:
-#
-#   1.  A new '.' modifier introduces a precision, similar to printf, applicable
-#       to the 'r', 's', 'S' and 'T' conversions. If no digits occur after the
-#       '.' then the maximum precision (9) is used.
-#
-#   2.  A new 'N' conversion provides the fractional part of the second; if a
-#       width is specified, this acts the same as the precision (mimicking
-#       behaviour of GNU "date") but without a leading decimal point. When the
-#       precision is used with the 'N' conversion, it turns on the leading
-#       decimal point, making it consistent with precision used elsewhere.
-#
-#       Do not use both width and precision; the behaviour is subject to change
-#       without notice. (In the current implementation, even an empty precision
-#       will cause width to be ignored.)
-#
-#       %.N   - nanoseconds padded to 9 digits, with leading '.'
-#       %N    - nanoseconds padded to 9 digits, without leading '.'
-#       %.ρN  - fractional seconds and scaled and padded to ρ digits, with leading '.'
-#       %ρN   - fractional seconds and scaled and padded to ρ digits, without leading '.'
-#
-#       %s    - integer epoch-seconds (for compatibility with existing code)
-#       %.s   - epoch-seconds with all available precision
-#       %.ρs  - epoch-seconds with ρ digits of subsecond precision
-#
-#       %S    - integer second-within-minute (for compatibility with existing code)
-#       %.S   - second-within-minute with all available precision
-#       %.ρS  - second-within-minute with ρ digits of subsecond precision
-#
-#       %.T   - equivalent to %H:%M:%.S
-#       %.ρT  - equivalent to %H:%M:%.ρS
-#
-#       _   (underscore) Also replaces trailing 0's on fractions with spaces
-#       -   (dash) Also suppresses trailing 0's on fractions, and suppresses
-#           the decimal point if there are no fractional digits left.
-#
-#       .   forces the inclusion of a decimal point on N conversions.
-#       .   introduces precision for S & T
-#
-#   In general the existing format conversions do not visibly change unless
-#   there the '.' modifier is included. 'N' is new, and therefore an exception
-#
-#   Normally the '.' is excluded if trailing 0 suppression results in no digits
-#   after the decimal point, or if the precision is 0.
-#
-#   Only Ρ VALUES 1..9 are guaranteed to be supported, and in particular:
-#       %.1χ (deciseconds)
-#       %.2χ (centiseconds)
-#       %.3χ (milliseconds)
-#       %.6χ (microseconds)
-#       %.9χ (nanoseconds)
-#
-
-sub strftime {
-    my ($fmt, @r) = @_;
-    my @p = split qr{( %%
-                     | %[-^#_0]*\d*\.?\d*[EO]?\w
-                     )}x, $fmt;
-
-    my $keep_nsec;   # stash after first use
-
-    for my $pp (@p) {
-        if ( not $pp =~ m<^%([-_#^0]*)(\d*)(?:(\.)(\d*))?([OE]?)([NrsST])$>x ) {
-            next;
+    sub stringify {
+        my $t = shift;
+        my $s = $t->_sec;
+        my $ns = $t->_nsec;
+        my $q = '';
+        if ($s < 0) {
+            $q = '-';
+            $s = -$s;
+            if ($ns) {
+                $ns = 1E9-$ns;
+                $s--;
+            }
         }
-        $3 || $6 eq 'N' or next;
-        my ($flags, $width, $dot, $prec, $mod, $conv) = ($1, $2, $3, $4, $5, $6);
+        return sprintf '%s%d.%09u', $q, $s, $ns;
+    }
 
-        # Convert empty or unmatched to undef; otherwise coerce to integer
-        $_ = ($_ // '') eq '' ? undef
-                              : 0 + $_
-            for $width, $prec;
-        # Convert to 1 or 0 to indicate '.' present or absent
-        $dot = 0+!!$dot;
+    sub boolify {
+        my $t = shift;
+        return $t->_sec || $t->_nsec;
+    }
 
-        # Take a working copy, since we might want to mangle it
-        my $ns = $keep_nsec //= int do {
-                        no integer;
-                        ($r[0] - int $r[0]) * 1E9 + 0.5
-                    };
-        my $replace_pp = undef;
+    use overload
+        '""'    => \&stringify,
+        bool    => \&boolify,
+        '0+'    => \&seconds,
+        ;
 
-        if ($conv eq 'N') {
-            $dot and undef $width;  # width not legal with precision, so ignore it
-            $prec //= $width;
-            # There won't be anything left after the fractional seconds are
-            # done, so set $replace_pp to empty (so it won't get reconstructed)
-            $replace_pp = '';
-        } else {
-            if ($conv eq 's') {
-                # Do the whole of the conversion here, because when negative, the
-                # integer component has to be be increased by one second, and the
-                # fractional component has to be decreased by one second (and then
-                # negated to become positive).
-                my @q = @r[0..8];
-                $q[0] = int $q[0];
-                # POSIX::strftime can take care of tm_sec==60
-                my $es = POSIX::strftime '%s', @q;
-                # Having computed %s, let's not waste it; finish the job and
-                # replace the conversion with the result:
-                my $sign = '';
-                if ($es < 0) {
-                    $sign = '-';
-                    $width-- if $width;    # 1 == length $sign
-                    $es++;
-                    $ns -= 1E9;
-                    $es = abs $es;
-                    $ns = abs $ns;
+    sub localtime {
+        my $t = shift;
+        my $s = $t->_sec;
+        my @r = CORE::localtime $s;
+        { no integer; $r[0] += $t->_fsec; }
+        $r[9] = $t->_prec;
+        return @r if wantarray;
+        # This bit of magic copied from Time::localtime::populate
+        my $r = Time::tm->new();
+        @$r = @r;
+        return $r;
+    }
+
+    sub gmtime {
+        my $t = shift;
+        my @r = CORE::gmtime $t->_sec;
+        { no integer; $r[0] += $t->_fsec; }
+        $r[9] = $t->_prec;
+        return @r if wantarray;
+        # This bit of magic copied from Time::gmtime::populate
+        my $r = Time::tm->new();
+        @$r = @r;
+        return $r;
+    }
+
+    # Mutating operators; These are optional
+
+    #sub increment { $_[0]->[0]++ }
+    #sub decrement { $_[0]->[0]-- }
+    #use overload
+    #   '++'    => \&increment,
+    #   '--'    => \&decrement;
+
+}
+
+package Time::Nanosecond v0.1.1 {
+
+    use Exporter 'import';
+    our @EXPORT;
+    our @EXPORT_OK;
+
+    ################################################################################
+    #
+    # localtime and gmtime (above) work as methods, but the following are intended
+    # as replacements for CORE::localtime and CORE::gmtime that recognize values
+    # from this package and adjust their behaviour appropriately.
+    #
+    # In array context, element 0 of the returned list is a floating-point value,
+    # but are otherwise indistinguishable from the regular versions.
+    #
+    # However in a scalar context they will emulate Time::localtime::localtime and
+    # Time::gmtime::gmtime (except that they populate the tm_sec field with a float
+    # rather than an int), rather than returning a "ctime" string.
+
+    sub localtime {
+        return $_[0]->localtime if UNIVERSAL::can($_[0], 'localtime');
+        goto &Time::localtime::localtime if exists &Time::localtime::localtime;
+        goto &CORE::localtime;
+    }
+    push @EXPORT_OK, 'localtime';
+
+    sub gmtime {
+        return $_[0]->gmtime if UNIVERSAL::can($_[0], 'gmtime');
+        goto &Time::gmtime::gmtime if exists &Time::gmtime::gmtime;
+        goto &CORE::gmtime;
+    }
+    push @EXPORT_OK, 'gmtime';
+
+    sub new_timeval($$)  {
+        return Time::Nanosecond::ts6->from_timeval(@_) if @_ >= 2;
+        return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
+    }
+    push @EXPORT_OK, qw( new_timeval  );
+
+    sub new_timespec($$) {
+        return Time::Nanosecond::ts->from_timespec(@_) if @_ >= 2;
+        return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
+    }
+    push @EXPORT_OK, qw( new_timespec );
+
+    sub new_seconds($) {
+        return Time::Nanosecond::ts0->from_microseconds($_[0] * 1E6) if @_;
+    }
+    push @EXPORT_OK, qw( new_seconds );
+
+    sub new_milliseconds($) {
+        return Time::Nanosecond::ts3->from_microseconds($_[0] * 1E3) if @_;
+    }
+    push @EXPORT_OK, qw( new_milliseconds );
+
+    sub new_microseconds($) {
+        return Time::Nanosecond::ts6->from_microseconds($_[0]) if @_;
+    }
+    push @EXPORT_OK, qw( new_microseconds );
+
+    ################################################################################
+    #
+    # We extend Perl's version of strftime as follows:
+    #
+    #   1.  A new '.' modifier introduces a precision, similar to printf, applicable
+    #       to the 'r', 's', 'S' and 'T' conversions. If no digits occur after the
+    #       '.' then the maximum precision (9) is used.
+    #
+    #   2.  A new 'N' conversion provides the fractional part of the second; if a
+    #       width is specified, this acts the same as the precision (mimicking
+    #       behaviour of GNU "date") but without a leading decimal point. When the
+    #       precision is used with the 'N' conversion, it turns on the leading
+    #       decimal point, making it consistent with precision used elsewhere.
+    #
+    #       Do not use both width and precision; the behaviour is subject to change
+    #       without notice. (In the current implementation, even an empty precision
+    #       will cause width to be ignored.)
+    #
+    #       %.N   - nanoseconds padded to 9 digits, with leading '.'
+    #       %N    - nanoseconds padded to 9 digits, without leading '.'
+    #       %.ρN  - fractional seconds and scaled and padded to ρ digits, with leading '.'
+    #       %ρN   - fractional seconds and scaled and padded to ρ digits, without leading '.'
+    #
+    #       %s    - integer epoch-seconds (for compatibility with existing code)
+    #       %.s   - epoch-seconds with all available precision
+    #       %.ρs  - epoch-seconds with ρ digits of subsecond precision
+    #
+    #       %S    - integer second-within-minute (for compatibility with existing code)
+    #       %.S   - second-within-minute with all available precision
+    #       %.ρS  - second-within-minute with ρ digits of subsecond precision
+    #
+    #       %.T   - equivalent to %H:%M:%.S
+    #       %.ρT  - equivalent to %H:%M:%.ρS
+    #
+    #       _   (underscore) Also replaces trailing 0's on fractions with spaces
+    #       -   (dash) Also suppresses trailing 0's on fractions, and suppresses
+    #           the decimal point if there are no fractional digits left.
+    #
+    #       .   forces the inclusion of a decimal point on N conversions.
+    #       .   introduces precision for S & T
+    #
+    #   In general the existing format conversions do not visibly change unless
+    #   there the '.' modifier is included. 'N' is new, and therefore an exception
+    #
+    #   Normally the '.' is excluded if trailing 0 suppression results in no digits
+    #   after the decimal point, or if the precision is 0.
+    #
+    #   Only Ρ VALUES 1..9 are guaranteed to be supported, and in particular:
+    #       %.1χ (deciseconds)
+    #       %.2χ (centiseconds)
+    #       %.3χ (milliseconds)
+    #       %.6χ (microseconds)
+    #       %.9χ (nanoseconds)
+    #
+
+    sub strftime {
+        my ($fmt, @r) = @_;
+        my @p = split qr{( %%
+                         | %[-^#_0]*\d*\.?\d*[EO]?\w
+                         )}x, $fmt;
+
+        my $keep_nsec;   # stash after first use
+
+        for my $pp (@p) {
+            if ( not $pp =~ m<^%([-_#^0]*)(\d*)(?:(\.)(\d*))?([OE]?)([NrsST])$>x ) {
+                next;
+            }
+            $3 || $6 eq 'N' or next;
+            my ($flags, $width, $dot, $prec, $mod, $conv) = ($1, $2, $3, $4, $5, $6);
+
+            # Convert empty or unmatched to undef; otherwise coerce to integer
+            $_ = ($_ // '') eq '' ? undef
+                                  : 0 + $_
+                for $width, $prec;
+            # Convert to 1 or 0 to indicate '.' present or absent
+            $dot = 0+!!$dot;
+
+            # Take a working copy, since we might want to mangle it
+            my $ns = $keep_nsec //= int do {
+                            no integer;
+                            ($r[0] - int $r[0]) * 1E9 + 0.5
+                        };
+            my $replace_pp = undef;
+
+            if ($conv eq 'N') {
+                $dot and undef $width;  # width not legal with precision, so ignore it
+                $prec //= $width;
+                # There won't be anything left after the fractional seconds are
+                # done, so set $replace_pp to empty (so it won't get reconstructed)
+                $replace_pp = '';
+            } else {
+                if ($conv eq 's') {
+                    # Do the whole of the conversion here, because when negative, the
+                    # integer component has to be be increased by one second, and the
+                    # fractional component has to be decreased by one second (and then
+                    # negated to become positive).
+                    my @q = @r[0..8];
+                    $q[0] = int $q[0];
+                    # POSIX::strftime can take care of tm_sec==60
+                    my $es = POSIX::strftime '%s', @q;
+                    # Having computed %s, let's not waste it; finish the job and
+                    # replace the conversion with the result:
+                    my $sign = '';
+                    if ($es < 0) {
+                        $sign = '-';
+                        $width-- if $width;    # 1 == length $sign
+                        $es++;
+                        $ns -= 1E9;
+                        $es = abs $es;
+                        $ns = abs $ns;
+                    }
+                    $replace_pp = sprintf "%s%0*d", $sign, $width // 0, $es;
                 }
-                $replace_pp = sprintf "%s%0*d", $sign, $width // 0, $es;
+                if (!$dot) {
+                    # If the conversion doesn't have a '.' then just fall back to
+                    # the default.
+                    next
+                }
             }
-            if (!$dot) {
-                # If the conversion doesn't have a '.' then just fall back to
-                # the default.
-                next
+
+            if (!defined $prec || $prec < 0 || $prec > 9) {
+                $prec = $r[9] // 9;
+            } else {
+              # $ns *= 2;
+                $ns /= 10 ** (9-$prec);
+              # $ns++;
+              # $ns /= 2;
             }
+
+            my $np = substr "000000000$ns", -$prec;
+            $np = ".$np" if $dot;
+            if ($flags =~ /-/) {
+                $np =~ s/0*$// and
+                $np =~ s/\.$//;
+            } elsif ($flags =~ /_/ && $np =~ s/\.?0*$//) {
+                $np = substr "$np         ", 0, $prec+$dot;
+            }
+
+            $width ||= 0;
+            $width -= length($np);
+            $width > 0 or $width = '';
+            $width ||= '';  # ignore undef and zero-width
+
+            # Use $replace_pp if it's defined, even if it's empty; otherwise
+            # reassemble conversion but omitting '.ρ'.
+            $pp = ($replace_pp // '%'.$flags.$width.$mod.$conv) . $np;
+
         }
-
-        if (!defined $prec || $prec < 0 || $prec > 9) {
-            $prec = $r[9] // 9;
-        } else {
-          # $ns *= 2;
-            $ns /= 10 ** (9-$prec);
-          # $ns++;
-          # $ns /= 2;
-        }
-
-        my $np = substr "000000000$ns", -$prec;
-        $np = ".$np" if $dot;
-        if ($flags =~ /-/) {
-            $np =~ s/0*$// and
-            $np =~ s/\.$//;
-        } elsif ($flags =~ /_/ && $np =~ s/\.?0*$//) {
-            $np = substr "$np         ", 0, $prec+$dot;
-        }
-
-        $width ||= 0;
-        $width -= length($np);
-        $width > 0 or $width = '';
-        $width ||= '';  # ignore undef and zero-width
-
-        # Use $replace_pp if it's defined, even if it's empty; otherwise
-        # reassemble conversion but omitting '.ρ'.
-        $pp = ($replace_pp // '%'.$flags.$width.$mod.$conv) . $np;
-
+        $fmt = join '', @p;
+        $fmt =~ /%/ or return $fmt;
+        return POSIX::strftime( $fmt, @r[0..8] );
     }
-    $fmt = join '', @p;
-    $fmt =~ /%/ or return $fmt;
-    return POSIX::strftime( $fmt, @r[0..8] );
-}
-push @EXPORT_OK, 'strftime';
+    push @EXPORT_OK, 'strftime';
 }
 
 1;
