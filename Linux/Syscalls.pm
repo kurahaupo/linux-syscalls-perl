@@ -1,7 +1,7 @@
 #! /module/for/perl
 
 # Linux::Syscalls implements perl subs for Linux syscalls that are missing
-# from module POSIX.
+# from module POSIX. (Some are POSIX, some are Linux innovations.)
 #
 # Aliases are provided where the Linux (or POSIX) names are inconsistent, for
 # example adding or removing an "f" prefix.
@@ -320,16 +320,28 @@ sub _seconds_to_timeval($) {
 }
 
 # Newer-style "timespec" contains tv_sec & tv_nsec (ns precision)
-sub _timespec_to_seconds($$) {
+sub _SC_timespec_to_seconds($$) {
     my ($s, $ns) = @_;
     return $s + $ns / 1E9;
 }
 
 sub _seconds_to_timespec($) {
     my $t = $_[0] // 0.0;
-    my $s = floor($t);
-    my $ns = floor(($t - $s) * 1E9 + 0.5);
-    return $s, $ns;
+    if (ref $t) {
+        return $t->_sec, $t->_nsec;
+    } else {
+        my $s = floor($t);
+        my $ns = floor(($t - $s) * 1E9 + 0.5);
+        return $s, $ns;
+    }
+}
+
+sub _timespec_to_seconds($$) {
+    my $f = \&_SC_timespec_to_seconds;
+    $f = \&Time::Nanosecond::new_timespec if exists &Time::Nanosecond::new_timespec;
+    no warnings 'redefine';
+    *_timespec_to_seconds = $f;
+    goto &$f;
 }
 
 #
@@ -1058,7 +1070,8 @@ sub rmdirat($$$) {
 sub _pack_utimes($$) {
     return pack "(Q2)2", map {
             ! defined $_ ? ( -1, UTIME_OMIT )
-              : $_ eq '' ? ( -1, UTIME_NOW )
+              : ! ref $_ &&
+                $_ eq '' ? ( -1, UTIME_NOW )
                          : _seconds_to_timespec $_ ;
         } @_;
 }
@@ -1086,7 +1099,8 @@ sub futimesat($$$$$) {
 #
 # Pass undef for atime or mtime to avoid changing that timestamp, empty string
 # to set it to the current time, or an epoch second (with decimal fraction) to
-# set it to that value (with nanosecond resolution).
+# set it to that value (with nanosecond resolution); Time::Nanosecond::ts
+# values are also supported.
 #
 
 _export_tag qw{ l_ => lutimes };
