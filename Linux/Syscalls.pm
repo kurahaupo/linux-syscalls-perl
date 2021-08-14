@@ -963,7 +963,7 @@ sub openat($$;$$) {
     _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     $mode //= 0666;
     state $syscall_id = _get_syscall_id 'openat';
-    return 0 == syscall $syscall_id, $dir_fd, $path, $flags, $mode;
+    return syscall $syscall_id, $dir_fd, $path, $flags, $mode;
 }
 
 ################################################################################
