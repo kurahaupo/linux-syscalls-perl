@@ -510,7 +510,11 @@ package Time::Nanosecond::base {
         return $r;
     }
 
-    # Mutating operators; These are optional
+    # A Time::Nanosecond::ts has value semantics, not container semantics, so
+    # mutating operators are very strongly discouraged.
+    #
+    # We can rely on Perl to convert $t++ to $t += 1 to $t = $t+1, which
+    # we then interpret to produce a new instance.
 
     #sub increment { $_[0]->[0]++ }
     #sub decrement { $_[0]->[0]-- }
@@ -627,7 +631,7 @@ package Time::Nanosecond v0.1.1 {
     #   Normally the '.' is excluded if trailing 0 suppression results in no digits
     #   after the decimal point, or if the precision is 0.
     #
-    #   Only Ρ VALUES 1..9 are guaranteed to be supported, and in particular:
+    #   Only ρ values 1..9 are guaranteed to be supported, and in particular:
     #       %.1χ (deciseconds)
     #       %.2χ (centiseconds)
     #       %.3χ (milliseconds)
@@ -737,25 +741,106 @@ package Time::Nanosecond v0.1.1 {
 
 1;
 
-=head 1
+=encoding utf8
+
+=head1
 
 Time::Nanosecond - fixed-point arithmetic for timespec's
 
-# There can be several implementations:
-# 1. use an extended float (on platforms that support it)
-# 2. just use a 64-bit int to represent nanoseconds
-# 3. use a packed 8-byte string that holds 2× 32-bit ints that represent
-#    seconds and nanoseconds (like the syscalls)
-# 4. use a pair of 32-bit ints that represent seconds and nanoseconds (same)
-#
-# The initial version of this is using (4) but I really want to change it.
-#
-# Version 1 should be used automatically when Perl is built to include support
-# (which can be tested with 'pack "D"').
-# Otherwise version 2 is the easiest to do arithmetic, and version 3 is the
-# least likely for clients to mess with.
-#
-# Unfortunately none of them interworks well with localtime or gmtime.
+=pod
+
+The Linux kernel provides nanosecond resolution timestamps in many contexts,
+however it is difficult to deal with them reliably.
+
+It might be tempting to express time as a floating-point number of seconds,
+effectively treating time_t as the basic function type. From a functional
+perspective that works quite well, but you discover that the round trip from
+struct timespec to float and back is not lossless:
+
+Between 2004 and 2038, time_t values will in the range 1<<30..1<<31 which means
+that to accurately represent nanoseconds, a numeric type with at least 60 bits
+of precision is needed, whereas the IEEE 64-bit "float" used by C (and thus by
+Perl) has only 52 bits of precision.
+
+On the other hand, if you only want microsecond precision, 52 bits of precision
+will be quite sufficient until March 2242.
+
+There are several plausible implementations:
+
+=over 4
+
+=item 1
+Use floating point.
+
+This is fine if you only need microseconds precision.
+
+You don't need library support, you just go ahead and use it.
+
+=item 2
+Use "extended" floating point.
+
+Note that this is the 80-bit 80x87-specific floating point format, and is not
+compiled into Perl by default even on i686 and x86 platforms.
+
+But where it is, you just go ahead and use it.
+
+A future version of Perl may provide a standard method for selecting 128-bit
+floating point on platforms that support it. When that happens, there will
+probably be a version of this module that uses them.
+
+=item 3
+Use an integer to represent nanoseconds.
+
+This offers the best performance for arithmetic, but is only available on
+64-bit platforms.
+
+This is implemented by the Time::Nanosecond::ns class.
+
+=item 4
+Use struct timespec
+
+(Use a pair of ints to represent seconds and nanoseconds.)
+
+This is the most portable format, and gives reasonable performance across most
+operations.
+
+This is implemented by the Time::Nanosecond::ts class.
+
+=item 5
+Use packed 32-bit struct timespec
+
+Use a packed 8-byte string that holds 2× 32-bit ints that represent seconds and
+nanoseconds.
+
+This is optimal when interacting with a 32-bit system calls and otherwise not
+manipulalating the values other than checking for equality. On big-endian CPUs
+you can also do ordering comparisons.
+
+This is not currently implemented, but a future version will provide a
+Time::Nanosecond::ll class (named for the pack format specifier).
+
+=item 6
+Use packed 64-bit struct timespec
+
+Use a packed 16-byte string that holds 2× 64-bit ints that represent seconds
+and nanoseconds.
+
+This is optimal when interacting with a 64-bit system calls and otherwise not
+manipulalating the values other than checking for equality. On big-endian CPUs
+you can also do ordering comparisons.
+
+This is not currently implemented, but a future version will provide a
+Time::Nanosecond::qq class (named for the pack format specifier).
+
+=back
+
+Option 4 is currently the only implementation provided if you just import
+methods from the package. A future version will allow different implementations
+to be selected, either directly, or based on desired performance
+characteristics. All classes will provide the same interface methods.
+
+The core localtime or gmtime know nothing of this additional precision, so this
+module provides enhanced versions of those too.
 
 =pod
 
@@ -791,7 +876,8 @@ the least significant bit of the mantissa represents a step of 2**-22 seconds
 or 0.238 µs, which although acceptable as a replacement for C<struct timeval>
 is obviously totally inadequate for representing C<struct timespec>.
 
-=head NOTE
+=head1
+NOTE
 
 =pod
 
