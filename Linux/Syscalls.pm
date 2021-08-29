@@ -366,24 +366,23 @@ sub _timespec_to_seconds($$) {
 
 sub _resolve_dir_fd_path(\$;\$\$$) {
     my ($dir_fd) = @_;
-    while (1) {
-        # Only "loop" once; either fail with "return", or succeed with "last"
+    MAP_FD: {
         my $D = $$dir_fd;
         if ( ref $D ) {
             # Try calling fileno method on any object that implements it
-            eval { $$dir_fd = $D->fileno; 1 } and last;
+            eval { $$dir_fd = $D->fileno; 1 } and last MAP_FD;
         } else {
             # undef, '' and '.' refer to current directory
             if ( ! defined $D || $D eq '' || $D eq '.' ) {
                 $$dir_fd = AT_FDCWD;
-                last;
+                last MAP_FD;
             }
             # Keep the input value unchanged if it's an integer
-            looks_like_number $D and last;
+            looks_like_number $D and last MAP_FD;
         }
         # Try calling fileno builtin func on an IO::File (ref) or GLOB-ref (ref) or
         # GLOB (non-ref)
-        defined eval { $$dir_fd = fileno $D } and last;
+        defined eval { $$dir_fd = fileno $D } and last MAP_FD;
         # It's not a valid filedescriptor
         $$dir_fd = undef;
         $! = EBADF;
