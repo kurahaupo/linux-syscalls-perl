@@ -971,7 +971,7 @@ sub mknodat($$$$) {
 _export_tag qw{ _at => openat };
 sub openat($$;$$) {
     my ($dir_fd, $path, $flags, $mode) = @_;
-    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path or return;  # $flags here means something unrelated
     $mode //= 0666;
     state $syscall_id = _get_syscall_id 'openat';
     return syscall $syscall_id, $dir_fd, $path, $flags, $mode;
