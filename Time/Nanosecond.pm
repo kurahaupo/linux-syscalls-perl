@@ -61,6 +61,8 @@ package Time::Nanosecond::ts {
     # of seconds, and 0..999999999 nanoseconds. Also use this when a struct timeval
     # is desired, as there's no performance improvement in providing two classes.
 
+    use POSIX qw(floor);
+
     BEGIN { $INC{'Time/Nanosecond/ts.pm'} = __FILE__ }
     use parent Time::Nanosecond::base::;
 
@@ -103,7 +105,7 @@ package Time::Nanosecond::ts {
     # constructor
     sub from_seconds($) {
         my $class = shift;
-        my $s = int $_[0];
+        my $s = floor $_[0];
         no integer;     # needed to map [0.0,1.0) to [0,999999999]
         my $ns = ($_[0] - $s) * 1E9;
         return _normalize bless [ $s, $ns ], $class;
