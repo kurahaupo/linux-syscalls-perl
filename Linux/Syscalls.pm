@@ -390,11 +390,14 @@ sub _resolve_dir_fd_path(\$;\$\$$) {
     }
 
     shift;
-    @_ or return 1;
+    goto &_normalize_path if @_;
+}
+
+sub _normalize_path(\$;\$\$) {
     my ($path, $flags, $default) = @_;
     if (defined $$path) {
         $$flags //= $default // AT_SYMLINK_NOFOLLOW if $flags;
-        $$path .= '';
+        $$path = "$$path";
     } else {
         $$flags //= AT_EMPTY_PATH if $flags;
         $$path = '';
@@ -603,7 +606,7 @@ use POSIX ();
 eval q{
     sub lchown($$$) {
         my ($path, $uid, $gid) = @_;
-        $path .= "";
+        _normalize_path $path;
         ($uid //= -1) += 0;
         ($gid //= -1) += 0;
         state $syscall_id = _get_syscall_id "lchown";
@@ -687,7 +690,7 @@ sub lchmod($$) {
 #sub lchmod($$) {
 #    my ($path, $perm) = @_;
 #    my $dir_fd = 0|AT_FDCWD;
-#    $path .= "";    # force string
+#    _normalize_path $path;
 #    $perm &= CHMOD_MASK; # force int, and range-limit
 #    my $flags = AT_SYMLINK_NOFOLLOW;
 #    state $syscall_id = _get_syscall_id 'fchmodat';
@@ -894,7 +897,7 @@ sub _unpack_stat {
 _export_ok qw{ lstatns };
 sub lstatns($) {
     my ($path) = @_;
-    $path .= "";
+    _normalize_path $path;
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'lstat';
     0 == syscall $syscall_id, $path, $buffer or return;
@@ -937,8 +940,7 @@ BEGIN { *statat = \&fstatat; }
 _export_tag qw{ _at => mkdirat };
 sub mkdirat($$$) {
     my ($dir_fd, $path, $mode) = @_;
-    _resolve_dir_fd_path $dir_fd or return;
-    $path .= '';
+    _resolve_dir_fd_path $dir_fd, $path or return;
     $mode //= 0777;
     state $syscall_id = _get_syscall_id 'mkdirat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode;
@@ -954,8 +956,7 @@ sub mkdirat($$$) {
 _export_tag qw{ _at => mknodat };
 sub mknodat($$$$) {
     my ($dir_fd, $path, $mode, $dev) = @_;
-    _resolve_dir_fd_path $dir_fd or return;
-    $path .= '';
+    _resolve_dir_fd_path $dir_fd, $path or return;
     $mode //= 0666;
     state $syscall_id = _get_syscall_id 'mknodat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode, $dev;
@@ -981,10 +982,9 @@ sub openat($$;$$) {
 
 
 _export_tag qw{ _at => readlinkat };
-sub readlinkat($$) {
+sub readlinkat($;$) {
     my ($dir_fd, $path) = @_;
-    _resolve_dir_fd_path $dir_fd or return;
-    $path .= "";
+    _resolve_dir_fd_path $dir_fd, $path or return;
     my $buffer = "\xa5" x 8192;
     state $syscall_id = _get_syscall_id 'readlinkat';
     my $r = syscall $syscall_id, $dir_fd, $path, $buffer, length($buffer);
@@ -1004,10 +1004,8 @@ sub readlinkat($$) {
 _export_tag qw{ _at => renameat };
 sub renameat($$$$) {
     my ($olddir_fd, $oldpath, $newdir_fd, $newpath) = @_;
-    $oldpath .= "";
-    $newpath .= "";
-    _resolve_dir_fd_path $olddir_fd or return;
-    _resolve_dir_fd_path $newdir_fd or return;
+    _resolve_dir_fd_path $olddir_fd, $oldpath or return;
+    _resolve_dir_fd_path $newdir_fd, $newpath or return;
     state $syscall_id = _get_syscall_id 'renameat';
     return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath;
 }
@@ -1024,7 +1022,7 @@ sub renameat($$$$) {
 _export_tag qw{ _at => symlinkat };
 sub symlinkat($$$) {
     my ($oldpath, $newdir_fd, $newpath) = @_;
-    $oldpath .= "";
+    _normalize_path $oldpath;
     _resolve_dir_fd_path $newdir_fd, $newpath or return;
     state $syscall_id = _get_syscall_id 'symlinkat';
     return 0 == syscall $syscall_id, $oldpath, $newdir_fd, $newpath;
