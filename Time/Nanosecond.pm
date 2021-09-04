@@ -131,7 +131,7 @@ package Time::Nanosecond::ts {
         $u = ref($t)->from_seconds($u) if ! ref $u;
         $t[0] += $u->_sec;
         $t[1] += $u->_nsec;
-        return _normalize bless \@t;
+        return _normalize bless \@t, ref $t;
     }
 
     sub subtract {
@@ -144,7 +144,7 @@ package Time::Nanosecond::ts {
             $t[0] = -$t[0];
             $t[1] = -$t[1];
         }
-        return _normalize bless \@t;
+        return _normalize bless \@t, ref $t;
     }
 
     use overload
@@ -291,14 +291,14 @@ package Time::Nanosecond::ns {
     sub add {
         my ($t, $u) = @_;
         my $r = $$t + ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
-        return bless \$r;
+        return bless \$r, ref $t;
     }
 
     sub subtract {
         my ($t, $u, $swap) = @_;
         my $r = $$t - ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
         $r = -$r if $swap;
-        return bless \$r;
+        return bless \$r, ref $t;
     }
 
     use overload
