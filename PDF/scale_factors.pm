@@ -9,7 +9,7 @@ no integer; # everything here is floating point
 ########################################
 # scale factors for sizes for PDF files
 
-package Math::scale_factors;
+package PDF::scale_factors;
 
 use constant Point   =>     1;
 use constant Pixel   =>         Point / 1.5;
@@ -136,7 +136,7 @@ my %metric_units = (
     Gm      =>  Gm,
     Tm      =>  Tm,
 );
-${Math::scale_factors::}{"\xb5m"} =
+${PDF::scale_factors::}{"\xb5m"} =
 $metric_units{"\xb5m"}=  µm; # micro symbol as ISO-8859-1
 
 my %units = (%imperial_units, %metric_units);
