@@ -9,7 +9,7 @@ There are three purposes to this package:
   2. To ensure that numbers are always scaled to a standard unit.
 
 Write
-    use Math::Dimensional;
+    use Filter::Dimensional;
 
     my $x = 5mm;
 
@@ -19,7 +19,7 @@ which gets translated to
 
     my $x = 5 ** encoded_symbol;
 
-where ParseUnit returns a blessed object in Math::Dimensional::Units.
+where ParseUnit returns a blessed object in Filter::Dimensional::Units.
 
 The seven base physical units are provided:
   Time - second (s)
@@ -192,15 +192,15 @@ use utf8;
 
 BEGIN { binmode $_, ':utf8' for *STDIN, *STDOUT, *STDERR; }
 
-package Math::Dimensional v0.0.1 { BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ } }
+package Filter::Dimensional v0.0.1 { BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ } }
 
-package Math::Dimensional::Units { use parent Math::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
-package Math::Dimensional::Values { use parent Math::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
+package Filter::Dimensional::Units { use parent Filter::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
+package Filter::Dimensional::Values { use parent Filter::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
 
-package Math::Dimensional::AbsUnits { use parent Math::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
-package Math::Dimensional::AbsValues { use parent Math::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
+package Filter::Dimensional::AbsUnits { use parent Filter::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
+package Filter::Dimensional::AbsValues { use parent Filter::Dimensional::; BEGIN { $INC{__PACKAGE__ =~ s#::#/#r . '.pm'} = __FILE__ }  }
 
-package Math::Dimensional {
+package Filter::Dimensional {
 
 use constant {
     Quantity    => 0,
@@ -572,10 +572,10 @@ sub FilterConv($$) {
                     ( map { my $o = $r->[$_]; $o         ? unpack "H*", pack 'C0s>', $_ : '' } MinDim..$#$r );
     $name =~ s/_+$//;
     # Create a "use constant"
-    $Math::Dimensional::Units::{$name} //= \$r;
+    $Filter::Dimensional::Units::{$name} //= \$r;
 
     $before .= ' ** ' if $before;
-    return "${before}Math::Dimensional::Units::$name";
+    return "${before}Filter::Dimensional::Units::$name";
 }
 
 #
