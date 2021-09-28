@@ -10,9 +10,15 @@ and truly Linux-specific syscalls such as `getcpu`.
 
 Only a small subset of these are implemented so far.
 
-As a design goal, all outputs are by value; any system calls that take a buffer
-that gets filled instead allocate a buffer within the implementation and then
-returned to the caller.
+As a design goal, all inputs are passed as parameters, and all outputs are
+returned; no placing outputs into global variables or into references that are
+passed in.
+
+(The implementation of any system call that takes a buffer to be filled instead
+allocates a buffer and returns that to the caller. That especially applies to
+"small" buffers such as the `int status` passed to `wait()`. For calls that can
+accept an arbitrary buffer size and return an arbitrary list of values, such as
+`getdents`, a buffer size hint is accepted as a parameter.)
 
 ## Contributing to this project
 
@@ -25,8 +31,9 @@ anomalies. Please ensure you have `/bin/bash` installed.
 
 ## Process management
 
-All of the various `*wait*` system calls are provided, such that they return
-all available information.
+All of the various `*wait*` system calls are provided; all information is
+returned as tuples in line with the overall design goal as above. In particular
+`$?` is untouched.
 
 `waitid5` is added as an interface to obtaining the additional information
 returned from the Linux `waitid` system call.
