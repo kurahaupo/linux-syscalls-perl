@@ -1,190 +1,5 @@
 #!/module/for/perl
 
-=pod
-
-There are three purposes to this package:
-  1. To enable units to be written as suffixes in the normal way.
-  2. To track the dimensions of values, so that dimensional mis-match can be
-     trapped; and
-  2. To ensure that numbers are always scaled to a standard unit.
-
-Write
-    use Filter::Dimensional;
-
-    my $x = 5mm;
-
-which gets translated to
-
-    use constant encoded_symbol => ParseUnit('mm');
-
-    my $x = 5 ** encoded_symbol;
-
-where ParseUnit returns a blessed object in Filter::Dimensional::Units.
-
-The seven base physical units are provided:
-  Time - second (s)
-  Length - meter (m)
-  Mass - kilogram (kg)
-  Amount of substance - mole (mole) (count of molcules)
-  Temperature - kelvin (K)
-  Electric current - ampere (A)
-  Luminous intensity - candela (cd)
-
-In addition
-  Data & entropy - bit (b) or bytes (B)
-  Angle - degree (°´¨) or radian (r)
-
-
-TODO:
-In addition, special handling [will be] available for values that are time
-durations or angles (degree+minute+second), using the forms:
-
-    my $duration = 5w3d4h19m10.33s;
-    my $angle    = 5°14´59¨ or 5°14'59" or 5°14’59”
-
-    where all components are optional except:
-      * m alone is metres not minutes
-      * using ' for minute and/or " for seconds cannot be implemented as code
-        literals due to limitations of the Filter::Simple module, but even if
-        they were, needs ° would still to be present, to disambiguate from
-        their use as quote marks.
-
-Whilst tracking the base physical dimensions is the obvious use-case, this is
-actually useful for tracking any denominated quantity; you could add a unit for
-anything you wish to measure, including economic units such as US$, GB£,
-barley, or petroleum, which then ensures that conversion rates result in the
-correct dimensions.
-
-TODO: Currently a single class is used for both values and bare units.
-They need to be separated of "bare" units (U) vs "values" (V);
-
-TODO: improve separation of "absolute" (Ua, Va) vs "relative" (Ur, Vr) (allow
-absolute with 0 offset)
-
-Only units may be named.
-
-Absolute units are derived from relative ones, by specifying an "origin"
-(which may be zero). This is envisaged as being useful for:
-  * Temperatures, where different units have different numerical values for absolute zero;
-  * Compass points and similar orientations, based on angles.
-
-Absolute units can't be manipulated. Absolute values can only be manipulated
-to take differences between them, analogously to pointer arithmetic in C:
-      Ur₁ = Ua₁ - Ua₁
-      Ua₁ = Ua₁ ± Ur₁
-TODO: for radians, absolute values should be computed modulo 2π
-
-along with scalar values ("S") the following operations should be allowed:
-
-  1. define new units:
-      _unit           (produces a dimensionless unit object)
-      Ur₂ = Ur₁->new('name', scale);
-      Ua₂ = Ur₁->new('name', scale, offset);
-
-  2. combine relative units to create new units
-      Ur₁ * Ur₂ → Ur₃
-      Ur₁ / Ur₂ → Ur₃
-      Ur₁ ** I  → Ur₂  (for small integer exponents)
-
-  3. combine a scalar with a unit to produce a value:
-      S  ** Ux₁ → Vx₁ (translated adjacency)
-      S  *  Ux₁ → Vx₁
-
-  4. perform computations with values:
-      _scalar(S)      (produces a dimensionless value object)
-      Vr₁ * Vr₂ → Vr₃
-      S   * Vr₁ → Vr₁
-      Vr₁ * S   → Vr₁
-      Vr₁ / S   → Vr₁
-      Vr₁ / Vr₂ → Vr₃
-      S   / Vr₂ → Vr₃
-      Vr₁ + Vr₁ → Vr₁
-      Vr₁ - Vr₁ → Vr₁
-      Vr₁ + Vr₁ → Vr₁
-
-  5. verify that a value matches a unit, and convert it to a string:
-      Vx₁ / Ux₁ → S
-
-          This yields undef if the dimensions do not match, but otherwise is
-          exactly the reverse of [S * Vx₁ → Ux₁].
-
-      Vx₁ % Ux₁ → Vx₁
-
-          This dies if dimensions do not match, but otherwise yields the same
-          value, except with the remembered unit replaced by the given one.
-
-          This is useful in two cases:
-            (1) to enforce dimensional checking on assignment, like
-
-                my $feet = $supposedly_distance % ft;
-
-            (2) to simplify printing values, like
-
-                printf "Mars is %s from Earth\n", $distance % Gm;
-
-  6. stringify. Values whose construction involved only one unit remember
-      that unit, and apply it by default when stringifying. That includes:
-      S * Ux → Vx
-      S * Vx → Vx
-      Vx * S → Vx
-     values constructed in other ways may or may not remember a unit. Addition and subtraction
-     will generally remember the unit of the left operand, if any.
-
-Addition and subtraction are only permitted between values with the same
-dimensions, subject to the additional limitation that values with fixed
-references (especially Celsius) can only be added to relative values
-(resulting in another fixed-ref value), or subtracted from another fixed-ref
-value (resulting in a relative value).
-
-
-Multiplication results in addition of dimensions.
-
-We also track when values have fixed reference values, like Celsius,
-having an
-
-however we
-additionally track whether a value is "absolute", in which case only
-abs+rel, rel+abs, rel+rel, abs-abs and abs-rel are permitted.
-
-We also track relativism: all units can indicate the difference between two
-states, but some such as Celsius can also have an absolute reference.
-For these units, an appended Δ indicates that it's non-absolute.
-
-(This also applies to dimensionless numbers, to differentiate cardinals from
-ordinals.)
-
-
-
-
-from https://www.ece.utoronto.ca/canadian-metric-association/si-derived-units/
-
-Physical Quantity                 Name        Symbol      Expressed in SI Base Units
-frequency                         hertz       Hz                      s⁻¹
-force                             newton      N                       m·kg·s⁻²
-pressure, stress                  pascal      Pa          N·m⁻²       m⁻¹·kg·s⁻²
-energy, work, heat                joule       J           N·m         m²·kg·s⁻²
-power, radiant flux               watt        W           J·s⁻¹       m²·kg·s⁻³
-electrical charge                 coulomb     C                       A·s
-electrical potential,
-electromotive force               volt        V           J·C⁻¹       m²·kg·s⁻³·A⁻¹
-electrical resistance             ohm         Ω           V·A⁻¹       m²·kg·s⁻³·A⁻²
-electric conductance              siemens     S           Ω⁻¹         m⁻²·kg⁻¹·s³·A²
-electical capacitance             farad       F           C·V⁻¹       m⁻²·kg⁻¹·s⁴·A²
-magnetic flux density             tesla       T           V·s·m⁻²     kg·s⁻²·A⁻¹
-magnetic flux                     weber       Wb          V·s         m²·kg·s⁻²·A⁻¹
-inductance                        henry       H           V·A⁻¹·s     m²·kg·s⁻²·A⁻²
-luminous flux                     lumen       lm                      cd·sr
-illuminance                       lux         lx                      cd·sr·m⁻²
-radioactive activity              becquerel   bq                      s⁻¹
-absorbed dose of radiation        gray        Gy          J·kg⁻¹      m²·s⁻²
-dose equivalent of radiation      sievert     Sv          J·kg⁻¹      m²·s⁻²
-
-plane angle                       radian      rad         1           m·m⁻¹
-solid angle                       steradian   sr          1           m²·m⁻²
-
-
-=cut
-
 use 5.012;
 use strict;
 
@@ -787,3 +602,309 @@ use overload
 
 };
 1;
+
+=encoding utf8
+
+=head1 NAME
+
+C<Filter::Dimensional>
+
+=head1 DESCRIPTION
+
+This package acts both as a source filter and as dimensional verification tool.
+
+There are three purposes to this package:
+
+=over
+
+=item 1.
+
+To enable units to be written as suffixes in the normal way (hence "Filter" in the name).
+
+=item 2.
+
+To track the dimensions of values, so that any dimensional mis-match can be trapped; and
+
+=item 3.
+
+To ensure that values are always scaled to a standard unit.
+
+=back
+
+Whilst tracking the base physical dimensions is the obvious use-case, this is
+actually useful for tracking any denominated quantity; you could add a unit for
+anything you wish to measure, including economic units such as US$, GB£,
+barley, or petroleum, which then ensures that conversion rates result in the
+correct dimensions. (Currently this has to be done by editing the module.)
+
+=head1 USAGE
+
+If you write:
+
+    use Filter::Dimensional;
+
+    my $x = 5mm;
+
+this gets translated to:
+
+    use constant encoded_symbol => ParseUnit('mm');
+
+    my $x = 5 ** encoded_symbol;
+
+where C<ParseUnit> returns a blessed object in C<Filter::Dimensional::Units>.
+
+Then the C<**> operator acts as a high-precedence multiplication, resulting in
+a value of C<0.005 metres>.
+
+=head1 BASE UNITS
+
+The seven base physical units are provided:
+
+=over
+
+=item * Time - second (s)
+
+=item * Length - meter (m)
+
+=item * Mass - kilogram (kg)
+
+=item * Amount of substance - mole (mole) (count of molcules)
+
+=item * Temperature - kelvin (K)
+
+=item * Electric current - ampere (A)
+
+=item * Luminous intensity - candela (cd)
+
+=back
+
+In addition
+
+=over
+
+=item * Data & entropy - bit (b) or bytes (B)
+
+=item * Angle - degree (°′″‴⁗) or radian (r)
+
+=back
+
+=head1 COMPOSITION OF UNITS
+
+Addition and subtraction are only permitted between values with the same
+dimensions, subject to the additional limitation that values with fixed
+references (especially Celsius) can only be added to relative values
+(resulting in another fixed-ref value), or subtracted from another fixed-ref
+value (resulting in a relative value).
+
+Multiplication results in addition of dimensions, and division results in
+subtraction of dimensions. Absolute values may not be involved
+
+We also track when values have fixed reference values, especially temperature
+and orientation.
+
+However we
+additionally track whether a value is "absolute", in which case only
+abs+rel, rel+abs, rel+rel, abs-abs and abs-rel are permitted.
+
+We also track relativism: all units can indicate the difference between two
+states, but some such as Celsius can also have an absolute reference.
+For these units, an appended Δ indicates that it's non-absolute.
+
+(This also applies to dimensionless numbers, to differentiate cardinals from
+ordinals.)
+
+along with scalar values ("S") the following operations should be allowed:
+
+=over
+
+=item 1. define new units:
+      _unit           (produces a dimensionless unit object)
+      Ur₂ = Ur₁->new('name', scale);
+      Ua₂ = Ur₁->new('name', scale, offset);
+
+=item 2. combine relative units to create new units
+      Ur₁ * Ur₂ → Ur₃
+      Ur₁ / Ur₂ → Ur₃
+      Ur₁ ** I  → Ur₂  (for small integer exponents)
+
+=item 3. combine a scalar with a unit to produce a value:
+      S  ** Ux₁ → Vx₁ (translated adjacency)
+      S  *  Ux₁ → Vx₁
+
+=item 4. perform computations with values:
+
+      _scalar(S)      (produces a dimensionless value object)
+      Vr₁ * Vr₂ → Vr₃
+      S   * Vr₁ → Vr₁
+      Vr₁ * S   → Vr₁
+      Vr₁ / S   → Vr₁
+      Vr₁ / Vr₂ → Vr₃
+      S   / Vr₂ → Vr₃
+      Vr₁ + Vr₁ → Vr₁
+      Vr₁ - Vr₁ → Vr₁
+      Vr₁ + Vr₁ → Vr₁
+
+=item 5. verify that a value matches a unit, and convert it to a string:
+
+      Vx₁ / Ux₁ → S
+
+          This yields undef if the dimensions do not match, but otherwise is
+          exactly the reverse of [S * Vx₁ → Ux₁].
+
+      Vx₁ % Ux₁ → Vx₁
+
+          This dies if dimensions do not match, but otherwise yields the same
+          value, except with the remembered unit replaced by the given one.
+
+          This is useful in two cases:
+            (1) to enforce dimensional checking on assignment, like
+
+                my $feet = $supposedly_distance % ft;
+
+            (2) to simplify printing values, like
+
+                printf "Mars is %s from Earth\n", $distance % Gm;
+
+=item 6. stringify. Values whose construction involved only one unit remember
+      that unit, and apply it by default when stringifying. That includes:
+      S * Ux → Vx
+      S * Vx → Vx
+      Vx * S → Vx
+     values constructed in other ways may or may not remember a unit. Addition and subtraction
+     will generally remember the unit of the left operand, if any.
+
+=back
+
+=head1 LIMITATIONS
+
+Because of how C<Filter::Simple> works, and how Perl parses code, it's not
+possible to use unit names that resemble quote operators C<m>, C<s>, and
+C<qI<X>>; nor is it possible to use C</> in a unit symbol that is affixed to
+number, because it's mis-parsed as the beginning of a regular expression.
+
+To get around these, you can either separate the number and the unit symbol
+
+    4 * mm/s
+
+Or use the negative exponent notation:
+
+    4m·s⁻¹
+
+=head1 BACKGROUND
+
+These base units are taken from
+https://www.ece.utoronto.ca/canadian-metric-association/si-derived-units/
+
+    Physical Quantity                 Name        Symbol      Expressed in SI Base Units
+    frequency                         hertz       Hz                      s⁻¹
+    force                             newton      N                       m·kg·s⁻²
+    pressure, stress                  pascal      Pa          N·m⁻²       m⁻¹·kg·s⁻²
+    energy, work, heat                joule       J           N·m         m²·kg·s⁻²
+    power, radiant flux               watt        W           J·s⁻¹       m²·kg·s⁻³
+    electrical charge                 coulomb     C                       A·s
+    electrical potential,
+    electromotive force               volt        V           J·C⁻¹       m²·kg·s⁻³·A⁻¹
+    electrical resistance             ohm         Ω           V·A⁻¹       m²·kg·s⁻³·A⁻²
+    electric conductance              siemens     S           Ω⁻¹         m⁻²·kg⁻¹·s³·A²
+    electical capacitance             farad       F           C·V⁻¹       m⁻²·kg⁻¹·s⁴·A²
+    magnetic flux density             tesla       T           V·s·m⁻²     kg·s⁻²·A⁻¹
+    magnetic flux                     weber       Wb          V·s         m²·kg·s⁻²·A⁻¹
+    inductance                        henry       H           V·A⁻¹·s     m²·kg·s⁻²·A⁻²
+    luminous flux                     lumen       lm                      cd·sr
+    illuminance                       lux         lx                      cd·sr·m⁻²
+    radioactive activity              becquerel   bq                      s⁻¹
+    absorbed dose of radiation        gray        Gy          J·kg⁻¹      m²·s⁻²
+    dose equivalent of radiation      sievert     Sv          J·kg⁻¹      m²·s⁻²
+
+    plane angle                       radian      rad         1           m·m⁻¹
+    solid angle                       steradian   sr          1           m²·m⁻²
+
+The "data" dimension (base unit: "bit") is background knowledge.
+
+=head1 FUTURE WORK
+
+=head2 TODO: Additional base units
+
+Currently all base units have to be defined in the module.
+
+Allow new base units to be defined, along with their names.
+
+One additional unit that may be useful is the "civil calendar month", which
+would have the "civil calendar year" as a multiple. The number of seconds in a
+month varies, so they are not strictly speaking the same dimension. This would
+force them to be accounted for separately, requiring a proper (separate)
+calendar library to combine them.
+
+Logically you could add "absolute" year value and a count of seconds to obtain
+a civil date, and then combine that with a timezone to specify an exact time,
+however that's likely to remain outside the scope of this module, and therefore
+that operation should remain forbidden.
+
+Better would be to facilitate interaction with gmtime/localtime et al, by providing
+break-out functions, so that it's simply a matter of
+
+    $t = mktime $seconds->split_s_m_h_d, $months->split_m_y
+
+=head2 TODO: Control symbol imports
+
+Currently all available units are recognized, sometimes leading to confliects
+where a fixed choice is made: C<m> is metres, not miles or minutes; C<′> and
+C<″> are minutes and second of arc, not feet and inches.
+
+=head2 TODO: Additive Composition
+
+In addition to the base units, special handling [will be] available for values
+that are time durations or angles (degree+minute+second), using the forms:
+
+    my $duration = 5w3d4h19m10.33s;
+    my $angle    = 5°14′59″30‴45⁗ or 5°14´59¨ or 5°14’59” (or 5°14'59")
+
+where all components are optional except:
+
+=over
+
+=item * m alone is metres not minutes
+
+=item * using ' for minute and/or " for seconds cannot be implemented as code literals
+due to limitations of the Filter::Simple module, but even if they were, needs ° would
+still to be present, to disambiguate from their use as quote marks.
+
+=back
+
+=head2 TODO: Split classes
+
+Currently a single class is used for both values and bare units. This makes the code
+more complex than necessary.
+
+They should be separated into "bare" units (U) vs "values" (V).
+
+=head2 TODO: Improve separation of "absolute" (Ua, Va) vs "relative" (Ur, Vr)
+
+(allow absolute with 0 offset)
+
+Only units may be named.
+
+Absolute units are derived from relative ones, by specifying an "origin"
+(which may be zero). This is envisaged as being useful for:
+
+=over
+
+=item * Temperatures, where different units have different numerical values for absolute zero;
+
+=item * Compass points and similar orientations, based on angles.
+
+=back
+
+Absolute units can't be manipulated. Absolute values can only be manipulated
+to take differences between them, analogously to pointer arithmetic in C:
+
+      Ur₁ = Ua₁ - Ua₁
+      Ua₁ = Ua₁ ± Ur₁
+
+=head2 TODO: modulus values
+
+For angular measures, absolute values should be computed modulo 2π, but
+scalar angles are not (since they might be combined to form values like
+C<40π rad/s>.
+
+=cut
