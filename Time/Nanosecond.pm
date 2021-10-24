@@ -72,20 +72,23 @@ package Time::Nanosecond::ts {
         my ($t) = @_;
 
         #
-        # On many CPUs, integer remainder is calculated such that the sign of the
-        # remainder matches the sign of the numerator, rather than the sign of the
-        # denominator, and integer division is defined as "truncate towards zero"
-        # so that a%b = a-(a∕b×b) or equivalently a∕b = (a-a%b)∕b
+        # On many CPUs, integer division is defined as "truncate towards zero",
+        # and this behaviour is mandated by recent versions of ISO-9899 (the C
+        # language specification).
         #
-        # This does not match the meaning of the mathematical modulus, because
-        # the identity
-        #      (a-b)%b = a%b
-        # fails when 0<a<b.
+        # In order to maintain the remainder identity
+        #       a%b = a-(a∕b×b),
+        # the integer remainder is defined so that the sign of the remainder
+        # matches the sign of the numerator, rather than the denominator.
         #
-        # The expression ((-7)/8 > -1) tells us whether we need to adjust for this,
-        # given the current arithmetic mode; with any luck this will be treated as
-        # a compile-time constant thus eliminating the $ns < 0 test when it's not
-        # needed.
+        # This definition does not match the mathematical meaning of modulus,
+        # because it causes the identity
+        #       (a-b)%b = a%b
+        # to fail when 0<a<b.
+        #
+        # The following tells us whether we need to adjust for this, given the
+        # current arithmetic mode; the expression ((-7)/8 > -1) should be
+        # a compile-time constant, possibly eliminating the $ns < 0 part.
         #
 
         if ( my $r = ((-7)/8 > -1) &&
