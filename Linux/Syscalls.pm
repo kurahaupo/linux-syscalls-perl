@@ -25,7 +25,7 @@ use Scalar::Util qw( looks_like_number blessed );
 
 use Errno qw( ENOSYS EBADF );
 use Fcntl qw( S_IFMT );
-use POSIX qw( uname );
+use POSIX qw( floor uname );
 
 ################################################################################
 #
