@@ -3,11 +3,41 @@
 # Linux::Syscalls implements perl subs for Linux syscalls that are missing
 # from module POSIX. (Some are POSIX, some are Linux innovations.)
 #
-# Aliases are provided where the Linux (or POSIX) names are inconsistent, for
-# example adding or removing an "f" prefix.
+# Where a whole family of calls are provided, generally they all call the new
+# syscall, with various fixed options. Examples include:
+#   * lchown & fchown calling chownat, and
+#   * utimes, futimes, lutimes, futimesat, & futimens calling utimensat.
 #
-# Shorthand versions such as lchown & lutimes are provided where Perl doesn't
-# have them built-in.
+# In some cases, versions of functions provided because the POSIX module may
+# not include the syscall, or may have been built without the syscall call
+# enabled. notably:
+#   * lchown.
+#
+# In addition, alias names are provided where the Linux (or POSIX) names are
+# inconsistent; for example removing an "f" prefix when an "at" suffix is
+# already present:
+#   * faccessat
+#   * fchmodat
+#   * fchownat
+#   * fstatat
+#   * futimesat
+#
+# Where timestamps are required as arguments, they may be provided as floating
+# point numbers, or as Time::Nanosecond::ts references (or indeed, any blessed
+# object that implements the _sec, _µsec and _nsec methods).
+#
+# Lastly, in some cases, we do a more sane job of handling arguments than the
+# POSIX version; in particular, we accept C<undef> in numerous places where a
+# numeric value would normally be presented, and provide a sane & relevant
+# default in its place:
+#   * the UID & GID arguments to the *chown family may be given as C<undef> to
+#     mean "don't change", which avoids the user having to know that C<-1> is a
+#     magic value for this purpose; alternatively they may be given an an empty
+#     string to mean "now".
+#   * the dir_fd argument(s) to the *at family may be given as C<undef> to mean
+#     AT_FDCWD.
+#   * the path argument(s) to the *at family may be given as C<undef> to mean
+#     "apply the AT_EMPTY_PATH flag, and pass an empty path";
 #
 
 use 5.010;
@@ -16,7 +46,7 @@ use strict;
 use warnings;
 use feature 'state';
 
-package Linux::Syscalls v0.1.0;
+package Linux::Syscalls v0.2.0;
 
 use base 'Exporter';
 
@@ -623,8 +653,9 @@ _export_tag qw{ l_ => lchown };
 # accessat - synonym
 #
 # Pass undef for dir_fd to use CWD for relative paths.
+# Pass undef for path to apply to dir_fd (which might be a symlink)
 # Pass undef for uid or gid to avoid changing that id.
-# Omit or pass undef for flags to check on a symlink itself.
+# Pass AT_SYMLINK_NOFOLLOW for flags to check on a symlink itself.
 #
 
 _export_tag qw{ _at => faccessat };
@@ -645,8 +676,9 @@ BEGIN { *accessat = \&faccessat; }
 # fchmodat - like chmod but relative to a DIR
 #
 # Pass undef for dir_fd to use CWD for relative paths.
-# Omit or pass undef for flags to try to avoid following symlinks, however the man page
-# for fchmodat warns:
+# Pass undef for path to apply to dir_fd (which might be a symlink)
+# Pass AT_SYMLINK_NOFOLLOW for flags to modify a symlink itself. However the
+# man page for fchmodat warns:
 #   "AT_SYMLINK_NOFOLLOW
 #       If pathname is a symbolic link, do not dereference it: instead operate
 #       on the link itself.  This flag is not currently implemented."
@@ -703,8 +735,9 @@ sub lchmod($$) {
 # chown but relative to an open dir_fd
 #
 # Pass undef for dir_fd to use CWD for relative paths.
+# Pass undef for path to apply to dir_fd (which might be a symlink)
 # Pass undef for uid or gid to avoid changing that id.
-# Omit or pass undef for flags to not follow symlinks.
+# Omit flags (or pass undef) to modify a symlinks itself.
 #
 
 _export_tag qw{ _at => fchownat };
@@ -723,9 +756,10 @@ BEGIN { *chownat = \&fchownat; }
 ################################################################################
 
 #
-# link but relative to (two) DIRs
+# linkat - like link but relative to (two) DIRs
+#
 # Pass undef for either dir_fd to use CWD for relative paths.
-# Omit or pass undef for flags to not follow symlinks.
+# Omit flags (or pass undef) to avoid following symlinks.
 #
 
 _export_tag qw{ _at => linkat };
@@ -998,7 +1032,7 @@ sub readlinkat($;$) {
 # renameat - like rename but with each path relative to an DIR
 #
 # Pass undef for either dir_fd to use CWD for relative paths.
-# Omit or pass undef for flags to not follow symlinks.
+# Omit flags (or pass undef) to avoid following symlinks.
 #
 
 _export_tag qw{ _at => renameat };
@@ -1016,7 +1050,7 @@ sub renameat($$$$) {
 # symlinkat - like symlink but relative to (two) DIRs
 #
 # Pass undef for either dir_fd to use CWD for relative paths.
-# Omit or pass undef for flags to not follow symlinks.
+# Omit flags (or pass undef) to avoid following symlinks.
 #
 
 _export_tag qw{ _at => symlinkat };
@@ -1034,7 +1068,7 @@ sub symlinkat($$$) {
 # unlinkat - like unlink but relative to an DIR
 #
 # Pass undef for dir_fd to use CWD for relative paths.
-# Omit or pass undef for flags to not follow symlinks.
+# Omit flags (or pass undef) to remove a symlinks itself.
 #
 
 _export_tag qw{ _at => unlinkat };
@@ -1050,7 +1084,7 @@ sub unlinkat($$$) {
 # rmdirat (fake syscall) - like rmdir but relative to an DIR
 #
 # Pass undef for either dir_fd to use CWD for relative paths.
-# Omit or pass undef for flags to not follow symlinks.
+# Omit flags (or pass undef) to avoid following symlinks.
 #
 
 _export_tag qw{ _at => rmdirat };
@@ -1074,12 +1108,20 @@ sub _pack_utimes($$) {
 }
 
 #
-# futimesat - like utimes but relative to an open dir_fd
+# utimensat (POSIX syscall) - like utimes, but:
 #
-# Pass undef for atime or mtime to avoid changing that timestamp, empty string
-# to set it to the current time, or an epoch second (with decimal fraction) to
-# set it to that value (with nanosecond resolution).
-# Omit or pass undef for flags to not follow symlinks.
+#   * relative to an open dir_fd, and:
+#   * with nanosecond precision
+#
+#   * Pass undef for dir_fd to use CWD for relative paths.
+#   * Pass undef for path to apply to dir_fd (which might be a symlink)
+#   * Pass undef for atime or mtime to avoid changing that timestamp, empty
+#     string to set it to the current time, or an epoch second (with decimal
+#     fraction) to set it to that value (with nanosecond resolution).
+#     Time::Nanosecond::ts values are also supported.
+#   * Omit flags (or pass undef) to avoid following symlinks.
+#   * Include trunc_µs to truncate precision (normally only used when emulating
+#     utime or utimes syscalls).
 #
 
 _export_tag qw{ _at => futimesat };
@@ -1094,10 +1136,8 @@ sub futimesat($$$$$) {
 #
 # lutimes (fake syscall) - like utimes but on a symlink
 #
-# Pass undef for atime or mtime to avoid changing that timestamp, empty string
-# to set it to the current time, or an epoch second (with decimal fraction) to
-# set it to that value (with nanosecond resolution); Time::Nanosecond::ts
-# values are also supported.
+#   * microsecond resolution
+#   * never follow symlinks
 #
 
 _export_tag qw{ l_ => lutimes };
@@ -1113,7 +1153,7 @@ sub lutimes($$$) {
 # Read entries from a directory
 #
 # Although opendir/readdir/closedir are a standard part of Perl, opendir does
-# not understand "<&=$fd", so it's impossible to use fopenat and then readdir
+# not understand "<&=$fd", so it's impossible to use openat and then readdir
 # from that; conversely, dirfd is not available in core Perl before about
 # v5.26, so it's impossible to go the other way as well.
 #
