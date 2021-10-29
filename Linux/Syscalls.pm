@@ -344,9 +344,13 @@ sub _timeval_to_seconds($$) {
 
 sub _seconds_to_timeval($) {
     my $t = $_[0] // 0.0;
-    my $s = floor($t);
-    my $µs = floor(($t - $s) * 1E6 + 0.5);
-    return $s, $µs;
+    if (ref $t) {
+        return $t->_sec, $t->_µsec;
+    } else {
+        my $s = floor($t);
+        my $µs = floor(($t - $s) * 1E6 + 0.5);
+        return $s, $µs;
+    }
 }
 
 # Newer-style "timespec" contains tv_sec & tv_nsec (ns precision)
@@ -661,7 +665,7 @@ _export_tag qw{ l_ => lchown };
 _export_tag qw{ _at => faccessat };
 sub faccessat($$$;$) {
     my ($dir_fd, $path, $mode, $flags) = @_;
-    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags, 0 or return;
     $mode += 0;
     state $syscall_id = _get_syscall_id 'faccessat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode, $flags;
@@ -688,10 +692,11 @@ BEGIN { *accessat = \&faccessat; }
 # pointed to by a symlink.
 #
 
-_export_tag qw{ _at => fchmodat };
+*chmodat = \&fchmodat;
+_export_tag qw{ _at => fchmodat chmodat };
 sub fchmodat($$$;$) {
     my ($dir_fd, $path, $perm, $flags) = @_;
-    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
+    _resolve_dir_fd_path $dir_fd, $path, $flags, 0 or return;
     if ($flags & AT_SYMLINK_NOFOLLOW) {
         $! = ENOSYS;
         return;
@@ -1098,13 +1103,20 @@ sub rmdirat($$$) {
 
 ################################################################################
 
-sub _pack_utimes($$) {
-    return pack "(Q2)2", map {
-            ! defined $_ ? ( -1, UTIME_OMIT )
-              : ! ref $_ &&
-                $_ eq '' ? ( -1, UTIME_NOW )
-                         : _seconds_to_timespec $_ ;
-        } @_;
+use constant {
+    UTIME_trunc_nsec => 0,
+    UTIME_trunc_µsec => 1,
+    UTIME_trunc_sec  => 2,
+};
+
+sub _normalize_utimens($$) {
+    my ($t, $trunc_µs) = @_;
+    defined $t          || return -1, UTIME_OMIT;
+    ref $t || $t ne ''  || return -1, UTIME_NOW;
+    my ($s, $ns) =  _seconds_to_timespec $t;
+    $ns = 0           if $trunc_µs == UTIME_trunc_nsec;
+    $ns -= $ns % 1000 if $trunc_µs == UTIME_trunc_µsec;
+    return $s, $ns;
 }
 
 #
@@ -1124,13 +1136,75 @@ sub _pack_utimes($$) {
 #     utime or utimes syscalls).
 #
 
-_export_tag qw{ _at => futimesat };
-sub futimesat($$$$$) {
-    my ($dir_fd, $path, $atime, $mtime, $flags) = @_;
+_export_tag qw{ _at => utimensat };
+sub utimensat($$$$;$$) {
+    my ($dir_fd, $path, $atime, $mtime, $flags, $trunc_µs) = @_;
     _resolve_dir_fd_path $dir_fd, $path, $flags or return;
-    my $ts = _pack_utimes $atime, $mtime;
+    my $ts = pack "(Q2)2", map { _normalize_utimens $_, $trunc_µs } $atime, $mtime;
     state $syscall_id = _get_syscall_id 'utimensat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $ts, $flags;
+}
+
+#
+# futimesat (abandoned POSIX syscall proposal)
+#
+#   * now a Linux-specific syscall, though a similar syscall exists on Solaris.
+#   * like utimes, but use dir_fd in place of CWD; or equivalently, like
+#     utimensat except that times are only microsecond precision, and there's
+#     no flags so modifying a symlink is not possible (hence pass 0 for flags).
+#
+#   * Pass undef for dir_fd to use CWD for relative paths.
+#   * Pass undef for path to apply to dir_fd (which might be a symlink; this is
+#     an extension from the syscall)
+#   * Pass undef for atime or mtime to avoid changing that timestamp, empty
+#     string to set it to the current time, or an epoch second (with decimal
+#     fraction) to set it to that value (with microsecond resolution).
+#     Time::Nanosecond::ts values are also supported.
+#
+
+*utimesat = \&futimesat;
+_export_ok qw{ _at => futimesat utimesat };
+sub futimesat($$$$) {
+    my ($dir_fd, $path, $atime, $mtime) = @_;
+    return utimensat $dir_fd, $path, $atime, $mtime, 0, UTIME_trunc_µsec;
+}
+
+#
+# futimens (POSIX syscall) - like utimensat but just an open fd (no filepath)
+#
+
+_export_ok qw{ f_ => futimens };
+sub futimens($$$) {
+    my ($fd, $atime, $mtime) = @_;
+    return utimensat $fd, undef, $atime, $mtime;
+}
+
+#
+# futimes (POSIX syscall) - like utimes but on an open fd instead of filepath
+#
+#   * microsecond resolution
+#
+# fd may refer to a symlink obtained with C<open ... O_PATH>, so pass C<undef>
+# for flags.
+#
+
+_export_ok qw{ f_ => futimes };
+sub futimes($$$) {
+    my ($fd, $atime, $mtime) = @_;
+    return utimensat $fd, undef, $atime, $mtime, undef, UTIME_trunc_µsec;
+}
+
+#
+# utimes (POSIX syscall)
+#
+#   * microsecond resolution
+#   * always follow symlinks
+#
+
+_export_ok qw{ f_ => utimes };
+sub utimes($$$) {
+    my ($path, $atime, $mtime) = @_;
+    return utimensat undef, $path, $atime, $mtime, 0, UTIME_trunc_µsec;
 }
 
 #
@@ -1142,9 +1216,8 @@ sub futimesat($$$$$) {
 
 _export_tag qw{ l_ => lutimes };
 sub lutimes($$$) {
-  # my ($path, $atime, $mtime) = @_;
-  # return futimesat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
-    return &futimesat(undef, @_, AT_SYMLINK_NOFOLLOW);  # bypass parameter checking
+    my ($path, $atime, $mtime) = @_;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, UTIME_trunc_µsec;
 }
 
 ################################################################################
