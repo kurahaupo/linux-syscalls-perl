@@ -1061,35 +1061,30 @@ sub symlinkat($$$) {
 ################################################################################
 
 #
-# unlinkat - like unlink but relative to an DIR
+# unlinkat - like unlink but relative to a given DIR
 #
 # Pass undef for dir_fd to use CWD for relative paths.
 # Omit flags (or pass undef) to remove a symlinks itself.
 #
 
 _export_tag qw{ _at => unlinkat };
-sub unlinkat($$$) {
+sub unlinkat($$;$) {
     my ($dir_fd, $path, $flags) = @_;
-    _resolve_dir_fd_path $dir_fd, $path, $flags, 0 or return;
-    # consider AT_REMOVEDIR|AT_SYMLINK_NOFOLLOW;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     state $syscall_id = _get_syscall_id 'unlinkat';
-    return 0 == syscall $syscall_id, $dir_fd, $path, $flags;
+    return 0 == syscall $syscall_id, $dir_fd, $path, $flags, 0;
 }
 
 #
-# rmdirat (fake syscall) - like rmdir but relative to an DIR
+# rmdirat (fake syscall) - like rmdir but relative to a given DIR
 #
-# Pass undef for either dir_fd to use CWD for relative paths.
-# Omit flags (or pass undef) to avoid following symlinks.
+# Pass undef for dir_fd to use CWD for relative paths.
 #
 
 _export_tag qw{ _at => rmdirat };
-sub rmdirat($$$) {
-    my ($dir_fd, $path, $flags) = @_;
-    _resolve_dir_fd_path $dir_fd, $path, $flags, AT_SYMLINK_NOFOLLOW or return;
-    $flags |= AT_REMOVEDIR;
-    state $syscall_id = _get_syscall_id 'unlinkat';
-    return 0 == syscall $syscall_id, $dir_fd, $path, $flags;
+sub rmdirat($$) {
+    my ($dir_fd, $path) = @_;
+    return unlinkat $dir_fd, $path, AT_REMOVEDIR|AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
