@@ -662,7 +662,8 @@ _export_tag qw{ l_ => lchown };
 # Pass AT_SYMLINK_NOFOLLOW for flags to check on a symlink itself.
 #
 
-_export_tag qw{ _at => faccessat };
+*accessat = \&faccessat;
+_export_tag qw{ _at => faccessat accessat };
 sub faccessat($$$;$) {
     my ($dir_fd, $path, $mode, $flags) = @_;
     _resolve_dir_fd_path $dir_fd, $path, $flags, 0 or return;
@@ -670,9 +671,6 @@ sub faccessat($$$;$) {
     state $syscall_id = _get_syscall_id 'faccessat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $mode, $flags;
 }
-
-_export_ok 'accessat';
-BEGIN { *accessat = \&faccessat; }
 
 ################################################################################
 
@@ -705,9 +703,6 @@ sub fchmodat($$$;$) {
     state $syscall_id = _get_syscall_id 'fchmodat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $perm, $flags;
 }
-
-_export_tag qw{ _at => chmodat };
-BEGIN { *chmodat = \&fchmodat; }
 
 #
 # lchmod (fake syscall) - like chmod but on a symlink
@@ -745,7 +740,8 @@ sub lchmod($$) {
 # Omit flags (or pass undef) to modify a symlinks itself.
 #
 
-_export_tag qw{ _at => fchownat };
+*chownat = \&fchownat;
+_export_tag qw{ _at => fchownat chownat };
 sub fchownat($$$$;$) {
     my ($dir_fd, $path, $uid, $gid, $flags) = @_;
     _resolve_dir_fd_path $dir_fd, $path, $flags or return;
@@ -754,9 +750,6 @@ sub fchownat($$$$;$) {
     state $syscall_id = _get_syscall_id 'fchownat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $uid, $gid, $flags;
 }
-
-_export_tag qw{ _at => chownat };
-BEGIN { *chownat = \&fchownat; }
 
 ################################################################################
 
@@ -955,7 +948,8 @@ BEGIN {
     _export_ok qw{ lstat };
 }
 
-_export_tag qw{ _at => fstatat };
+*statat = \&fstatat;
+_export_tag qw{ _at => fstatat statat };
 sub fstatat($$;$) {
     my ($dir_fd, $path, $flags) = @_;
     _resolve_dir_fd_path $dir_fd, $path, $flags or return;
@@ -965,9 +959,6 @@ sub fstatat($$;$) {
     0 == syscall $syscall_id, $dir_fd, $path, $buffer, $flags or return;
     return _unpack_stat($buffer);
 }
-
-_export_ok qw{ statat };
-BEGIN { *statat = \&fstatat; }
 
 ################################################################################
 
