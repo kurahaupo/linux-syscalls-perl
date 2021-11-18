@@ -383,9 +383,9 @@ sub _timespec_to_seconds($$) {
 #
 # * when dir_fd is:
 #     - undef or empty or ".", use AT_FDCWD; or
-#     - a blessed reference with a fileno method, use that to get its
-#       underlying filedescriptor number
-#     - a glob or filehandle, use the fileno function to get its underlying
+#     - a blessed reference with a C<dirfd> or C<fileno> method, use that to
+#       get its underlying filedescriptor number
+#     - a glob or filehandle, use the C<fileno> function to get its underlying
 #       filedescriptor number; or
 # * make sure the result is a number
 #
@@ -404,6 +404,7 @@ sub _resolve_dir_fd_path(\$;\$\$$) {
         my $D = $$dir_fd;
         if ( ref $D ) {
             # Try calling fileno method on any object that implements it
+            eval { $$dir_fd = $D->dirfd;  1 } and last MAP_FD if $^V ge v5.25.0;
             eval { $$dir_fd = $D->fileno; 1 } and last MAP_FD;
         } else {
             # undef, '' and '.' refer to current directory
@@ -1209,27 +1210,57 @@ sub lutimes($$$) {
 ################################################################################
 
 #
-# Read entries from a directory
+# C<getdents> read entries from a directory.
 #
-# Although opendir/readdir/closedir are a standard part of Perl, opendir does
-# not understand "<&=$fd", so it's impossible to use openat and then readdir
-# from that; conversely, dirfd is not available in core Perl before about
-# v5.26, so it's impossible to go the other way as well.
-#
-# This can also be used in conjunction with sysopen, systell, sysseek, etc.
-#
-# Takes a filedescriptor and an optional buffer size.
+# Parameters:
+#   * a filedescriptor; and
+#   * an optional buffer size.
 # Returns:
-#   a list of arrays, each blessed as dirent entry; or
-#   an empty list at EOF; or
-#   an undef on error (a non-empty list).
+#   * a list blessed dirent entries; or
+#   * an empty list at EOF; or
+#   * an undef on error (including "buffer too small").
+#
+# The C<getdents> syscall is provided to work around some deficiencies in
+# Perl's core C<opendir>/C<readdir>/C<closedir> functions. Converting between a
+# filedescriptor and DirHandle is awkward and unreliable.
+#   1. You can't easily use C<readdir> given a filedescriptor;
+#   2. You can't easily use C<fstat>, C<fchmod>, C<openat>, etc, given a
+#      C<DirHandle> (from C<opendir>).
+#   3. You don't get access to any additional information contained in a dirent
+#      record, such as the file type.
+#   4. There are no C<telldir> and C<seekdir> functions.
+#   5. The overloading of IO::Handle to hold both an open file and an open dir
+#      makes many operations much harder than necessary. (Later versions of
+#      Perl fixed that.)
+#
+# Perl's C<opendir> does not understand C<< <&=$fd >> (and there's no
+# C<fdopendir>). Most work-arounds involve C<diropen("/dev/fd/$fd")>, which
+# opens a new filedescriptor, and as a result:
+#   1. There is a (small) chance that C<opendir("/dev/fd/$fd")> might fail with
+#      C<EMFILE> or C<ENFILE>;
+#   2. Extra code is needed ensure that C<closedir> and C<sysclose> are done
+#      together.
+#   3. The new filedescriptor has its own separate cursor, so you still can't
+#      use C<sysseek> and C<systell>.
+#
+# On the other hand, C<dirfd> was not added to core Perl until about v5.26, but
+# there's no C<flushdir>, so even if you use sysseek on the underlying
+# filedescriptor, there's no way to be sure that you get the corresponding
+# dirent immediately.
+#
+# C<getdents> takes a filedescriptor and an optional buffer size. It returns:
+#   * a list of arrays, each blessed as dirent entry; or
+#   * an empty list at EOF; or
+#   * an undef on error.
 #
 # NB:
 #  1. The kernel call may return as many dirent entries as fit in the buffer,
 #     and there is no direct mechanism to limit the number of entries returned.
+#     If there is not enough room for at least one entry, then undef is
+#     returned with set $! to EINVAL.
 #
 #  2. When a fd is open on a directory, the position reported by systell (and
-#     used by sysseek) is an opaque tokens, not a computable integer.
+#     used by sysseek) is an opaque token, not a linear position.
 #
 
 use constant {
