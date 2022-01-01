@@ -1065,7 +1065,9 @@ sub symlinkat($$$) {
 # unlinkat - like unlink but relative to a given DIR
 #
 # Pass undef for dir_fd to use CWD for relative paths.
-# Omit flags (or pass undef) to remove a symlinks itself.
+#
+# Will refuse to remove a directory unless flags includes AT_REMOVEDIR; see
+# rmdirat.
 #
 
 _export_tag qw{ _at => unlinkat };
