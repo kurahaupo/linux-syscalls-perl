@@ -78,8 +78,8 @@ package Time::Nanosecond::ts {
         # so that a%b = a-(a∕b×b) or equivalently a∕b = (a-a%b)∕b
         #
         # This does not match the meaning of the mathematical modulus, because
-        # relationship
-        #      (a-b)∕b = a∕b-1
+        # the identity
+        #      (a-b)%b = a%b
         # fails when 0<a<b.
         #
         # The expression ((-7)/8 > -1) tells us whether we need to adjust for this,
