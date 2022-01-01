@@ -1025,7 +1025,7 @@ sub readlinkat($;$) {
 ################################################################################
 
 #
-# renameat - like rename but with each path relative to an DIR
+# renameat - like rename but with each path relative to a given DIR
 #
 # Pass undef for either dir_fd to use CWD for relative paths.
 # Omit flags (or pass undef) to avoid following symlinks.
