@@ -607,33 +607,47 @@ package Time::Nanosecond v0.1.1 {
     #       without notice. (In the current implementation, even an empty precision
     #       will cause width to be ignored.)
     #
-    #       %.N   - nanoseconds padded to 9 digits, with leading '.'
-    #       %N    - nanoseconds padded to 9 digits, without leading '.'
-    #       %.ρN  - fractional seconds and scaled and padded to ρ digits, with leading '.'
-    #       %ρN   - fractional seconds and scaled and padded to ρ digits, without leading '.'
+    #       %.N   - fractional seconds with all available precision, with leading '.'
+    #       %N    - fractional seconds with all available precision, without leading '.'
+    #       %.0N  - empty string
+    #       %0N   - empty string
+    #       %.ρN  - fractional seconds to ρ digit precision, with leading '.'
+    #       %ρN   - fractional seconds to ρ digit precision, without leading '.'
     #
     #       %s    - integer epoch-seconds (for compatibility with existing code)
+    #       %.0s  - same as %s
     #       %.s   - epoch-seconds with all available precision
     #       %.ρs  - epoch-seconds with ρ digits of subsecond precision
     #
     #       %S    - integer second-within-minute (for compatibility with existing code)
+    #       %.0S  - same as %S
     #       %.S   - second-within-minute with all available precision
     #       %.ρS  - second-within-minute with ρ digits of subsecond precision
     #
     #       %.T   - equivalent to %H:%M:%.S
+    #       %.0T  - same as %T
     #       %.ρT  - equivalent to %H:%M:%.ρS
     #
-    #       _   (underscore) Also replaces trailing 0's on fractions with spaces
-    #       -   (dash) Also suppresses trailing 0's on fractions, and suppresses
-    #           the decimal point if there are no fractional digits left.
+    #       _   (underscore) Replaces trailing 0's on fractions with spaces;
+    #           also replaces the decimal point if there are no fractional
+    #           digits left.
     #
-    #       .   forces the inclusion of a decimal point on N conversions.
-    #       .   introduces precision for S & T
+    #       -   (dash) Suppresses trailing 0's on fractions, and suppresses the
+    #           decimal point if there are no fractional digits left.
+    #
+    #       .   introduces precision for S & T, and
+    #           forces the inclusion of a decimal point on N conversions.
+    #
+    #   The "available precision" is generally 9 digits, but if the original
+    #   time value was a Time::Nanoseconds object, then the precision used when
+    #   creating that object is passed through by gmtime and localtime, so that
+    #   (for example) if the original was constructed from a floating point
+    #   value, only 6 digits will be available.
     #
     #   In general the existing format conversions do not visibly change unless
-    #   there the '.' modifier is included. 'N' is new, and therefore an exception
+    #   there the '.' modifier is included; 'N' is new, and therefore an exception
     #
-    #   Normally the '.' is excluded if trailing 0 suppression results in no digits
+    #   The '.' is excluded if trailing 0 suppression results in no digits
     #   after the decimal point, or if the precision is 0.
     #
     #   Only ρ values 1..9 are guaranteed to be supported, and in particular:
@@ -718,8 +732,8 @@ package Time::Nanosecond v0.1.1 {
               # $ns /= 2;
             }
 
-            my $np = substr "000000000$ns", -$prec;
-            $np = ".$np" if $dot;
+            my $np = substr '000000000'.$ns.'0', -$prec-1, -1;
+            $np = ".$np" if $dot && $prec;
             if ($flags =~ /-/) {
                 $np =~ s/0*$// and
                 $np =~ s/\.$//;
