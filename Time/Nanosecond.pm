@@ -683,7 +683,9 @@ package Time::Nanosecond v0.1.1 {
             # Take a working copy, since we might want to mangle it
             my $ns = $keep_nsec //= int do {
                             no integer;
-                            ($r[0] - int $r[0]) * 1E9 + 0.5
+                            ref $r[0] && UNIVERSAL::can($r[0], '_nsec')
+                                ? $r[0]->_nsec
+                                : ($r[0] - int $r[0]) * 1E9 + 0.5
                         };
             my $replace_pp = undef;
 
