@@ -927,6 +927,16 @@ sub _unpack_stat {
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
 }
 
+_export_ok qw{ statns };
+sub statns($) {
+    my ($path) = @_;
+    _normalize_path $path;
+    my $buffer = "\xa5" x 160;
+    state $syscall_id = _get_syscall_id 'stat';
+    0 == syscall $syscall_id, $path, $buffer or return;
+    return _unpack_stat($buffer);
+}
+
 _export_ok qw{ lstatns };
 sub lstatns($) {
     my ($path) = @_;
