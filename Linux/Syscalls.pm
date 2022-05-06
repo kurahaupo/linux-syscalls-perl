@@ -366,7 +366,7 @@ sub _seconds_to_timespec($) {
 }
 
 sub _timespec_to_seconds($$) {
-    my $f = \&_SC_timespec_to_seconds;;
+    my $f = \&_SC_timespec_to_seconds;
     $f = \&Time::Nanosecond::new_timespec if exists &Time::Nanosecond::new_timespec;
     no warnings 'redefine';
     *_timespec_to_seconds = $f;
