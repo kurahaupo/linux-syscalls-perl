@@ -947,6 +947,16 @@ sub lstatns($) {
     return _unpack_stat($buffer);
 }
 
+_export_ok qw{ fstatns };
+sub fstatns($) {
+    my ($fd) = @_;
+    $fd = $fd->fileno if ref $fd;
+    my $buffer = "\xa5" x 160;
+    state $syscall_id = _get_syscall_id 'fstat';
+    0 == syscall $syscall_id, $fd, $buffer or return;
+    return _unpack_stat($buffer);
+}
+
 BEGIN {
     eval {
         require Time::HiRes;
