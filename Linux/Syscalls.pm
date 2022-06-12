@@ -1216,6 +1216,32 @@ sub utimes($$$) {
 }
 
 #
+# utimens (fake syscall) - like utimes but to nanosecond resolution
+#
+#   * microsecond resolution
+#   * always follow symlinks
+#
+
+_export_ok qw{ utimens };
+sub utimens($$$) {
+    my ($path, $atime, $mtime) = @_;
+    return utimensat undef, $path, $atime, $mtime, 0;
+}
+
+#
+# lutime (fake syscall) - like utime but on a symlink
+#
+#   * wholesecond resolution
+#   * never follow symlinks
+#
+
+_export_tag qw{ l_ => lutime };
+sub lutime($$$) {
+    my ($path, $atime, $mtime) = @_;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
+}
+
+#
 # lutimes (fake syscall) - like utimes but on a symlink
 #
 #   * microsecond resolution
@@ -1226,6 +1252,19 @@ _export_tag qw{ l_ => lutimes };
 sub lutimes($$$) {
     my ($path, $atime, $mtime) = @_;
     return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
+}
+
+#
+# lutimens (fake syscall) - like utimes but on a symlink and to nanosecond resolution
+#
+#   * microsecond resolution
+#   * never follow symlinks
+#
+
+_export_tag qw{ l_ => lutimens };
+sub lutimens($$$) {
+    my ($path, $atime, $mtime) = @_;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
