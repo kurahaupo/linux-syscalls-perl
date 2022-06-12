@@ -1112,19 +1112,16 @@ sub rmdirat($$) {
 
 ################################################################################
 
-use constant {
-    UTIME_trunc_nsec => 0,
-    UTIME_trunc_µsec => 1,
-    UTIME_trunc_sec  => 2,
-};
-
 sub _normalize_utimens($$) {
-    my ($t, $trunc_µs) = @_;
+    my ($t, $time_res) = @_;
     defined $t          || return -1, UTIME_OMIT;
     ref $t || $t ne ''  || return -1, UTIME_NOW;
     my ($s, $ns) =  _seconds_to_timespec $t;
-    $ns = 0           if $trunc_µs == UTIME_trunc_nsec;
-    $ns -= $ns % 1000 if $trunc_µs == UTIME_trunc_µsec;
+    if ( $time_res == TIMERES_SECOND ) {
+        $ns = 0;
+    } elsif ( $time_res < TIMERES_NANOSECOND ) {
+        $ns -= $ns % 10 ** ( TIMERES_NANOSECOND - $time_res );
+    }
     return $s, $ns;
 }
 
@@ -1141,15 +1138,18 @@ sub _normalize_utimens($$) {
 #     fraction) to set it to that value (with nanosecond resolution).
 #     Time::Nanosecond::ts values are also supported.
 #   * Omit flags (or pass undef) to avoid following symlinks.
-#   * Include trunc_µs to truncate precision (normally only used when emulating
-#     utime or utimes syscalls).
+#   * Accepts an optional time_res parameter to moderate the precision
+#     (normally only used when emulating utime or utimes syscalls, where
+#     timestamps have microsecond or whole second resolution).
+#
 #
 
 _export_tag qw{ _at => utimensat };
 sub utimensat($$$$;$$) {
-    my ($dir_fd, $path, $atime, $mtime, $flags, $trunc_µs) = @_;
+    my ($dir_fd, $path, $atime, $mtime, $flags, $time_res) = @_;
     _resolve_dir_fd_path $dir_fd, $path, $flags or return;
-    my $ts = pack "(Q2)2", map { _normalize_utimens $_, $trunc_µs } $atime, $mtime;
+    $time_res //= TIMERES_NANOSECOND;
+    my $ts = pack "(Q2)2", map { _normalize_utimens $_, $time_res } $atime, $mtime;
     state $syscall_id = _get_syscall_id 'utimensat';
     return 0 == syscall $syscall_id, $dir_fd, $path, $ts, $flags;
 }
@@ -1174,7 +1174,7 @@ sub utimensat($$$$;$$) {
 _export_ok qw{ futimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
-    return utimensat $dir_fd, $path, $atime, $mtime, 0, UTIME_trunc_µsec;
+    return utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1199,7 +1199,7 @@ sub futimens($$$) {
 _export_tag qw{ f_ => futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
-    return utimensat $fd, undef, $atime, $mtime, undef, UTIME_trunc_µsec;
+    return utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
 }
 
 #
@@ -1212,7 +1212,7 @@ sub futimes($$$) {
 _export_tag qw{ f_ => utimes };
 sub utimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, 0, UTIME_trunc_µsec;
+    return utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1225,7 +1225,7 @@ sub utimes($$$) {
 _export_tag qw{ l_ => lutimes };
 sub lutimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, UTIME_trunc_µsec;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
 }
 
 ################################################################################
