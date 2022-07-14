@@ -11,16 +11,16 @@
 # In some cases, versions of functions provided because the POSIX module may
 # not include the syscall, or may have been built without the syscall call
 # enabled. notably:
-#   * lchown.
+#   * lchown
 #
 # In addition, alias names are provided where the Linux (or POSIX) names are
 # inconsistent; for example removing an "f" prefix when an "at" suffix is
 # already present:
-#   * faccessat
-#   * fchmodat
-#   * fchownat
-#   * fstatat
-#   * futimesat
+#   * faccessat -> accessat
+#   * fchmodat  -> chmodat
+#   * fchownat  -> chownat
+#   * fstatat   -> statat
+#   * futimesat -> utimesat
 #
 # Where timestamps are required as arguments, they may be provided as floating
 # point numbers, or as Time::Nanosecond::ts references (or indeed, any blessed
@@ -196,11 +196,11 @@ _export_tag qw{ res_ =>
 # FROM /usr/include/*-linux-gnu/bits/fcntl-linux.h
 BEGIN {
 #
-# These O_* constants can also be provided by POSIX.pm and/or Fcntl.pm, so
-# only define them here if they're /not/ provided by those.
+# These O_* constants can also be provided by POSIX.pm and/or Fcntl.pm, so only
+# define them here if they're /not/ provided by those.
 #
-# They all be specified to open*(), but some are applicable
-# to other calls, notably the *_at() family.
+# They can all be specified to open*(), but some are applicable to other calls,
+# notably the *_at() family.
 #
 # On Linux fcntl(F_SETFL,...) can change only the O_APPEND, O_ASYNC, O_DIRECT,
 # O_NOATIME, and O_NONBLOCK flags, and fcnl(F_SETFD,...) can only change the
@@ -1128,7 +1128,7 @@ sub _normalize_utimens($$) {
 #
 # utimensat (POSIX syscall) - like utimes, but:
 #
-#   * relative to an open dir_fd, and:
+#   * relative to an open dir_fd
 #   * with nanosecond precision
 #
 #   * Pass undef for dir_fd to use CWD for relative paths.
@@ -1138,10 +1138,18 @@ sub _normalize_utimens($$) {
 #     fraction) to set it to that value (with nanosecond resolution).
 #     Time::Nanosecond::ts values are also supported.
 #   * Omit flags (or pass undef) to avoid following symlinks.
+#
 #   * Accepts an optional time_res parameter to moderate the precision
 #     (normally only used when emulating utime or utimes syscalls, where
 #     timestamps have microsecond or whole second resolution).
 #
+# IMPORTANT NOTE:
+#   1.  Because of the dir_fd+path pairing, and because of the optional flags,
+#       only one file is processed per call, and the order of the parameters
+#       differs from Perl's built-in utime.
+#   2.  The timestamp handling differs from utime and utimes, where undef sets
+#       to current time and there is no option to leave either timestamp
+#       unchanged.
 #
 
 _export_tag qw{ _at => utimensat };
@@ -1155,20 +1163,21 @@ sub utimensat($$$$;$$) {
 }
 
 #
-# futimesat (abandoned POSIX syscall proposal)
+# futimesat (abandoned POSIX syscall proposal) - like utimensat except:
 #
-#   * now a Linux-specific syscall, though a similar syscall exists on Solaris.
-#   * like utimes, but use dir_fd in place of CWD; or equivalently, like
-#     utimensat except that times are only microsecond precision, and there's
-#     no flags so modifying a symlink is not possible (hence pass 0 for flags).
+#   * times are only microsecond precision, and
+#   * flags is always 0
 #
-#   * Pass undef for dir_fd to use CWD for relative paths.
-#   * Pass undef for path to apply to dir_fd (which might be a symlink; this is
-#     an extension from the syscall)
-#   * Pass undef for atime or mtime to avoid changing that timestamp, empty
-#     string to set it to the current time, or an epoch second (with decimal
-#     fraction) to set it to that value (with microsecond resolution).
-#     Time::Nanosecond::ts values are also supported.
+# So modifying a symlink is not possible, except for the case where dir_fd is
+# itself a symlink and path is undef, and THAT is an extension.
+#
+# Or equivalently, like utimes, but use dir_fd in place of CWD:
+#
+#   * relative to an open dir_fd
+#   * microsecond resolution
+#
+# Implements a Linux-specific syscall, though a similar syscall exists on
+# Solaris.
 #
 
 _export_ok qw{ futimesat };
@@ -1218,7 +1227,7 @@ sub utimes($$$) {
 #
 # utimens (fake syscall) - like utimes but to nanosecond resolution
 #
-#   * microsecond resolution
+#   * nanosecond resolution
 #   * always follow symlinks
 #
 
@@ -1257,7 +1266,7 @@ sub lutimes($$$) {
 #
 # lutimens (fake syscall) - like utimes but on a symlink and to nanosecond resolution
 #
-#   * microsecond resolution
+#   * nanosecond resolution
 #   * never follow symlinks
 #
 
