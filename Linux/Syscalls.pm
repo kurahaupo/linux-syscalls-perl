@@ -1175,7 +1175,8 @@ sub utimensat($$$$;$$) {
 # Solaris.
 #
 
-_export_ok qw{ futimesat };
+*utimesat = \&futimesat;
+_export_tag qw{ _at => futimesat utimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
     return utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
@@ -1185,7 +1186,7 @@ sub futimesat($$$$) {
 # futimens (POSIX syscall) - like utimensat but just an open fd (no filepath)
 #
 
-_export_tag qw{ f_ => futimens };
+_export_ok qw{ futimens };
 sub futimens($$$) {
     my ($fd, $atime, $mtime) = @_;
     return utimensat $fd, undef, $atime, $mtime;
@@ -1200,7 +1201,7 @@ sub futimens($$$) {
 # for flags.
 #
 
-_export_tag qw{ f_ => futimes };
+_export_ok qw{ futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
     return utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
@@ -1213,7 +1214,7 @@ sub futimes($$$) {
 #   * always follow symlinks
 #
 
-_export_tag qw{ f_ => utimes };
+_export_ok qw{ utimes };
 sub utimes($$$) {
     my ($path, $atime, $mtime) = @_;
     return utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
