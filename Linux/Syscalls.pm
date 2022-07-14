@@ -1163,21 +1163,21 @@ sub utimensat($$$$;$$) {
 }
 
 #
-# futimesat (abandoned POSIX syscall proposal) - like utimensat except:
+# futimesat (abandoned POSIX syscall proposal)
 #
-#   * times are only microsecond precision, and
-#   * flags is always 0
+#   * now a Linux-specific syscall, though a similar syscall exists on Solaris.
+#   * like utimensat except that times are only microsecond precision, and
+#     there's no flags argument; or equivalently,
+#   * like utimes, but use dir_fd in place of CWD.
 #
-# So modifying a symlink is not possible, except for the case where dir_fd is
-# itself a symlink and path is undef, and THAT is an extension.
-#
-# Or equivalently, like utimes, but use dir_fd in place of CWD:
-#
-#   * relative to an open dir_fd
-#   * microsecond resolution
-#
-# Implements a Linux-specific syscall, though a similar syscall exists on
-# Solaris.
+#   * Pass undef for dir_fd to use CWD for relative paths.
+#   * Pass undef for path to apply to dir_fd (which might be a symlink; this is
+#     an extension from the syscall)
+#   * Pass undef for atime or mtime to avoid changing that timestamp, empty
+#     string to set it to the current time, or an epoch second (with decimal
+#     fraction) to set it to that value (with microsecond resolution).
+#   * Time::Nanosecond::ts timestamps are also supported, though they will be
+#     truncated to microsecond precision.
 #
 
 *utimesat = \&futimesat;
