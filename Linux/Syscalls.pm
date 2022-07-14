@@ -1558,6 +1558,7 @@ sub waitpid2($$) {
 
 # waitid returns a 5-element array
 
+_export_tag qw{ proc => waitid } if _get_syscall_id 'waitid', 1;
 sub waitid($$;$) {
 #   my ($id_type, $id, $options) = @_;
     $_[2] //= WEXITED;
@@ -1567,6 +1568,7 @@ sub waitid($$;$) {
 
 # waitid5 returns a 21-element array, starting with the same 5 as waitid
 
+_export_tag qw{ proc => waitid5 } if _get_syscall_id 'waitid', 1;
 sub waitid5($$;$) {
 #   my ($id_type, $id, $options) = @_;
     $_[2] //= WEXITED;
