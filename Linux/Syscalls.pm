@@ -1685,7 +1685,6 @@ _export_tag qw{ proc wait_options =>
                     WNOTHREAD
                     WALLCHILDREN
                     WCLONE };
-_export_tag qw{ proc => waitid waitid5 Exit };
 
 {
 # Internal subs for unpacking complex proc-related structs
@@ -1875,6 +1874,7 @@ sub waitpid2($$) {
 
 # waitid returns a 5-element array
 
+_export_tag qw{ proc => waitid } if _get_syscall_id 'waitid', 1;
 sub waitid($$;$) {
 #   my ($id_type, $id, $options) = @_;
     $_[2] //= WEXITED;
@@ -1884,6 +1884,7 @@ sub waitid($$;$) {
 
 # waitid5 returns a 21-element array, starting with the same 5 as waitid
 
+_export_tag qw{ proc => waitid5 } if _get_syscall_id 'waitid', 1;
 sub waitid5($$;$) {
 #   my ($id_type, $id, $options) = @_;
     $_[2] //= WEXITED;
@@ -1894,7 +1895,7 @@ sub waitid5($$;$) {
 # Assume that since you're calling waitid, you have an interest in the siginfo,
 # but since the rusage is a Linux syscall extension, only include it if you
 # explicitly ask for it.
-_export_ok 'waitid_';
+_export_ok 'waitid_' if _get_syscall_id 'waitid', 1;
 sub waitid_($$$;$$) {
     my ($id_type, $id, $options, $record_wrusage, $record_siginfo) = @_;
     $id_type |= 0;  # force numeric
