@@ -53,9 +53,20 @@ use base 'Exporter';
 use Config;
 use Scalar::Util qw( looks_like_number blessed );
 
-use Errno qw( ENOSYS EBADF );
 use Fcntl qw( S_IFMT );
-use POSIX qw( floor uname );
+use POSIX qw( ENOSYS EBADF floor uname );
+# «use Errno qw( E... );» results in dup import warnings with perl -Wc
+
+BEGIN {
+    # When in syntax-checking mode, check for clashes with the POSIX module,
+    # which (unhelpfully) exports everything by default, including optional
+    # symbols like lchown.
+    #
+    # Import POSIX after all other modules are imported, but before we define
+    # anything. (POSIX normally won't complain if we've already defined
+    # something that it provides.)
+    POSIX->import() if $^C;
+}
 
 ################################################################################
 #
@@ -98,13 +109,6 @@ sub _get_scalar_constant($) {
 sub _listlen(@) { return 0+@_; }
 
 ################################################################################
-
-BEGIN {
-    # When in checking mode, import everything from POSIX, to find out whether
-    # we clash with anything. Do this after all other modules are imported, so
-    # POSIX won't complain if we've already defined something that it provides.
-    POSIX->import() if $^C;
-}
 
 sub _unique_sorted(\@@) {
     my $r = shift;
