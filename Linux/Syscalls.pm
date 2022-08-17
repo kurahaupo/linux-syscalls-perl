@@ -402,33 +402,35 @@ sub _timespec_to_seconds($$) {
 # * make sure the result is a string
 #
 
+sub _map_fd(\$;$) {
+    my ($dir_fd, $allow_at_cwd) = @_;
+    my $D = $$dir_fd;
+    if ( ref $D ) {
+        # Try calling fileno method on any object that implements it
+        eval { $$dir_fd = $D->dirfd;  1 } and return 1 if $^V ge v5.25.0;
+        eval { $$dir_fd = $D->fileno; 1 } and return 1;
+        # Fall through and use fileno builtin
+    } else {
+        # Keep the input value unchanged if it's an integer
+        looks_like_number $D and return 1;
+        if ( $allow_at_cwd and ! defined $D || $D eq '' || $D eq '.' ) {
+            # undef, '' and '.' refer to current directory
+            $$dir_fd = AT_FDCWD;
+            return 1;
+        }
+    }
+    # Try calling fileno builtin func on an IO::File (ref) or GLOB-ref (ref) or
+    # GLOB (non-ref)
+    defined eval { $$dir_fd = fileno $D } and return 1;
+    # It's not a valid filedescriptor
+    $$dir_fd = undef;
+    $! = EBADF;
+    return ();
+}
+
 sub _resolve_dir_fd_path(\$;\$\$$) {
     my ($dir_fd) = @_;
-    MAP_FD: {
-        my $D = $$dir_fd;
-        if ( ref $D ) {
-            # Try calling fileno method on any object that implements it
-            eval { $$dir_fd = $D->dirfd;  1 } and last MAP_FD if $^V ge v5.25.0;
-            eval { $$dir_fd = $D->fileno; 1 } and last MAP_FD;
-        } else {
-            # undef, '' and '.' refer to current directory
-            if ( ! defined $D || $D eq '' || $D eq '.' ) {
-                $$dir_fd = AT_FDCWD;
-                last MAP_FD;
-            }
-            # Keep the input value unchanged if it's an integer
-            looks_like_number $D and last MAP_FD;
-        }
-        # Try calling fileno builtin func on an IO::File (ref) or GLOB-ref (ref) or
-        # GLOB (non-ref)
-        defined eval { $$dir_fd = fileno $D } and last MAP_FD;
-        # It's not a valid filedescriptor
-        $$dir_fd = undef;
-        $! = EBADF;
-        return;
-    }
-
-    shift;
+    &_map_fd(shift, 1) or return;
     goto &_normalize_path if @_;
 }
 
@@ -957,7 +959,7 @@ sub lstatns($) {
 _export_ok qw{ fstatns };
 sub fstatns($) {
     my ($fd) = @_;
-    $fd = $fd->fileno if ref $fd;
+    _map_fd($fd);
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'fstat';
     0 == syscall $syscall_id, $fd, $buffer or return;
@@ -1203,6 +1205,7 @@ sub futimesat($$$$) {
 _export_ok qw{ futimens };
 sub futimens($$$) {
     my ($fd, $atime, $mtime) = @_;
+    _map_fd($fd);
     return utimensat $fd, undef, $atime, $mtime;
 }
 
@@ -1218,6 +1221,7 @@ sub futimens($$$) {
 _export_ok qw{ futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
+    _map_fd($fd);
     return utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
 }
 
@@ -1364,6 +1368,7 @@ use constant {
 
 sub getdents($;$) {
     my ($fd, $bufsize) = @_;
+    _map_fd($fd);
     # Keep track of this usage:
     #   $bufsize is the size of the buffer passed to the kernel
     #   $blksize is the size of the received data block
@@ -1546,6 +1551,7 @@ sub fiemap($;$$) {
     my $buffer = pack( $packfmt, $fm_start, $fm_length, $in_flags, 0xeeeeeeee, $bufcount ) . (  "\xee" x ( $bufcount * fiemap_extent_size ) );
     my $res = ioctl $fd, FS_IOC_FIEMAP, $buffer;
     #my $res = syscall $syscall_id, $fd, $buffer;
+    _map_fd($fd);
     printf STDERR "ioctl(%d, FS_IOC_FIEMAP, [%s]) -> %s\n", $fd, unpack("H*",$buffer), $res // '(undef)';
     $res >= 0 or return;
     my (undef, undef, $out_flags, $fm_mapped_extents ) = unpack fiemap_header_packfmt, $buffer;
