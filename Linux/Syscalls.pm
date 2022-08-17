@@ -16,11 +16,11 @@
 # In addition, alias names are provided where the Linux (or POSIX) names are
 # inconsistent; for example removing an "f" prefix when an "at" suffix is
 # already present:
-#   * faccessat -> accessat
-#   * fchmodat  -> chmodat
-#   * fchownat  -> chownat
-#   * fstatat   -> statat
-#   * futimesat -> utimesat
+#   * faccessat → accessat
+#   * fchmodat  → chmodat
+#   * fchownat  → chownat
+#   * fstatat   → statat
+#   * futimesat → utimesat
 #
 # Where timestamps are required as arguments, they may be provided as floating
 # point numbers, or as Time::Nanosecond::ts references (or indeed, any blessed
@@ -283,7 +283,7 @@ my %o_const = (
         # But verify that we would provide the same numeric value.
         $ov[0] == $nv or
             die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
-        warn "Already have $k (probably from POSIX)\n" if $^C;
+        warn "Already have $k (probably from POSIX)\n" if $^C && $^W;
     }
     constant->import(\%o_const);
 }
@@ -479,7 +479,7 @@ BEGIN {
         'generic',
     } ) {
         my $m = "${built_for_os}::Syscalls::$mm";
-        warn "Trying to load $m" if $^C;
+        warn "Trying to load $m" if $^C && $^W;
         eval qq{
             use $m;
           # printf "syscall_map=%s\\n", scalar %syscall_map;
@@ -668,6 +668,7 @@ _export_tag qw{ l_ => lchown };
 #
 
 *accessat = \&faccessat;
+\&accessat or die; # suppress "only used once" warning
 _export_tag qw{ _at => faccessat accessat };
 sub faccessat($$$;$) {
     my ($dir_fd, $path, $mode, $flags) = @_;
@@ -696,6 +697,7 @@ sub faccessat($$$;$) {
 #
 
 *chmodat = \&fchmodat;
+\&chmodat or die; # suppress "only used once" warning
 _export_tag qw{ _at => fchmodat chmodat };
 sub fchmodat($$$;$) {
     my ($dir_fd, $path, $perm, $flags) = @_;
@@ -746,6 +748,7 @@ sub lchmod($$) {
 #
 
 *chownat = \&fchownat;
+\&chownat or die; # suppress "only used once" warning
 _export_tag qw{ _at => fchownat chownat };
 sub fchownat($$$$;$) {
     my ($dir_fd, $path, $uid, $gid, $flags) = @_;
@@ -974,6 +977,7 @@ BEGIN {
 }
 
 *statat = \&fstatat;
+\&statat or die; # suppress "only used once" warning
 _export_tag qw{ _at => fstatat statat };
 sub fstatat($$;$) {
     my ($dir_fd, $path, $flags) = @_;
@@ -1185,6 +1189,7 @@ sub utimensat($$$$;$$) {
 #
 
 *utimesat = \&futimesat;
+\&utimesat or die; # suppress "only used once" warning
 _export_tag qw{ _at => futimesat utimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
@@ -1661,7 +1666,7 @@ my %w_const = (
         # But verify that we would provide the same numeric value.
         $ov[0] == $nv or
             die "Symbol $k already has value $ov[0], which disagrees our value $nv\n";
-        warn "Already have $k (probably from POSIX)\n" if $^C;
+        warn "Already have $k (probably from POSIX)\n" if $^C && $^W;
     }
     constant->import(\%w_const);
 };
