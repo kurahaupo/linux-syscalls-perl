@@ -640,7 +640,7 @@ BEGIN {
 use POSIX ();
 eval q{
     sub lchown($$$) {
-        my ($path, $uid, $gid) = @_;
+        my ($uid, $gid, $path) = @_;
         _normalize_path $path;
         ($uid //= -1) += 0;
         ($gid //= -1) += 0;
