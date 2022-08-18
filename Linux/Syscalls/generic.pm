@@ -9,8 +9,7 @@ package Linux::Syscalls::generic;
 # Generic variables, constants, and methods, which are architecture-
 # independent, or common to the majority of architectures.
 
-use base 'Linux::Syscalls::base';
-use base 'Exporter';
+use Exporter 'import';
 
 use Config;
 

@@ -9,8 +9,7 @@ package Linux::Syscalls::ia32;
 # This file supports i386, i586 & i686
 #
 
-use base 'Linux::Syscalls::base';
-use base 'Exporter';
+use Exporter 'import';
 
 our %syscall_map = (
     # FROM /usr/include/x86_64-linux-gnu/asm/unistd_32.h

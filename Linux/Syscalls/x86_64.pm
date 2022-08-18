@@ -5,8 +5,7 @@ use warnings;
 
 package Linux::Syscalls::x86_64;
 
-use base 'Linux::Syscalls::base';
-use base 'Exporter';
+use Exporter 'import';
 
 use Config;
 
