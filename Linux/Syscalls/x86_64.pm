@@ -329,7 +329,8 @@ our %syscall_map = (
     open_by_handle_at       => 304,
     clock_adjtime           => 305,
     syncfs                  => 306,
-    sendmmsg                => 307,  ## for x86_32 replaced by call #538 setns                   => 308,
+    sendmmsg                => 307,  ## for x86_32 replaced by call #538
+    setns                   => 308,
     getcpu                  => 309,
     process_vm_readv        => 310,  ## for x86_32 replaced by call #539
     process_vm_writev       => 311,  ## for x86_32 replaced by call #540
