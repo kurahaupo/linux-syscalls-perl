@@ -18,8 +18,6 @@ my $x32 = ! $Config{use64bitall};
 our @EXPORT = (qw(
     %pack_map
     %syscall_map
-
-    unpack_dent
 ));
 
 our %syscall_map = (
