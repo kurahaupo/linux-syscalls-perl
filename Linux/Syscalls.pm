@@ -495,7 +495,6 @@ BEGIN {
     }
     no diagnostics;
     @e and die "@e\n";
-    sub _get_syscall_id($;$);
 };
 
 sub _get_syscall_id($;$) {
