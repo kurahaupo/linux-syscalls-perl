@@ -1399,6 +1399,41 @@ _export_tag qw( DT_ dirent  =>  getdents
                                 DT_REG DT_LNK DT_SOCK DT_WHT
               );
 
+BEGIN { $^C and eval q{
+# Include this in regression testing with perl -c but otherwise hide it
+
+sub old_getdents_do_not_use_this($;$) {
+    my ($fd, $bufsize) = @_;
+    _map_fd($fd);
+    state $syscall_id = _get_syscall_id 'getdents32';   # does not exist in x86_64
+    $syscall_id or $! = ENOSYS, return undef;
+    $bufsize ||= getdents_default_bufsize;
+    my $buffer = '\xee' x $bufsize;
+    my $res = syscall $syscall_id, $fd, $buffer, $bufsize;
+    return undef if $res < 0;
+    my @r;
+    for (my $offset = 0, $bufsize = $res ; 0 <= $offset && $offset < $bufsize ;) {
+        #
+        # The old getdents returns fields in a different order from getdents64.
+        # In particular, d_type field *follows* d_name, at d_reclen-1, or may
+        # be missing entirely.
+        # Fortunately in that case, the byte at d_reclen-1 will be the null
+        # terminator of d_name, so d_type will still be DT_UNKNOWN.
+        #
+        # Furthermore, the 16-bit d_inode field is too small to be reliable;
+        # you then need to lstat the name to get all its bits.
+        #
+        my ($inode, $next, $entsize, $name) = unpack '@'.$offset.'SSSU0Z*', $buffer;
+        $entsize or last;    # can't get anything more out of this block
+        $entsize < 0 || $entsize > $bufsize - $offset and $! = EFAULT, return undef;  # error while unpacking
+        my ($type) = unpack '@'.($offset+$entsize-1).'C', $buffer;
+        push @r, bless [$name, $inode, $type, $next], Linux::Syscalls::bless::dirent::;
+        $offset += $entsize;
+    }
+    return @r;
+}
+} }
+
 ################################################################################
 
 {
