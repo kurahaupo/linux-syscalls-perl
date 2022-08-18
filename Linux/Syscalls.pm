@@ -54,7 +54,7 @@ use Config;
 use Scalar::Util qw( looks_like_number blessed );
 
 use Fcntl qw( S_IFMT );
-use POSIX qw( ENOSYS EBADF floor uname );
+use POSIX qw( EBADF EFAULT ENOSYS floor uname );
 # «use Errno qw( E... );» results in dup import warnings with perl -Wc
 
 BEGIN {
@@ -141,7 +141,9 @@ sub _export_finish {
 
 # Internal magic numbers
 use constant {
-    getdents_default_bufsize => 0x4000, # a multiple of the file allocation block size
+    getdents_default_bufsize => 0x4000,
+    # This number should be a multiple of the file allocation block size, and
+    # at least sizeof(struct dirent)+MAXNAMELEN == pathconf(_PC_NAME_MAX).
 };
 
 # Magic numbers for Linux; these should be (but aren't) in Fcntl
@@ -1363,31 +1365,29 @@ use constant {
     sub name  { $_[0]->[0]  }
     sub inode { $_[0]->[1]  }
     sub type  { $_[0]->[2]  }
-    sub hash  { $_[0]->[3]  }
+    sub next  { $_[0]->[3]  }   # seek to this position to read the NEXT entry
 }
 
 sub getdents($;$) {
     my ($fd, $bufsize) = @_;
     _map_fd($fd);
-    # Keep track of this usage:
-    #   $bufsize is the size of the buffer passed to the kernel
-    #   $blksize is the size of the received data block
-    #   $entsize is the size of each entry
-    # however the buffer size and the received size have non-ov
-    state $syscall_id = _get_syscall_id 'getdents64';
-    state $packfmt = $pack_map{getdents64};    # 'QQSC'
-    state $packlen = length pack $packfmt, (0) x 5;
     $bufsize ||= getdents_default_bufsize;
     my $buffer = "\xee" x $bufsize;
-    my $blksize = syscall $syscall_id, $fd, $buffer, $bufsize;
-    return undef if $blksize < 0;
-  # substr($buffer, $blksize) = '';  # cut off unfilled tail of buffer
+
+    state $syscall_id = _get_syscall_id 'getdents64';
+    my $res = syscall $syscall_id, $fd, $buffer, $bufsize;
+    return undef if $res < 0 || $res > $bufsize;
 
     my @r;
-    for (my $offset = 0 ; $offset < $blksize ;) {
-        my ($entsize, @e) = unpack_dent $buffer;
+    for (my $offset = 0, $bufsize = $res ; 0 <= $offset && $offset < $bufsize ;) {
+        #
+        # The new getdents64 always returns d_inode, d_next, d_reclen, d_type,
+        # and d_name (null-terminated) in that order on all architectures.
+        #
+        my ($inode, $next, $entsize, $type, $name) = unpack '@'.$offset.'QQSCU0Z*', $buffer;
         $entsize or last;    # can't get anything more out of this block
-        push @r, bless \@e, Linux::Syscalls::bless::dirent::;
+        $entsize < 0 || $entsize > $bufsize - $offset and $! = EFAULT, return undef;  # error while unpacking
+        push @r, bless [$name, $inode, $type, $next], Linux::Syscalls::bless::dirent::;
         $offset += $entsize;
     }
     return @r;
