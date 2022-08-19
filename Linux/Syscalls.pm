@@ -55,7 +55,7 @@ use Scalar::Util qw( looks_like_number blessed );
 
 use Fcntl qw( S_IFMT );
 use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor uname );
-# «use Errno qw( E... );» results in dup import warnings with perl -Wc
+# Avoid «use Errno qw( E... );» as it results in dup import warnings with perl -Wc
 
 BEGIN {
     # When in syntax-checking mode, check for clashes with the POSIX module,
@@ -301,13 +301,6 @@ use constant {
 
 use constant {
     CHMOD_MASK  => 0xffff & ~( S_IFMT | - S_IFMT ),
-#   CHMOD_MASK  => 07777,
-#
-## S_ISVTX & S_ISTXT may not be defined
-#   CHMOD_MASK  => S_ISUID | S_ISGID | ( exists &S_ISVTX ? &S_ISVTX
-#                                        exists &S_ISTXT ? &S_ISTXT
-#                                                        : 01000 )
-#                | S_IRWXU | S_IRWXG | S_IRWXO;
 };
 
 BEGIN { CHMOD_MASK == 07777 or die "Internal Error; for details read source code" };
