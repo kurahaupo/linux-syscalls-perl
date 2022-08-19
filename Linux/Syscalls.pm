@@ -54,7 +54,7 @@ use Config;
 use Scalar::Util qw( looks_like_number blessed );
 
 use Fcntl qw( S_IFMT );
-use POSIX qw( EBADF EFAULT ENOSYS floor uname );
+use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor uname );
 # «use Errno qw( E... );» results in dup import warnings with perl -Wc
 
 BEGIN {
@@ -138,13 +138,6 @@ sub _export_finish {
 }
 
 ################################################################################
-
-# Internal magic numbers
-use constant {
-    getdents_default_bufsize => 0x4000,
-    # This number should be a multiple of the file allocation block size, and
-    # at least sizeof(struct dirent)+MAXNAMELEN == pathconf(_PC_NAME_MAX).
-};
 
 # Magic numbers for Linux; these should be (but aren't) in Fcntl
 use constant {
@@ -1347,16 +1340,41 @@ sub lutimens($$$) {
 #     used by sysseek) is an opaque token, not a linear position.
 #
 
+# These DT_* constants are the same as the corresponding S_IF* constants
+# shifted right 12 bits.
+
 use constant {
     DT_UNKNOWN  => 0,
-    DT_FIFO     => 1,
-    DT_CHR      => 2,
-    DT_DIR      => 4,
-    DT_BLK      => 6,
-    DT_REG      => 8,
-    DT_LNK      => 10,
-    DT_SOCK     => 12,
-    DT_WHT      => 14,
+    DT_FIFO     => 1,   # S_IFIFO  >> 12
+    DT_CHR      => 2,   # S_IFCHR  >> 12
+    DT_DIR      => 4,   # S_IFDIR  >> 12
+    DT_BLK      => 6,   # S_IFBLK  >> 12
+    DT_REG      => 8,   # S_IFREG  >> 12
+    DT_LNK      => 10,  # S_IFLNK  >> 12
+    DT_SOCK     => 12,  # S_IFSOCK >> 12
+    DT_WHT      => 14,  # whiteout; you should never see these entries
+
+    # Options for extensions
+    GDE_RETRY           => 1,   # try again if buffer too small
+    GDE_SKIP_DOTDOTDOT  => 2,   # filter out '.' and '..'
+    GDE_SKIP_WHITEOUT   => 4,   # filter out DT_WHT entries
+};
+
+# Internal magic numbers
+use constant {
+    # Enough room for a dirent header (19 bytes) plus a maximal-length name
+    # (MAXNAMELEN=1024 bytes) plus terminator (1 byte)
+    getdents_maxnamelen_plus =>    0x400 + 19 + 1,
+
+    # Same, rounded up to next power of 2
+    getdents_minimum_bufsize =>    0x800, # == 1 << scalar frexp( getdents_maxnamelen_plus - 1 ),
+
+    # The default size should be a multiple of the file allocation block size,
+    # and must be at least sizeof(struct dirent)+MAXNAMELEN
+    getdents_default_bufsize =>   0x4000,
+
+    # Cap buffer size at 1MiB, which is enough for at least 1000 names
+    getdents_maximum_bufsize => 0x100000,
 };
 
 {
@@ -1367,35 +1385,61 @@ use constant {
     sub next  { $_[0]->[3]  }   # seek to this position to read the NEXT entry
 }
 
-sub getdents($;$) {
-    my ($fd, $bufsize) = @_;
+sub getdents($;$$) {
+    my ($fd, $bufsize, $options) = @_;
     _map_fd($fd);
     $bufsize ||= getdents_default_bufsize;
-    my $buffer = "\xee" x $bufsize;
+    $options //= ~0;
 
     state $syscall_id = _get_syscall_id 'getdents64';
-    my $res = syscall $syscall_id, $fd, $buffer, $bufsize;
-    return undef if $res < 0 || $res > $bufsize;
+    FETCH: for (;;) {
+        $bufsize <= getdents_maximum_bufsize or $bufsize = getdents_maximum_bufsize;
+        my $buffer = "\xee" x $bufsize;
+        my $res_size = syscall $syscall_id, $fd, $buffer, $bufsize;
 
-    my @r;
-    for (my $offset = 0, $bufsize = $res ; 0 <= $offset && $offset < $bufsize ;) {
-        #
-        # The new getdents64 always returns d_inode, d_next, d_reclen, d_type,
-        # and d_name (null-terminated) in that order on all architectures.
-        #
-        my ($inode, $next, $entsize, $type, $name) = unpack '@'.$offset.'QQSCU0Z*', $buffer;
-        $entsize or last;    # can't get anything more out of this block
-        $entsize < 0 || $entsize > $bufsize - $offset and $! = EFAULT, return undef;  # error while unpacking
-        push @r, bless [$name, $inode, $type, $next], Linux::Syscalls::bless::dirent::;
-        $offset += $entsize;
+        # end-of-file
+        return () if ! $res_size;
+
+        # some sort of error
+        if ( $res_size < 0 ) {
+            if ( $! == EINVAL && $bufsize < getdents_minimum_bufsize && $options & GDE_RETRY ) {
+                # Buffer wasn't big enough; try again with a bigger buffer
+                $bufsize = getdents_maximum_bufsize;
+                redo FETCH
+            }
+            return undef;   # keep $!
+        }
+
+        # returned result bigger than given size should not happen
+        last FETCH if $res_size > $bufsize;
+
+        my @r;
+        UNPACK: for (my $offset = 0 ; $offset < $res_size ;) {
+            #
+            # The new getdents64 always returns d_inode, d_next, d_reclen, d_type,
+            # and d_name (null-terminated) in that order on all architectures.
+            #
+            my ($inode, $next, $entsize, $type, $name) = unpack '@'.$offset.'QQSCU0Z*', $buffer;
+            $entsize or last UNPACK;    # can't get anything more out of this block
+            $entsize < 0 || $entsize > $res_size - $offset and $! = EFAULT, return undef;  # error while unpacking
+            push @r, bless [$name, $inode, $type, $next], Linux::Syscalls::bless::dirent::
+                unless $options & GDE_SKIP_WHITEOUT && $type == DT_WHT
+                    || $options & GDE_SKIP_DOTDOTDOT && ( $name eq '.' || $name eq '..' );
+            $offset += $entsize;
+        }
+        return @r if @r;
+        # Buffer empty after eliding unwanted entries, try again
+        $bufsize <<= 1;
     }
-    return @r;
+    $! = EINVAL;    # E2BIG would have been nicer, but POSIX says EINVAL
+    return undef;
 }
 
 _export_tag qw( DT_ dirent  =>  getdents
                                 DT_UNKNOWN
                                 DT_FIFO DT_CHR DT_DIR DT_BLK
                                 DT_REG DT_LNK DT_SOCK DT_WHT
+                                GDE_SKIP_DOTDOTDOT GDE_SKIP_WHITEOUT
               );
 
 BEGIN { $^C and eval q{
