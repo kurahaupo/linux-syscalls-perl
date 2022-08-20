@@ -1,0 +1,13 @@
+#!/bin/bash
+
+for s in u/show-*.c ; do
+  b=${s%.c}
+  t=${b##*-}
+  for cm in -m32 -mx32 -m64 ; do
+    printf '\n%-9s %s\n' "$t" "$cm"
+    o=$b$cm
+    cc "$cm" "$s" -o "$o" 2> >( head -n6 >&2 ) &&
+    "$o"
+    sleep 0.25
+  done
+done
