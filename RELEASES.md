@@ -1,3 +1,19 @@
+## v0.4.0
+
+Bugfixes
+* Prefer C<use POSIX qw(ENOENT);> rather than C<use Errno qw(ENOENT);> for
+  error symbols, to quell dup warnings when C<perl -c> triggers C<use POSIX;>
+  (which exports _all_ symbols)
+* Split C<\_resolve\_dir\_fd\_path> into C<\_resolve\_dir\_fd\_path> and
+  C<\_map\_fd>
+* Remove C<lchmod> (which can never work)
+
+Improvements
+* Remove broken C<statvfs> (because Linux has no C<\_\_NR\_statfvs> syscall and
+  replace it with C<statfs>
+* Add C<ST\_> export tag to import the C<f\_flag> constants
+* Document that some calls return blessed references
+
 ## v0.3.1
 
 Bugfixes
