@@ -9,8 +9,7 @@ use POSIX;
 #require "syscall.ph";
 BEGIN { require 'asm/unistd_32.ph' };
 
-{
-package FS::base;
+package Linux::Syscalls::test::fs::base {
 sub ok { not ! shift->kern }
 sub st {
     my $self = shift;
@@ -22,76 +21,51 @@ sub st {
     $res;
 }
 use constant size => 4096;
-#use constant size => undef;
 use constant kern => undef;
-
 }
 
+package Linux::Syscalls::test::fs::statfs    {}
+package Linux::Syscalls::test::fs::statfs64  {}
+package Linux::Syscalls::test::fs::statvfs   {}
+package Linux::Syscalls::test::fs::statvfs64 {}
+
+{
 my @S;
 
 BEGIN {
 
-@S = qw( fork
-            fstatfs fstatfs64
-            statfs  statfs64
+@S = qw(
+        fstatfs fstatfs64
+        statfs  statfs64
        );
 
 for my $s (@S) {
-    my $p = 'FS::'.$s;
+    my $p = 'Linux::Syscalls::test::fs::'.$s;
     my $k = '__NR_'.$s;
     my $kk = eval "exists &$k && $k()" // 0;
     #my $kk = eval "exists &$k" ? eval "$k()" : 0;
     my $s = $p =~ /64/ ? 128 : 64;
 
-#   warn sprintf "Checking %-32s %-32s %s\n", $p, $k, $kk;
-
     eval qq{
         package $p;
-        our \@ISA = FS::base::;
+        our \@ISA = Linux::Syscalls::test::fs::base::;
     };
     eval qq{
         package $p;
         use constant kern => $kk;
         use constant size => $s;
     } if $kk;
-#   eval qq{
-#       package $p;
-#   };
 }
 }
-
-#   package FS::fork;
-#   our @ISA = FS::base::;
-#   use constant kern => ::__NR_fork()    || warn( "Can't ::__NR_fork" ) && 0;
-#   use constant size => 64;
-
-#   package FS::statfs;
-#   our @ISA = FS::base::;
-#   use constant kern => ::__NR_statfs()    || warn( "Can't ::__NR_statfs" ) && 0;
-#   use constant size => 64;
-
-#   package FS::statfs64;
-#   our @ISA = FS::base::;
-#   use constant kern => ::__NR_statfs64()  || warn( "Can't ::__NR_statfs64" ) && 0;
-#   use constant size => 128;
-
-#   package FS::statvfs;
-#   our @ISA = FS::base::;
-#   use constant kern => ::__NR_statvfs()   || warn( "Can't ::__NR_statvfs" ) && 0;
-#   use constant size => 128;
-
-#   package FS::statvfs64;
-#   our @ISA = FS::base::;
-#   use constant kern => ::__NR_statvfs64() || warn( "Can't ::__NR_statvfs64" ) && 0;
-#   use constant size => 128;
 
 for my $t (@S) {
-    print " -> ", "FS::$t"->ok ? " CAN " : "can't", " $t\n";
+    printf " -> %5s %s\n", "Linux::Syscalls::test::fs::$t"->ok ? " CAN " : "can't", $t;
+}
 }
 
 for my $argv (@ARGV) {
     eval {
-        my $res = FS::statfs::->st($argv);
+        my $res = Linux::Syscalls::test::fs::statfs::->st($argv);
     #   $res =~ s/(?:\0\0\0\0)+$//;
         printf STDERR "statfs [%s]\n", unpack "H*", $res;
         my @R = unpack "L*", $res;
@@ -117,10 +91,10 @@ for my $argv (@ARGV) {
                 length($res);
         1;
     } or
-        warn "statfs $argv: $!\n" if FS::statfs->ok;
+        warn "statfs $argv: $!\n" if Linux::Syscalls::test::fs::statfs::->ok;
 
     eval {
-        my $res = FS::statfs64::->st($argv);
+        my $res = Linux::Syscalls::test::fs::statfs64::->st($argv);
         printf STDERR "statfs64 [%s]\n", unpack "H*", $res;
         $res =~ s/(?:\0\0\0\0)+$//;
         my ($type, @r) = unpack "L*", $res;
@@ -128,10 +102,10 @@ for my $argv (@ARGV) {
         1;
     } or
         warn "statfs64 $argv: $!\n"
-        if FS::statfs64->ok;
+        if Linux::Syscalls::test::fs::statfs64::->ok;
 
     eval {
-        my $res = FS::statvfs::->st($argv);
+        my $res = Linux::Syscalls::test::fs::statvfs::->st($argv);
         printf STDERR "statvfs [%s]\n", unpack "H*", $res;
         $res =~ s/(?:\0\0\0\0)+$//;
         my ($type, @r) = unpack "L*", $res;
@@ -139,10 +113,10 @@ for my $argv (@ARGV) {
         1;
     } or
         warn "statvfs $argv: $!\n"
-        if FS::statvfs->ok;
+        if Linux::Syscalls::test::fs::statvfs::->ok;
 
     eval {
-        my $res = FS::statvfs64::->st($argv);
+        my $res = Linux::Syscalls::test::fs::statvfs64::->st($argv);
         printf STDERR "statvfs64 [%s]\n", unpack "H*", $res;
         $res =~ s/(?:\0\0\0\0)+$//;
         my ($type, @r) = unpack "L*", $res;
@@ -150,7 +124,7 @@ for my $argv (@ARGV) {
         1;
     } or
         warn "statvfs64 $argv: $!\n"
-        if FS::statvfs64->ok;
+        if Linux::Syscalls::test::fs::statvfs64::->ok;
 }
 
 1;
