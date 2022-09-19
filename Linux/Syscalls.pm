@@ -39,6 +39,18 @@
 #   * the path argument(s) to the *at family may be given as C<undef> to mean
 #     "apply the AT_EMPTY_PATH flag, and pass an empty path";
 #
+# In some cases one or more blessed objects may be returned:
+#   * fiemap (fiemap_extent)
+#   * getdents (dirent)
+#   * stat, lstat
+#   * statfs
+# These returned objects have methods to choose the fields, but named without
+# any invariant prefix so that (for example) stat returns an object with an
+# "ino" method rather than a "st_ino" method.
+#
+# To make stat and lstat usable as a drop-in replacement for the built-in stat
+# and lstat, they return the same list as provided by those functions when
+# wantarray is true, and only return a blessed object when wantarray is false.
 
 use 5.010;
 use utf8;       # allow $µs symbol
@@ -46,7 +58,7 @@ use strict;
 use warnings;
 use feature 'state';
 
-package Linux::Syscalls v0.3.1;
+package Linux::Syscalls v0.4.0;
 
 use base 'Exporter';
 
