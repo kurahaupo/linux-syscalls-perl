@@ -600,9 +600,204 @@ sub adjtimex($;$$$$$$$$$$$$$$$$$$$) {
 # Report details of the filesystem at a particular path
 #
 
-_export_ok 'statvfs';
+#
+#   The statvfs POSIX call returns a field called f_flag that is a bit-mask
+#   indicating the mount options for the file system.
+#
+#   Newer statfs syscalls return f_flags with this information, but it was not
+#   originally present. We treat these as synonyms for the same field, and set
+#   it to undef if it's not provided.
+#
+#   f_flags replaced one of the zero-filled padding fields, with its presence
+#   is indicated by the ST_VALID bit, which we suppress in the returned field.
+#
+#   (Most of these constants are defined in <bits/statvfs.h>; some are from
+#   kernel sources.)
+#
+#   It contains zero or more of the following bits:
+#
+
+use constant {
+    ST_RDONLY       => 0x000001,    #* Mounted read-only.
+    ST_NOSUID       => 0x000002,    #* Set-uid & set-gid bits are ignored by execve.
+    ST_NODEV        => 0x000004,    #* Disallow access to device special files.
+    ST_NOEXEC       => 0x000008,    #* Disallow program execution.
+    ST_SYNCHRONOUS  => 0x000010,    #* Writes are synchronized immediately, as if O_SYNC always included when calling open(); see open(2) and fcntl(2)
+    ST_VALID        => 0x000020,    # Kernel statfs has provided all the statvfs flags; hidden by libc
+    ST_MANDLOCK     => 0x000040,    #* Enable mandatory locking (see fcntl(2)).
+    ST_WRITE        => 0x000080,    # Explicit 'mount -w' (opposite of 'mount -r'; not implemented in Linux)
+    ST_APPEND       => 0x000100,    # Honour append-only file attribute
+    ST_IMMUTABLE    => 0x000200,    # Honour immutable file attribute
+    ST_NOATIME      => 0x000400,    #* Do not update access times; see mount(2).
+    ST_NODIRATIME   => 0x000800,    #* Do not update directory access times; see mount(2).
+    ST_RELATIME     => 0x001000,    #* Update atime relative to mtime/ctime; see mount(2).
+    #                  0x002000
+    #                  0x004000
+    #                  0x008000
+    #                  0x010000
+    ST_UNBINDABLE   => 0x020000,    # Currently unbindable
+    ST_PRIVATE      => 0x040000,    # Currently private
+    #                  0x080000
+    ST_SHARED       => 0x100000,    # Currently shared
+};
+
+package Linux::Syscalls::bless::statfs {
+    use constant {
+        ST_VALID => Linux::Syscalls::ST_VALID
+    };
+
+    our %magic = (
+
+        QNX4         =>     0x002f, # (_super)
+        DevFS        =>     0x1373, # (_super)
+        Ext          =>     0x137d, # (_super)
+        MINIX1       =>     0x137f, # (_super) orig. minix, 14 char names
+        MINIX12      =>     0x138f, # (_super2) minix, 30 char names
+        DEVPTS       =>     0x1cd1, # (_super)
+        MINIX2       =>     0x2468, # (_super) minix V2, 14 char names
+        MINIX22      =>     0x2478, # (_super2) minix V2, 30 char names
+        NILFS        =>     0x3434, # (_super)
+        HFS          =>     0x4244, # (_super)
+        MSDOS        =>     0x4d44, # (_super)
+        MINIX3       =>     0x4d5a, # (_super) minix V3, 60 char names
+        SMB          =>     0x517b, # (_super)
+        NCP          =>     0x564c, # (_super)
+        NFS          =>     0x6969, # (_super)
+        ROMFS        =>     0x7275,
+        JFFS2        =>     0x72b6, # (_super)
+        ISOFS        =>     0x9660, # (_super)
+        PROC         =>     0x9fa0, # (_super)
+        OPENPROM     =>     0x9fa1, # (_super)
+        USBDEVICE    =>     0x9fa2, # (_super)
+        ADFS         =>     0xadf5, # (_super)
+        AFFS         =>     0xadff, # (_super)
+        EXT2_OLD     =>     0xef51, # (_super)
+        EXT2         =>     0xef53, # (_super)
+        EXT3         =>     0xef53, # (_super)
+        EXT4         =>     0xef53, # (_super)
+        UFS          => 0x00011954,
+        CGROUP       => 0x0027e0eb, # (_super)
+        EFS          => 0x00414a53, # (_super)
+        HOSTFS       => 0x00c0ffee, # (_super) "coffee"
+        TMPFS        => 0x01021994,
+        V9FS         => 0x01021997,
+        XIAFS        => 0x012fd16d, # (_super)
+        XENIX        => 0x012ff7b4, # (_super)
+        SYSV4        => 0x012ff7b5, # (_super)
+        SYSV2        => 0x012ff7b6, # (_super)
+        COH          => 0x012ff7b7, # (_super)
+        FUTEXFS      => 0x0bad1dea, # (_super)  "0 bad idea"
+        UDF          => 0x15013346, # (_super)
+        MQUEUE       => 0x19800202,
+        BFS          => 0x1badface, #           "1 bad face"
+        CRAMFS       => 0x28cd3d45,
+        JFS          => 0x3153464a, # (_super)
+        BEFS         => 0x42465331, # (_super)
+        BINFMTFS     => 0x42494e4d,
+        SMACK        => 0x43415d53,
+        PIPEFS       => 0x50495045,
+        REISERFS     => 0x52654973, # (_super)
+        NTFS_SB      => 0x5346544e,
+        SOCKFS       => 0x534f434b,
+        XFS          => 0x58465342, # (_super)
+        PSTOREFS     => 0x6165676c,
+        BDEVFS       => 0x62646576,
+        SYSFS        => 0x62656572,
+        DEBUGFS      => 0x64626720,
+        FUSE         => 0x65735546, # (_super)
+        QNX6         => 0x68191122, # (_super)
+        SQUASHFS     => 0x73717368,
+        CODA         => 0x73757245, # (_super)
+        OCFS2        => 0x7461636f, # (_super)
+        RAMFS        => 0x858458f6,
+        BTRFS        => 0x9123683e, # (_super)
+        HUGETLBFS    => 0x958458f6,
+        VXFS         => 0xa501fcf5, # (_super)
+        XENFS        => 0xabba1974, # (_super)
+        EFIVARFS     => 0xde5e81e4,
+        SELINUX      => 0xf97cff8c,
+        HPFS         => 0xf995e849, # (_super)
+        CIFS_NUMBER  => 0xff534d42,
+
+    );
+
+    our %names;
+        @names{ values %magic } = keys %magic;
+        $names{$magic{EXT4}} = 'EXT2~4';    # 3 mapped together; depends on feature set instead
+
+    sub type($)    { return $_[0]->[0] }
+    sub type_name($) { my $t = $_[0]->[0]; return $names{$t} // "Type#".$t }
+    sub bsize($)   { return $_[0]->[1] }
+    sub blocks($)  { return $_[0]->[2] }
+    sub bfree($)   { return $_[0]->[3] }
+    sub bavail($)  { return $_[0]->[4] }
+    sub files($)   { return $_[0]->[5] }
+    sub ffree($)   { return $_[0]->[6] }
+    sub fsid($)    { return $_[0]->[7] }
+    sub namelen($) { return $_[0]->[8] }    # statvfs calls this 'f_namemax'
+    sub frsize($)  { return $_[0]->[9] }
+    sub flags($)   { my $f = $_[0]->[10] ^ ST_VALID; return $f & ST_VALID ? undef : $f }   # statvfs calls this 'f_flag'
+    sub spares($)  { my $r = $_[0]; return @$r[11..$#$r] }
+
+    BEGIN {
+        # Aliases for statvfs
+        *favail     = \&ffree;      # Linux doesn't have "reserved inodes"
+        *flag       = \&flags;
+        *namemax    = \&namelen;
+    }
+
+    # Dissect flags
+    sub flag_RDONLY($)      { return $_[0]->[10] & Linux::Syscalls::ST_RDONLY      }
+    sub flag_NOSUID($)      { return $_[0]->[10] & Linux::Syscalls::ST_NOSUID      }
+    sub flag_NODEV($)       { return $_[0]->[10] & Linux::Syscalls::ST_NODEV       }
+    sub flag_NOEXEC($)      { return $_[0]->[10] & Linux::Syscalls::ST_NOEXEC      }
+    sub flag_SYNCHRONOUS($) { return $_[0]->[10] & Linux::Syscalls::ST_SYNCHRONOUS }
+    sub flag_MANDLOCK($)    { return $_[0]->[10] & Linux::Syscalls::ST_MANDLOCK    }
+#   sub flag_VALID($)       { return $_[0]->[10] & Linux::Syscalls::ST_VALID       }
+    sub flag_WRITE($)       { return $_[0]->[10] & Linux::Syscalls::ST_WRITE       }
+    sub flag_APPEND($)      { return $_[0]->[10] & Linux::Syscalls::ST_APPEND      }
+    sub flag_IMMUTABLE($)   { return $_[0]->[10] & Linux::Syscalls::ST_IMMUTABLE   }
+    sub flag_NOATIME($)     { return $_[0]->[10] & Linux::Syscalls::ST_NOATIME     }
+    sub flag_NODIRATIME($)  { return $_[0]->[10] & Linux::Syscalls::ST_NODIRATIME  }
+    sub flag_RELATIME($)    { return $_[0]->[10] & Linux::Syscalls::ST_RELATIME    }
+    sub flag_UNBINDABLE($)  { return $_[0]->[10] & Linux::Syscalls::ST_UNBINDABLE  }
+    sub flag_PRIVATE($)     { return $_[0]->[10] & Linux::Syscalls::ST_PRIVATE     }
+    sub flag_SHARED($)      { return $_[0]->[10] & Linux::Syscalls::ST_SHARED      }
+}
+
+sub statfs($;$) {
+    my ($path, $opts) = @_;
+    my $obs = 120;
+    my $buf = "\xaa" x $obs;
+    state $syscall_id = _get_syscall_id('statfs');
+    0 == syscall $syscall_id, $path, $buf or return ();
+    my @R = unpack "qqQQQQQqqqqq*", $buf or return ();
+#   return @R if $opts & ST_RETURN_ARRAY && wantarray;
+    my $nbs = length $buf;
+    warn "buffer size changed from $obs to $nbs" if $obs != $nbs;
+    return bless \@R, Linux::Syscalls::bless::statfs::;
+        #  q   __fsword_t f_type;    /* Type of filesystem (see below) */
+        #  q   __fsword_t f_bsize;   /* Optimal transfer block size */
+        #  Q   fsblkcnt_t f_blocks;  /* Total data blocks in filesystem */
+        #  Q   fsblkcnt_t f_bfree;   /* Free blocks in filesystem */
+        #  Q   fsblkcnt_t f_bavail;  /* Free blocks available to unprivileged user */
+        #  Q   fsfilcnt_t f_files;   /* Total file nodes in filesystem */
+        #  Q   fsfilcnt_t f_ffree;   /* Free file nodes in filesystem */
+        #  q   fsid_t     f_fsid;    /* Filesystem ID (officially a struct with two 32-bit ints; treat as one 64-bit int) */
+        #  q   __fsword_t f_namelen; /* Maximum length of filenames */
+        #  q   __fsword_t f_frsize;  /* Fragment size (since Linux 2.6) */
+        #  q   __fsword_t f_flags;   /* Mount flags of filesystem (since Linux 2.6.36) */
+        #  q4  __fsword_t f_spare[4]; /* Padding bytes reserved for future use */
+}
 
 *statvfs = \&statfs;    # Linux implements statvfs as a library call on top of an extended statfs
+
+_export_ok qw{ statfs statvfs };
+_export_tag qw{
+    ST_  => ST_RDONLY ST_NOSUID ST_NODEV ST_NOEXEC ST_SYNCHRONOUS ST_MANDLOCK
+            ST_WRITE ST_APPEND ST_IMMUTABLE ST_NOATIME ST_NODIRATIME
+            ST_RELATIME ST_UNBINDABLE ST_PRIVATE ST_SHARED
+};
 
 #
 # lchown - chown but on a symlink.
