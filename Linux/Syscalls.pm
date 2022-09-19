@@ -602,24 +602,7 @@ sub adjtimex($;$$$$$$$$$$$$$$$$$$$) {
 
 _export_ok 'statvfs';
 
-sub statvfs($) {
-    my ($path) = @_;
-    my $buf = '\x00' x 80;
-    state $syscall_id = _get_syscall_id 'statvfs';
-    0 == syscall $syscall_id, $path, $buf or return ();
-    return unpack "L2Q6Lx![Q]L2", $buf;
-        #  L   unsigned long  f_bsize;    /* filesystem block size */
-        #  L   unsigned long  f_frsize;   /* fragment size */
-        #  Q   fsblkcnt_t     f_blocks;   /* size of fs in f_frsize units */
-        #  Q   fsblkcnt_t     f_bfree;    /* # free blocks */
-        #  Q   fsblkcnt_t     f_bavail;   /* # free blocks for unprivileged users */
-        #  Q   fsfilcnt_t     f_files;    /* # inodes */
-        #  Q   fsfilcnt_t     f_ffree;    /* # free inodes */
-        #  Q   fsfilcnt_t     f_favail;   /* # free inodes for unprivileged users */
-        #  L   unsigned long  f_fsid;     /* filesystem ID */
-        #  L   unsigned long  f_flag;     /* mount flags */
-        #  L   unsigned long  f_namemax;  /* maximum filename length */
-}
+*statvfs = \&statfs;    # Linux implements statvfs as a library call on top of an extended statfs
 
 #
 # lchown - chown but on a symlink.

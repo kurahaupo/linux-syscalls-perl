@@ -34,7 +34,7 @@ BEGIN {
 @S = qw( fork
             fstatfs fstatfs64
             statfs  statfs64
-            statvfs statvfs64 );
+       );
 
 for my $s (@S) {
     my $p = 'FS::'.$s;
