@@ -12,6 +12,12 @@ use Config;
 #
 # This file supports x86_64 in both 64-bit and 32-bit modes.
 #
+# Alternative names are available for some syscalls:
+#   fadvise                 ← fadvise64
+#   fstatat                 ← newfstatat
+#   getdents                ← getdents64
+#   prlimit                 ← prlimit64
+#
 
 my $x32 = ! $Config{use64bitall};
 
@@ -239,11 +245,11 @@ our %syscall_map = (
     epoll_ctl_old           => 214, # Only x86_64 - no x86_32 equivalent
     epoll_wait_old          => 215, # Only x86_64 - no x86_32 equivalent
     remap_file_pages        => 216,
-    getdents64              => 217,
+    getdents                => 217,     getdents64              => 217,
     set_tid_address         => 218,
     restart_syscall         => 219,
     semtimedop              => 220,
-    fadvise64               => 221,
+    fadvise                 => 221,     fadvise64               => 221,
     timer_create            => 222,  ## for x86_32 replaced by call #526
     timer_settime           => 223,
     timer_gettime           => 224,
@@ -284,7 +290,7 @@ our %syscall_map = (
     mknodat                 => 259,
     fchownat                => 260,
     futimesat               => 261,
-    newfstatat              => 262,
+    fstatat                 => 262,     newfstatat              => 262,
     unlinkat                => 263,
     renameat                => 264,
     linkat                  => 265,
@@ -324,7 +330,7 @@ our %syscall_map = (
     recvmmsg                => 299,  ## for x86_32 replaced by call #537
     fanotify_init           => 300,
     fanotify_mark           => 301,
-    prlimit64               => 302,
+    prlimit                 => 302,     prlimit64               => 302,
     name_to_handle_at       => 303,
     open_by_handle_at       => 304,
     clock_adjtime           => 305,

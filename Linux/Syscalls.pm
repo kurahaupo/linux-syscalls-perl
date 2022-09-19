@@ -1384,7 +1384,7 @@ sub getdents($;$$) {
     $bufsize ||= getdents_default_bufsize;
     $options //= ~0;
 
-    state $syscall_id = _get_syscall_id 'getdents64';
+    state $syscall_id = _get_syscall_id 'getdents';
     FETCH: for (;;) {
         $bufsize <= getdents_maximum_bufsize or $bufsize = getdents_maximum_bufsize;
         my $buffer = "\xee" x $bufsize;
