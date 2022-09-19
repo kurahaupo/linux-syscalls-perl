@@ -7,7 +7,80 @@ package Linux::Syscalls::ia32;
 
 #
 # This file supports i386, i586 & i686
+# (Note: i386 was the original Linux 0.01, and there are still remnants of that
+# legacy in this file. As a result, this file is a maze of dark twisty
+# passages; programmers who linger here are likely to be eaten by a grue.)
 #
+# %syscall_map reports the version of each syscall that most closely aligns
+# with the x86_64 version, mostly by adding or removing numeric suffices. In
+# most cases this means that they can share an "unpack" format string with
+# x86_64.
+#
+# This generally applies where new syscalls are provided to cope with
+#  → File sizes widened from 32 to 64 bits
+#  → UID & GID widened from 16 to 32 bits
+#  → Timestamp precision improved from seconds to nanoseconds
+# (but 32-bit platforms still use 16-bit PIDs, so there's no getpid32.)
+#
+# Examples:
+# → __NR_stat64   is given when asked for "stat" (or "stat64"), and
+#   __NR_stat     is given when asked for "stat32";
+# → __NR_getuid32 is given when asked for "getuid" (or "getuid"), and
+#   __NR_getuid   is given when asked for "getuid16".
+#
+# Full list of renamed syscalls, plus aliases:
+#
+# ╔══════════════════╤═══════════════════╤═══════════════════╗
+# ║ preferred name   │ std name for orig │ std name for new  ║
+# ║ for orig call    │ call == preferred │ call              ║
+# ║                  │ name for new call │                   ║
+# ╠══════════════════╪═══════════════════╪═══════════════════╣
+# ║ chown16          │ chown             │ chown32           ║
+# ║ fchown16         │ fchown            │ fchown32          ║
+# ║ lchown16         │ lchown            │ lchown32          ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ fcntl32          │ fcntl             │ fcntl64           ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ getdents32       │ getdents          │ getdents64        ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ getegid16        │ getegid           │ getegid32         ║
+# ║ geteuid16        │ geteuid           │ geteuid32         ║
+# ║ setfsgid16       │ setfsgid          │ setfsgid32        ║
+# ║ setfsuid16       │ setfsuid          │ setfsuid32        ║
+# ║ getgid16         │ getgid            │ getgid32          ║
+# ║ setgid16         │ setgid            │ setgid32          ║
+# ║ getgroups16      │ getgroups         │ getgroups32       ║
+# ║ setgroups16      │ setgroups         │ setgroups32       ║
+# ║ setregid16       │ setregid          │ setregid32        ║
+# ║ getresgid16      │ getresgid         │ getresgid32       ║
+# ║ setresgid16      │ setresgid         │ setresgid32       ║
+# ║ getresuid16      │ getresuid         │ getresuid32       ║
+# ║ setresuid16      │ setresuid         │ setresuid32       ║
+# ║ setreuid16       │ setreuid          │ setreuid32        ║
+# ║ getuid16         │ getuid            │ getuid32          ║
+# ║ setuid16         │ setuid            │ setuid32          ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ sendfile32       │ sendfile          │ sendfile64        ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ stat32           │ stat              │ stat64            ║
+# ║ fstat32          │ fstat             │ fstat64           ║
+# ║ lstat32          │ lstat             │ lstat64           ║
+# ║                  │ fstatat           │ fstatat64         ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ statfs32         │ statfs            │ statfs64          ║
+# ║ fstatfs32        │ fstatfs           │ fstatfs64         ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║ truncate32       │ truncate          │ truncate64        ║
+# ║ ftruncate32      │ ftruncate         │ ftruncate64       ║
+# ╟──────────────────┼───────────────────┼───────────────────╢
+# ║                  │ fadvise           │ fadvise64         ║
+# ║                  │ getdents          │ getdents64        ║
+# ║                  │ prlimit           │ prlimit64         ║
+# ╚══════════════════╧═══════════════════╧═══════════════════╝
+#
+# TODO: Figure out what to do about 64-bit file sizes on 32-bit platforms for:
+#           * mmap2 vs mmap
+#           * lseek64 vs _llseek vs lseek
 
 use Exporter 'import';
 
@@ -29,19 +102,19 @@ our %syscall_map = (
     time                    =>  13,
     mknod                   =>  14,
     chmod                   =>  15,
-    lchown                  =>  16,
+    lchown16                =>  16,     # was lchown
     break                   =>  17,
-    oldstat                 =>  18,
+    oldstat                 =>  18,     # really-old stat; __old_kernel_stat
     lseek                   =>  19,
     getpid                  =>  20,
     mount                   =>  21,
     umount                  =>  22,
-    setuid                  =>  23,
-    getuid                  =>  24,
+    setuid16                =>  23,     # was setuid
+    getuid16                =>  24,     # was getuid
     stime                   =>  25,
     ptrace                  =>  26,
     alarm                   =>  27,
-    oldfstat                =>  28,
+    oldfstat                =>  28,     # really-old fstat; __old_kernel_stat
     pause                   =>  29,
     utime                   =>  30,
     stty                    =>  31,
@@ -59,16 +132,16 @@ our %syscall_map = (
     times                   =>  43,
     prof                    =>  44,
     brk                     =>  45,
-    setgid                  =>  46,
-    getgid                  =>  47,
+    setgid16                =>  46,     # was setgid
+    getgid16                =>  47,     # was getgid
     signal                  =>  48,
-    geteuid                 =>  49,
-    getegid                 =>  50,
+    geteuid16               =>  49,     # was geteuid
+    getegid16               =>  50,     # was getegid
     acct                    =>  51,
     umount2                 =>  52,
     lock                    =>  53,
     ioctl                   =>  54,
-    fcntl                   =>  55,
+    fcntl32                 =>  55,     # was fcntl
     mpx                     =>  56,
     setpgid                 =>  57,
     ulimit                  =>  58,
@@ -83,8 +156,8 @@ our %syscall_map = (
     sigaction               =>  67,
     sgetmask                =>  68,
     ssetmask                =>  69,
-    setreuid                =>  70,
-    setregid                =>  71,
+    setreuid16              =>  70,     # was setreuid
+    setregid16              =>  71,     # was setregid
     sigsuspend              =>  72,
     sigpending              =>  73,
     sethostname             =>  74,
@@ -93,11 +166,11 @@ our %syscall_map = (
     getrusage               =>  77,
     gettimeofday            =>  78,
     settimeofday            =>  79,
-    getgroups               =>  80,
-    setgroups               =>  81,
+    getgroups16             =>  80,     # was getgroups
+    setgroups16             =>  81,     # was setgroups
     select                  =>  82,
     symlink                 =>  83,
-    oldlstat                =>  84,
+    oldlstat                =>  84,     # really-old lstat; __old_kernel_stat
     readlink                =>  85,
     uselib                  =>  86,
     swapon                  =>  87,
@@ -105,23 +178,23 @@ our %syscall_map = (
     readdir                 =>  89,
     mmap                    =>  90,
     munmap                  =>  91,
-    truncate                =>  92,
-    ftruncate               =>  93,
+    truncate32              =>  92,     # was truncate
+    ftruncate32             =>  93,     # was ftruncate
     fchmod                  =>  94,
-    fchown                  =>  95,
+    fchown16                =>  95,     # was fchown
     getpriority             =>  96,
     setpriority             =>  97,
     profil                  =>  98,
-    statfs                  =>  99,
-    fstatfs                 => 100,
+    statfs32                =>  99,     # was statfs
+    fstatfs32               => 100,     # was fstatfs
     ioperm                  => 101,
     socketcall              => 102,
     syslog                  => 103,
     setitimer               => 104,
     getitimer               => 105,
-    stat                    => 106,
-    lstat                   => 107,
-    fstat                   => 108,
+    stat32                  => 106,     # was stat
+    lstat32                 => 107,     # was lstat
+    fstat32                 => 108,     # was fstat
     olduname                => 109,
     iopl                    => 110,
     vhangup                 => 111,
@@ -151,10 +224,10 @@ our %syscall_map = (
     sysfs                   => 135,
     personality             => 136,
     afs_syscall             => 137,
-    setfsuid                => 138,
-    setfsgid                => 139,
+    setfsuid16              => 138,     # was setfsuid
+    setfsgid16              => 139,     # was setfsgid
     _llseek                 => 140,
-    getdents                => 141,
+    getdents32              => 141,     # was getdents
     _newselect              => 142,
     flock                   => 143,
     msync                   => 144,
@@ -177,14 +250,14 @@ our %syscall_map = (
     sched_rr_get_interval   => 161,
     nanosleep               => 162,
     mremap                  => 163,
-    setresuid               => 164,
-    getresuid               => 165,
+    setresuid16             => 164,     # was setresuid
+    getresuid16             => 165,     # was getresuid
     vm86                    => 166,
     query_module            => 167,
     poll                    => 168,
     nfsservctl              => 169,
-    setresgid               => 170,
-    getresgid               => 171,
+    setresgid16             => 170,     # was setresgid
+    getresgid16             => 171,     # was getresgid
     prctl                   => 172,
     rt_sigreturn            => 173,
     rt_sigaction            => 174,
@@ -195,48 +268,48 @@ our %syscall_map = (
     rt_sigsuspend           => 179,
     pread64                 => 180,
     pwrite64                => 181,
-    chown                   => 182,
+    chown16                 => 182,     # was chown
     getcwd                  => 183,
     capget                  => 184,
     capset                  => 185,
     sigaltstack             => 186,
-    sendfile                => 187,
+    sendfile32              => 187,     # was sendfile
     getpmsg                 => 188,
     putpmsg                 => 189,
     vfork                   => 190,
     ugetrlimit              => 191,
     mmap2                   => 192,
-    truncate64              => 193,
-    ftruncate64             => 194,
-    stat64                  => 195,
-    lstat64                 => 196,
-    fstat64                 => 197,
-    lchown32                => 198,
-    getuid32                => 199,
-    getgid32                => 200,
-    geteuid32               => 201,
-    getegid32               => 202,
-    setreuid32              => 203,
-    setregid32              => 204,
-    getgroups32             => 205,
-    setgroups32             => 206,
-    fchown32                => 207,
-    setresuid32             => 208,
-    getresuid32             => 209,
-    setresgid32             => 210,
-    getresgid32             => 211,
-    chown32                 => 212,
-    setuid32                => 213,
-    setgid32                => 214,
-    setfsuid32              => 215,
-    setfsgid32              => 216,
+    truncate                => 193,     truncate64              => 193,
+    ftruncate               => 194,     ftruncate64             => 194,
+    stat                    => 195,     stat64                  => 195,
+    lstat                   => 196,     lstat64                 => 196,
+    fstat                   => 197,     fstat64                 => 197,
+    lchown                  => 198,     lchown32                => 198,
+    getuid                  => 199,     getuid32                => 199,
+    getgid                  => 200,     getgid32                => 200,
+    geteuid                 => 201,     geteuid32               => 201,
+    getegid                 => 202,     getegid32               => 202,
+    setreuid                => 203,     setreuid32              => 203,
+    setregid                => 204,     setregid32              => 204,
+    getgroups               => 205,     getgroups32             => 205,
+    setgroups               => 206,     setgroups32             => 206,
+    fchown                  => 207,     fchown32                => 207,
+    setresuid               => 208,     setresuid32             => 208,
+    getresuid               => 209,     getresuid32             => 209,
+    setresgid               => 210,     setresgid32             => 210,
+    getresgid               => 211,     getresgid32             => 211,
+    chown                   => 212,     chown32                 => 212,
+    setuid                  => 213,     setuid32                => 213,
+    setgid                  => 214,     setgid32                => 214,
+    setfsuid                => 215,     setfsuid32              => 215,
+    setfsgid                => 216,     setfsgid32              => 216,
     pivot_root              => 217,
     mincore                 => 218,
     madvise                 => 219,
-    getdents64              => 220,
-    fcntl64                 => 221,
-    #
-    #
+    getdents                => 220,     getdents64              => 220,
+    fcntl                   => 221,     fcntl64                 => 221,
+    # unused => 222
+    # unused => 223
     gettid                  => 224,
     readahead               => 225,
     setxattr                => 226,
@@ -252,7 +325,7 @@ our %syscall_map = (
     lremovexattr            => 236,
     fremovexattr            => 237,
     tkill                   => 238,
-    sendfile64              => 239,
+    sendfile                => 239,     sendfile64              => 239,
     futex                   => 240,
     sched_setaffinity       => 241,
     sched_getaffinity       => 242,
@@ -263,8 +336,8 @@ our %syscall_map = (
     io_getevents            => 247,
     io_submit               => 248,
     io_cancel               => 249,
-    fadvise64               => 250,
-    #
+    fadvise                 => 250,     fadvise64               => 250,
+    # unused => 251
     exit_group              => 252,
     lookup_dcookie          => 253,
     epoll_create            => 254,
@@ -281,8 +354,8 @@ our %syscall_map = (
     clock_gettime           => 265,
     clock_getres            => 266,
     clock_nanosleep         => 267,
-    statfs64                => 268,
-    fstatfs64               => 269,
+    statfs                  => 268,     statfs64                => 268,
+    fstatfs                 => 269,     fstatfs64               => 269,
     tgkill                  => 270,
     utimes                  => 271,
     fadvise64_64            => 272,
@@ -298,7 +371,7 @@ our %syscall_map = (
     mq_getsetattr           => 282,
     kexec_load              => 283,
     waitid                  => 284,
-    #
+    # unused => 285
     add_key                 => 286,
     request_key             => 287,
     keyctl                  => 288,
@@ -313,7 +386,7 @@ our %syscall_map = (
     mknodat                 => 297,
     fchownat                => 298,
     futimesat               => 299,
-    fstatat64               => 300,
+    fstatat                 => 300,     fstatat64               => 300,
     unlinkat                => 301,
     renameat                => 302,
     linkat                  => 303,
@@ -353,7 +426,7 @@ our %syscall_map = (
     recvmmsg                => 337,
     fanotify_init           => 338,
     fanotify_mark           => 339,
-    prlimit64               => 340,
+    prlimit                 => 340,     prlimit64               => 340,
     name_to_handle_at       => 341,
     open_by_handle_at       => 342,
     clock_adjtime           => 343,
