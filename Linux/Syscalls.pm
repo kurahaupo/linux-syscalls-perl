@@ -893,16 +893,6 @@ sub lchmod($$) {
     return fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
 }
 
-#sub lchmod($$) {
-#    my ($path, $perm) = @_;
-#    my $dir_fd = 0|AT_FDCWD;
-#    _normalize_path $path;
-#    $perm &= CHMOD_MASK; # force int, and range-limit
-#    my $flags = AT_SYMLINK_NOFOLLOW;
-#    state $syscall_id = _get_syscall_id 'fchmodat';
-#    return 0 == syscall $syscall_id, $dir_fd, $path, $perm, $flags;
-#}
-
 ################################################################################
 
 #
