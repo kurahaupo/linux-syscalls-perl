@@ -1,3 +1,14 @@
+## v0.3.1
+
+Bugfixes
+* Remove C<f_> export tag
+* Document that the order of parameters for C<utimens> necessarily differs from
+  the C<utime> built-in
+
+Improvements
+* For the C<f\*at> functions, provide an alias without the C<f> prefix, to give
+  consistent naming
+
 ## v0.3.0
 
 Bugfixes
