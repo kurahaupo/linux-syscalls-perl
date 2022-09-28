@@ -425,13 +425,7 @@ sub _map_fd(\$;$) {
     # It's not a valid filedescriptor
     $$dir_fd = undef;
     $! = EBADF;
-    return ();
-}
-
-sub _resolve_dir_fd_path(\$;\$\$$) {
-    my ($dir_fd) = @_;
-    &_map_fd(shift, 1) or return;
-    goto &_normalize_path if @_;
+    return;
 }
 
 sub _normalize_path(\$;\$\$) {
@@ -444,6 +438,13 @@ sub _normalize_path(\$;\$\$) {
         $$path = '';
     }
     return 1; # OK
+}
+
+sub _resolve_dir_fd_path(\$;\$\$$) {
+    my ($dir_fd) = @_;
+    &_map_fd(shift, 1) or return;
+    goto &_normalize_path if @_;
+    return 1;
 }
 
 ################################################################################
@@ -782,8 +783,8 @@ sub statfs($;$) {
     my $obs = 120;
     my $buf = "\xaa" x $obs;
     state $syscall_id = _get_syscall_id('statfs');
-    0 == syscall $syscall_id, $path, $buf or return ();
-    my @R = unpack "qqQQQQQqqqqq*", $buf or return ();
+    0 == syscall $syscall_id, $path, $buf or return;
+    my @R = unpack "qqQQQQQqqqqq*", $buf or return;
 #   return @R if $opts & ST_RETURN_ARRAY && wantarray;
     my $nbs = length $buf;
     warn "buffer size changed from $obs to $nbs" if $obs != $nbs;
@@ -902,7 +903,7 @@ sub fchmodat($$$;$) {
 _export_tag qw{ l_ => lchmod };
 sub lchmod($$) {
     my ($path, $perm) = @_;
-    return fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
+    return 0 == fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
@@ -1196,6 +1197,9 @@ sub mknodat($$$$) {
 # open but relative to an open dir_fd
 #  pass undef for mode to use 0777
 #
+# openat returns the fd (which may be 0), or undef on failure.
+# If you want -1, just use C< openat(...) // -1 >;
+#
 
 _export_tag qw{ _at => openat };
 sub openat($$;$$) {
@@ -1205,7 +1209,9 @@ sub openat($$;$$) {
     _resolve_dir_fd_path $dir_fd, $path or return;
     $mode //= 0666;
     state $syscall_id = _get_syscall_id 'openat';
-    return syscall $syscall_id, $dir_fd, $path, $flags, $mode;
+    my $r =  syscall $syscall_id, $dir_fd, $path, $flags, $mode;
+    return if $r < 0;
+    return $r;
 }
 
 ################################################################################
@@ -1395,7 +1401,7 @@ sub utimensat($$$$;$$) {
 _export_tag qw{ _at => futimesat utimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
-    return utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
+    return 0 == utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1406,7 +1412,7 @@ _export_ok qw{ futimens };
 sub futimens($$$) {
     my ($fd, $atime, $mtime) = @_;
     _map_fd($fd);
-    return utimensat $fd, undef, $atime, $mtime;
+    return 0 == utimensat $fd, undef, $atime, $mtime;
 }
 
 #
@@ -1422,7 +1428,7 @@ _export_ok qw{ futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
     _map_fd($fd);
-    return utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
+    return 0 == utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
 }
 
 #
@@ -1435,7 +1441,7 @@ sub futimes($$$) {
 _export_ok qw{ utimes };
 sub utimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
+    return 0 == utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1448,7 +1454,7 @@ sub utimes($$$) {
 _export_ok qw{ utimens };
 sub utimens($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, 0;
+    return 0 == utimensat undef, $path, $atime, $mtime, 0;
 }
 
 #
@@ -1461,7 +1467,7 @@ sub utimens($$$) {
 _export_tag qw{ l_ => lutime };
 sub lutime($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
+    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
 }
 
 #
@@ -1474,7 +1480,7 @@ sub lutime($$$) {
 _export_tag qw{ l_ => lutimes };
 sub lutimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
+    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
 }
 
 #
@@ -1487,7 +1493,7 @@ sub lutimes($$$) {
 _export_tag qw{ l_ => lutimens };
 sub lutimens($$$) {
     my ($path, $atime, $mtime) = @_;
-    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
+    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
