@@ -1214,6 +1214,11 @@ sub openat($$;$$) {
     return $r;
 }
 
+# Undecided whether I should expose this publicly.
+#sub openatn($$;$$) {
+#    return &openat // -1;    # pass through unmodified args
+#}
+
 ################################################################################
 
 #
