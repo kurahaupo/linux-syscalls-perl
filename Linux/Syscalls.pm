@@ -1210,6 +1210,9 @@ sub openat($$;$$) {
 
 ################################################################################
 
+#
+# Returns a Perl string holding the result of reading a symbolic link.
+#
 
 _export_tag qw{ _at => readlinkat };
 sub readlinkat($;$) {
@@ -1230,15 +1233,43 @@ sub readlinkat($;$) {
 # Pass undef for either dir_fd to use CWD for relative paths.
 # Omit flags (or pass undef) to avoid following symlinks.
 #
+# This being Perl, we don't actually need separate function names when
+# additional parameters are added. We just always call renameat2, with
+# 0 when the flags are not supplied.
+#
+
+# from /usr/include/linux/fs.h
+use constant {
+    RENAME_NOREPLACE => 1 << 0,        # Don't overwrite target
+    RENAME_EXCHANGE  => 1 << 1,        # Exchange source and dest
+    RENAME_WHITEOUT  => 1 << 2,        # Whiteout source
+};
+
+_export_tag qw{
+    RENAME_ rename rename2 =>
+    RENAME_NOREPLACE RENAME_EXCHANGE RENAME_WHITEOUT renameat
+};
 
 _export_tag qw{ _at => renameat };
-sub renameat($$$$) {
-    my ($olddir_fd, $oldpath, $newdir_fd, $newpath) = @_;
+sub renameat($$$$;$) {
+    my ($olddir_fd, $oldpath, $newdir_fd, $newpath, $flags) = @_;
     _resolve_dir_fd_path $olddir_fd, $oldpath or return;
     _resolve_dir_fd_path $newdir_fd, $newpath or return;
-    state $syscall_id = _get_syscall_id 'renameat';
-    return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath;
+    state $syscall_id2 = _get_syscall_id 'renameat2';
+    $flags //= 0;
+    my $r = 0 == syscall $syscall_id2, $olddir_fd, $oldpath, $newdir_fd, $newpath, $flags;
+  #
+  # Uncomment this code if you ever run on a kernel that supports
+  # renameat but not renameat2...
+  #
+  # if ( !$r && $! == ENOSYS && !$flags ) {
+  #     state $syscall_id = _get_syscall_id 'renameat';
+  #     return 0 == syscall $syscall_id, $olddir_fd, $oldpath, $newdir_fd, $newpath;
+  # }
+    return $r;
 }
+*renameat2 = \&renameat;
+_export_ok qw{ renameat2 };
 
 ################################################################################
 
