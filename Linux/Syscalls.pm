@@ -58,7 +58,7 @@ use strict;
 use warnings;
 use feature 'state';
 
-package Linux::Syscalls v0.4.0;
+package Linux::Syscalls v0.5.0;
 
 use base 'Exporter';
 
