@@ -295,7 +295,7 @@ my %o_const = (
     constant->import(\%o_const);
 }
 
-_export_tag qw{ o_ =>
+_export_tag qw{ O_ =>
     O_RDONLY O_WRONLY O_RDWR O_ACCMODE O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND
     O_NONBLOCK O_NDELAY O_DSYNC O_ASYNC O_DIRECT O_LARGEFILE O_DIRECTORY
     O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_RSYNC O_PATH O_TMPFILE
@@ -1194,11 +1194,18 @@ sub mknodat($$$$) {
 ################################################################################
 
 #
-# open but relative to an open dir_fd
-#  pass undef for mode to use 0777
+# openat is like open, but non-absolute paths are taken as relative to a
+# specified dir_fd;
 #
-# openat returns the fd (which may be 0), or undef on failure.
-# If you want -1, just use C< openat(...) // -1 >;
+# * flags defaults to O_PATH if omitted or undef
+# * mode defaults to 0666 if omitted or undef
+#
+# openat returns truish on success (the new fd number, or "0 but true" if that
+# would be 0), or falsish (an empty list) on failure.
+#
+# Use the O_PATH flag to allow opening symlinks and unreadable directories,
+# with the intention of supplying the returned filedescriptor as the dir_fd to
+# a subsequent call to fstatat or openat.
 #
 
 _export_tag qw{ _at => openat };
@@ -1208,16 +1215,35 @@ sub openat($$;$$) {
     # flags, so don't use it here.
     _resolve_dir_fd_path $dir_fd, $path or return;
     $mode //= 0666;
+    $flags //= O_PATH;
     state $syscall_id = _get_syscall_id 'openat';
-    my $r =  syscall $syscall_id, $dir_fd, $path, $flags, $mode;
+    my $r = syscall $syscall_id, $dir_fd, $path, $flags, $mode;
     return if $r < 0;
-    return $r;
+    return $r || '0 but true';
 }
 
 # Undecided whether I should expose this publicly.
 #sub openatn($$;$$) {
 #    return &openat // -1;    # pass through unmodified args
 #}
+
+################################################################################
+
+#
+# close a filedescriptor previously returned by openat.
+#
+# (I wish this could simply be called "close", but obviously that would
+# conflict with CORE::close)
+#
+
+_export_ok qw{ closefd };
+sub closefd($) {
+    my ($fd) = @_;
+    state $syscall_id = _get_syscall_id 'close';
+    my $r = syscall $syscall_id, $fd;
+    return if $r < 0;
+    return 1;
+}
 
 ################################################################################
 
