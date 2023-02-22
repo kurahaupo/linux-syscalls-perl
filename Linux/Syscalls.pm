@@ -381,12 +381,13 @@ sub _timespec_to_seconds($$) {
 # Standardized argument handling:
 #
 # * when dir_fd is:
+#     - an integer, use it directly
 #     - undef or empty or ".", use AT_FDCWD; or
 #     - a blessed reference with a C<dirfd> or C<fileno> method, use that to
 #       get its underlying filedescriptor number
 #     - a glob or filehandle, use the C<fileno> function to get its underlying
-#       filedescriptor number; or
-# * make sure the result is a number
+#       filedescriptor number
+#   otherwise fail
 #
 # * when flags is undef, use the given default, or AT_SYMLINK_NOFOLLOW if no
 #   default is given.
@@ -406,7 +407,8 @@ sub _map_fd(\$;$) {
         eval { $$dir_fd = $D->fileno; 1 } and return 1;
         # Fall through and use fileno builtin
     } else {
-        # Keep the input value unchanged if it's an integer
+        # Keep the input value unchanged if it's an integer, including
+        # "0 but true"
         looks_like_number $D and return 1;
         if ( $allow_at_cwd and ! defined $D || $D eq '' || $D eq '.' ) {
             # undef, '' and '.' refer to current directory
