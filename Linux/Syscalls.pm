@@ -2286,4 +2286,5 @@ sub waitid_($$$;$$) {
 
 _export_finish;
 
+# vim: set ai et sts=4 sw=4 ts=9999 nowrap :
 1;
