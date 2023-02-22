@@ -382,11 +382,27 @@ package Time::Nanosecond::base {
         return $class->from_nanoseconds($µs * 1E3);
     }
 
-    # Fallback output conversions; you MUST override at least one.
+    # Fallback output conversions.
+    #   * all of these SHOULD be overridden (for performance);
+    #   * at least one of _nsec or _fsec MUST be overridden.
 
-    sub _fsec($) { no integer; return $_[0]->_nsec / 1E9 }
-    sub _µsec($) {             return $_[0]->_nsec / 1E3 }
+    sub _fsec($) { no integer; return        $_[0]->_nsec / 1E9         }
     sub _nsec($) { no integer; return floor( $_[0]->_fsec * 1E9 + 0.5 ) }
+    sub _µsec($) {             return        $_[0]->_nsec / 1E3         }  # microseconds
+
+    # Unicode version 6 deprecated classic micro µ (U+00b5) in favour of Greek mu
+    # μ (U+03bc).
+    #
+    # We contend that this was a mistake, as for several decades X11 has set
+    # aside AltGr+m for U+00b5 on Latin keyboard layouts, so that U+00b5 has
+    # become embedded in places that are case-sensitive and have no code-point
+    # folding, such as passwords and APIs, including this one.
+    #
+    # We therefore decline to change _µsec to _μsec, especially since it's
+    # essentially a callback, so that these would be backwards:
+    #
+    #   sub _μsec($) { return shift->_µsec(@_) }
+    #   sub _usec($) { return shift->_µsec(@_) }
 
     # Default conversions; good for most uses.
 
@@ -886,7 +902,7 @@ C<struct timespec> - a time_t accompanied by an integer number of nanoseconds
 =back
 
 When dealing with subsecond resolution, the naïve approach would be to use a
-floating point to store a C<time_t> with a
+floating point to store a fractional C<time_t>.
 
 The problem with this approach is the loss of precision. Perl uses a regular C
 "double", which (on most platforms) is 64 bits comprising a sign bit, a 11-bit
