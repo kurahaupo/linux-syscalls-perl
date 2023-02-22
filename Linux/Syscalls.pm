@@ -122,14 +122,6 @@ sub _listlen(@) { return 0+@_; }
 
 ################################################################################
 
-sub _unique_sorted(\@@) {
-    my $r = shift;
-    my %r;
-    @r{@_} = @_;
-    @r{@$r} = @$r;
-    @$r = sort keys %r;
-}
-
 sub _export_ok(@)  { our @EXPORT_OK; push @EXPORT_OK, @_; }
 sub _export_tag(@) {
     my ($j) = grep { $_[$_] eq '=>' } 1 .. $#_;
@@ -144,7 +136,10 @@ sub _export_finish {
     our @EXPORT_OK;
     our %EXPORT_TAGS;
     for my $e (\@EXPORT, \@EXPORT_OK, values %EXPORT_TAGS) {
-        _unique_sorted @$e;
+        # Remove duplicates from each list
+        my %r;
+        @r{@$e} = @$e;
+        @$e = keys %r;
     }
     $EXPORT_TAGS{everything} = \@EXPORT_OK;
 }
