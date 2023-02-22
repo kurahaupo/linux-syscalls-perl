@@ -1675,7 +1675,11 @@ sub getdents($;$$) {
     return undef;
 }
 
+sub dt_to_stmode($) { $_[0] << 12 }
+sub stmode_to_dt($) { $_[0] >> 12 }
+
 _export_tag qw( DT_ dirent  =>  getdents
+                                dt_to_stmode stmode_to_dt
                                 DT_UNKNOWN
                                 DT_FIFO DT_CHR DT_DIR DT_BLK
                                 DT_REG DT_LNK DT_SOCK DT_WHT
