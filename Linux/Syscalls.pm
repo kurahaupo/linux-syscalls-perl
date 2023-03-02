@@ -1588,17 +1588,46 @@ use constant {
     DT_FIFO     => 1,   # S_IFIFO  >> 12
     DT_CHR      => 2,   # S_IFCHR  >> 12
     DT_DIR      => 4,   # S_IFDIR  >> 12
+    DT_NAM      => 5,   # S_IFNAM  >> 12
     DT_BLK      => 6,   # S_IFBLK  >> 12
     DT_REG      => 8,   # S_IFREG  >> 12
     DT_LNK      => 10,  # S_IFLNK  >> 12
     DT_SOCK     => 12,  # S_IFSOCK >> 12
     DT_WHT      => 14,  # whiteout; you should never see these entries
+};
 
-    # Options for extensions
+# Options for extensions
+use constant {
     GDE_RETRY           => 1,   # try again if buffer too small
     GDE_SKIP_DOTDOTDOT  => 2,   # filter out '.' and '..'
     GDE_SKIP_WHITEOUT   => 4,   # filter out DT_WHT entries
+    GDE_NONE            => 0,   # none of the above
+    GDE_DEFAULT         => 7,   # all of the above
 };
+
+{
+my @dt_names = (
+    'unknown',
+    'fifo',
+    'chr',
+    undef,
+    'dir',
+    'nam',
+    'blk',
+    undef,
+    'reg',
+    undef,
+    'lnk',
+    undef,
+    'sock',
+    undef,
+    'wht',
+    undef,
+);
+sub dt_name($) {
+    return $dt_names[$_[0]&15];
+}
+}
 
 # Internal magic numbers
 use constant {
@@ -1629,7 +1658,7 @@ sub getdents($;$$) {
     my ($fd, $bufsize, $options) = @_;
     _map_fd($fd);
     $bufsize ||= getdents_default_bufsize;
-    $options //= ~0;
+    $options //= GDE_DEFAULT;
 
     state $syscall_id = _get_syscall_id 'getdents';
     FETCH: for (;;) {
@@ -1680,9 +1709,12 @@ sub stmode_to_dt($) { $_[0] >> 12 }
 
 _export_tag qw( DT_ dirent  =>  getdents
                                 dt_to_stmode stmode_to_dt
+
                                 DT_UNKNOWN
-                                DT_FIFO DT_CHR DT_DIR DT_BLK
+                                DT_FIFO DT_CHR DT_DIR DT_NAM DT_BLK
                                 DT_REG DT_LNK DT_SOCK DT_WHT
+
+                                GDE_RETRY
                                 GDE_SKIP_DOTDOTDOT GDE_SKIP_WHITEOUT
               );
 
