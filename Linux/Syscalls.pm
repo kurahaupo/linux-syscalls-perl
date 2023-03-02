@@ -1098,7 +1098,87 @@ sub _unpack_stat {
     sub blksize         { $_[0]->[11] }
     sub blocks          { $_[0]->[12] }
 
+    sub _dtype          { $_[0]->[2] >> 12   }  # same as stmode_to_dt
+    sub _perms          { $_[0]->[2] & 07777 }
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
+
+    use constant {
+        DT_FIFO     => 1,   # S_IFIFO  >> 12
+        DT_CHR      => 2,   # S_IFCHR  >> 12
+        DT_DIR      => 4,   # S_IFDIR  >> 12
+        DT_BLK      => 6,   # S_IFBLK  >> 12
+        DT_REG      => 8,   # S_IFREG  >> 12
+        DT_LNK      => 10,  # S_IFLNK  >> 12
+        DT_SOCK     => 12,  # S_IFSOCK >> 12
+    };
+
+    sub _is_er { $_[0]->_perms & ( $_->_is_eo ? 0400 : $_->_is_eg ? 040 : 04 ) }    # File is readable by effective uid/gid.
+    sub _is_ew { $_[0]->_perms & ( $_->_is_eo ? 0200 : $_->_is_eg ? 020 : 02 ) }    # File is writable by effective uid/gid.
+    sub _is_ex { $_[0]->_perms & ( $_->_is_eo ? 0100 : $_->_is_eg ? 010 : 01 ) }    # File is executable by effective uid/gid.
+    sub _is_eo { $< == $_->uid }                                                    # File is owned by effective uid.
+    sub _is_eg { $( == $_->gid }                                                    # File's primary group is effective gid.
+    sub _is_rr { $_[0]->_perms & ( $_->_is_rO ? 0400 : $_->_is_rg ? 040 : 04 ) }    # File is readable by real uid/gid.
+    sub _is_rw { $_[0]->_perms & ( $_->_is_rO ? 0200 : $_->_is_rg ? 020 : 02 ) }    # File is writable by real uid/gid.
+    sub _is_rx { $_[0]->_perms & ( $_->_is_rO ? 0100 : $_->_is_rg ? 010 : 01 ) }    # File is executable by real uid/gid.
+    sub _is_ro { $> == $_->uid }                                                    # File is owned by real uid.
+    sub _is_rg { $) == $_->gid }                                                    # File's primary group is real gid.
+    sub _is_u { $_[0]->_perms & 04000 }         # File has setuid bit set.
+    sub _is_g { $_[0]->_perms & 02000 }         # File has setgid bit set.
+    sub _is_k { $_[0]->_perms & 01000 }         # File has sticky bit set.
+
+    sub _is_z { $_[0]->_is_f && ! $_[0]->size } # File has zero size (is empty).
+    sub _is_s { $_[0]->_is_f &&   $_[0]->size } # File has nonzero size (returns size in bytes).
+    sub _is_f { $_[0]->_dtype == DT_REG }       # File is a plain file.
+    sub _is_d { $_[0]->_dtype == DT_DIR }       # File is a directory.
+    sub _is_l { $_[0]->_dtype == DT_LNK }       # File is a symbolic link (false if symlinks aren't supported by the file system).
+    sub _is_p { $_[0]->_dtype == DT_FIFO }      # File is a named pipe (FIFO), or Filehandle is a pipe.
+    sub _is_S { $_[0]->_dtype == DT_SOCK }      # File is a socket.
+    sub _is_b { $_[0]->_dtype == DT_BLK }       # File is a block special file.
+    sub _is_c { $_[0]->_dtype == DT_CHR }       # File is a character special file.
+
+    sub _is_M { $^T - $_[0]->mtime }            # Script start time minus file modification time, in days.
+    sub _is_A { $^T - $_[0]->atime }            # Script start time minus file access time.
+    sub _is_C { $^T - $_[0]->ctime }            # Script start time minus file inode change time (Unix, may differ for other platforms)
+  # sub _is_e { 1 },                            # File exists. Necessarily true if we get here
+  # sub _is_t { confess "Not implemented" },    # Filehandle is opened to a tty. (Not implemented; need to call tcgetattr() on original FD)
+  # sub _is_T { confess "Not implemented" },    # File is an ASCII or UTF-8 text file (heuristic guess). (Not implemented; need to read original FD)
+  # sub _is_B { confess "Not implemented" },    # File is a "binary" file (opposite of -T). (Not implemented; need to read original FD)
+
+    use Carp 'confess';
+
+    use overload -X => sub {
+        my ($self, $op, undef) = @_;
+        state $v = {
+          # Effective           Real
+            r =>  \&_is_er,     R =>  \&_is_rr, # File is readable by effective uid/gid.
+            w =>  \&_is_ew,     W =>  \&_is_rw, # File is writable by effective uid/gid.
+            x =>  \&_is_ex,     X =>  \&_is_rx, # File is executable by effective uid/gid.
+            o =>  \&_is_eo,     O =>  \&_is_ro, # File is owned by effective uid.
+            u =>  \&_is_u,  # File has setuid bit set.
+            g =>  \&_is_g,  # File has setgid bit set.
+            k =>  \&_is_k,  # File has sticky bit set.
+
+            z =>  \&_is_z,  # File has zero size (is empty).
+            s =>  \&_is_s,  # File has nonzero size (returns size in bytes).
+            f =>  \&_is_f,  # File is a plain file.
+            d =>  \&_is_d,  # File is a directory.
+            l =>  \&_is_l,  # File is a symbolic link (false if symlinks aren't supported by the file system).
+            p =>  \&_is_p,  # File is a named pipe (FIFO), or Filehandle is a pipe.
+            S =>  \&_is_S,  # File is a socket.
+            b =>  \&_is_b,  # File is a block special file.
+            c =>  \&_is_c,  # File is a character special file.
+
+            M =>  \&_is_M,  # Script start time minus file modification time, in days.
+            A =>  \&_is_A,  # Script start time minus file access time.
+            C =>  \&_is_C,  # Script start time minus file inode change time (Unix, may differ for other platforms)
+          # e =>  \&_is_e,  # File exists. Necessarily true if we get here
+          # t =>  \&_is_t,  # Filehandle is opened to a tty. (Not implemented; need to call tcgetattr() on original FD)
+          # T =>  \&_is_T,  # File is an ASCII or UTF-8 text file (heuristic guess). (Not implemented; need to read original FD)
+          # B =>  \&_is_B,  # File is a "binary" file (opposite of -T). (Not implemented; need to read original FD)
+        };
+        $v->{$op}->($self);
+    };
+
 }
 
 _export_ok qw{ statns };
