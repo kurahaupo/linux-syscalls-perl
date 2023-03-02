@@ -1,17 +1,19 @@
 #define _GNU_SOURCE         /* See feature_test_macros(7) */
 #define _BSD_SOURCE         /* for the DT_* macros */
-#include <fcntl.h>
+
 #include <sys/stat.h>
+#include <sys/syscall.h>   /* For SYS_xxx definitions */
+
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
-#include <errno.h>
-#include <dirent.h>
 #include <string.h>
-
 #include <unistd.h>
-#include <sys/syscall.h>   /* For SYS_xxx definitions */
 
 #ifndef AT_EMPTY_PATH
 #define AT_EMPTY_PATH          0x1000
