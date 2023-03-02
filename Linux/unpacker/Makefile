@@ -9,7 +9,7 @@ test::
 	$$PWD/show_stat_struct.bash    show_timex_struct show_stat_struct
 
 clean::
-	rm -fv die.o getlink.o log2ceil.o perl_unpack.o show_stat_struct.o show_struct.o sxbuf.o
+	rm -fv *.o show_*_struct
 
 show_stat_struct:       show_stat_struct.o getlink.o log2ceil.o perl_unpack.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_stat_struct.o getlink.o log2ceil.o perl_unpack.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
