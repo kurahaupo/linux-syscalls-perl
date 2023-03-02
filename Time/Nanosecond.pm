@@ -944,15 +944,15 @@ add anything beyond what GNU libc offers.
 The format specifiers for strftime are similar to those for printf; they
 comprise a '%' followed by flags, precision, options, and finally a selector.
 
-The following are all the formatting options recognized by C, POSIX, GNU-date,
-and GNU-strftime:
+The following are all the formatting options recognized by C, POSIX, SU (Single
+UNIX Specification), TZ (Olson's timezone package), GNU-date, and GNU-strftime:
 
     %%      a literal '%'  (C, POSIX, GNU-date, GNU-strftime)
     %A      localized full weekday name ("Sunday")  (GNU-date, GNU-strftime)
     %B      localized full month name ("January")  (GNU-date, GNU-strftime)
     %C      century (year/100) ("19" or "20")  (SU, GNU-date, GNU-strftime)
     %D      equivalent to %m/%d/%y  (SU, GNU-date, GNU-strftime)
-    %F      equivalent to %Y-%m-%d (the ISO 8601 date format)  (C99, GNU-date, GNU-strftime)
+    %F      equivalent to %Y-%m-%d (the ISO 8601 date format)  (C99, POSIX2001, GNU-date, GNU-strftime)
     %G      year matching ISO 8601 week number (see %V)  This has the same format and value as %Y, except that if the ISO 8601 week number belongs to the previous or next year, that year is used instead  (TZ, GNU-date, GNU-strftime)
     %H      hour using a 24-hour clock (00..23)  (GNU-date, GNU-strftime)
     %I      hour using a 12-hour clock (01..12)  (GNU-date, GNU-strftime)
@@ -976,7 +976,7 @@ and GNU-strftime:
     %g      year within century of %G (year of ISO 8601 week number) (00..99)  (TZ, GNU-date, GNU-strftime)
     %h      equivalent to %b  (SU, GNU-date, GNU-strftime)
     %j      day of year (001..366)  (GNU-date, GNU-strftime)
-    %k      equivalent to %_H  (TZ, GNU-strftime, GNU-date)
+    %k      equivalent to %_H  (TZ, GNU-date, GNU-strftime)
     %l      equivalent to %_I  (TZ, GNU-date, GNU-strftime)
     %m      month (01..12)  (GNU-date, GNU-strftime)
     %n      a newline  (SU, GNU-date, GNU-strftime)
