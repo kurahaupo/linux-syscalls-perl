@@ -107,7 +107,7 @@ sub _export_finish {
 
 # Internal magic numbers
 use constant {
-    default_getdents_bufsize => 0x4000, # a multiple of the file allocation block size
+    getdents_default_bufsize => 0x4000, # a multiple of the file allocation block size
 };
 
 # Magic numbers for Linux; these should be (but aren't) in Fcntl
@@ -566,17 +566,17 @@ sub statvfs($) {
     state $syscall_id = _get_syscall_id 'statvfs';
     0 == syscall $syscall_id, $path, $buf or return ();
     return unpack "L2Q6Lx![Q]L2", $buf;
-        #      unsigned long  f_bsize;    /* filesystem block size */
-        #      unsigned long  f_frsize;   /* fragment size */
-        #      fsblkcnt_t     f_blocks;   /* size of fs in f_frsize units */
-        #      fsblkcnt_t     f_bfree;    /* # free blocks */
-        #      fsblkcnt_t     f_bavail;   /* # free blocks for unprivileged users */
-        #      fsfilcnt_t     f_files;    /* # inodes */
-        #      fsfilcnt_t     f_ffree;    /* # free inodes */
-        #      fsfilcnt_t     f_favail;   /* # free inodes for unprivileged users */
-        #      unsigned long  f_fsid;     /* filesystem ID */
-        #      unsigned long  f_flag;     /* mount flags */
-        #      unsigned long  f_namemax;  /* maximum filename length */
+        #  L   unsigned long  f_bsize;    /* filesystem block size */
+        #  L   unsigned long  f_frsize;   /* fragment size */
+        #  Q   fsblkcnt_t     f_blocks;   /* size of fs in f_frsize units */
+        #  Q   fsblkcnt_t     f_bfree;    /* # free blocks */
+        #  Q   fsblkcnt_t     f_bavail;   /* # free blocks for unprivileged users */
+        #  Q   fsfilcnt_t     f_files;    /* # inodes */
+        #  Q   fsfilcnt_t     f_ffree;    /* # free inodes */
+        #  Q   fsfilcnt_t     f_favail;   /* # free inodes for unprivileged users */
+        #  L   unsigned long  f_fsid;     /* filesystem ID */
+        #  L   unsigned long  f_flag;     /* mount flags */
+        #  L   unsigned long  f_namemax;  /* maximum filename length */
 }
 
 #
@@ -1152,8 +1152,8 @@ sub getdents($;$) {
     state $syscall_id = _get_syscall_id 'getdents64';
     state $packfmt = $pack_map{getdents64};    # 'QQSC'
     state $packlen = length pack $packfmt, (0) x 5;
-    $bufsize ||= default_getdents_bufsize;
-    my $buffer = ' ' x $bufsize;
+    $bufsize ||= getdents_default_bufsize;
+    my $buffer = "\xee" x $bufsize;
     my $blksize = syscall $syscall_id, $fd, $buffer, $bufsize;
     return undef if $blksize < 0;
   # substr($buffer, $blksize) = '';  # cut off unfilled tail of buffer
