@@ -1171,8 +1171,7 @@ sub utimensat($$$$;$$) {
 #     Time::Nanosecond::ts values are also supported.
 #
 
-*utimesat = \&futimesat;
-_export_ok qw{ _at => futimesat utimesat };
+_export_ok qw{ futimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
     return utimensat $dir_fd, $path, $atime, $mtime, 0, UTIME_trunc_µsec;
@@ -1182,7 +1181,7 @@ sub futimesat($$$$) {
 # futimens (POSIX syscall) - like utimensat but just an open fd (no filepath)
 #
 
-_export_ok qw{ f_ => futimens };
+_export_tag qw{ f_ => futimens };
 sub futimens($$$) {
     my ($fd, $atime, $mtime) = @_;
     return utimensat $fd, undef, $atime, $mtime;
@@ -1197,7 +1196,7 @@ sub futimens($$$) {
 # for flags.
 #
 
-_export_ok qw{ f_ => futimes };
+_export_tag qw{ f_ => futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
     return utimensat $fd, undef, $atime, $mtime, undef, UTIME_trunc_µsec;
@@ -1210,7 +1209,7 @@ sub futimes($$$) {
 #   * always follow symlinks
 #
 
-_export_ok qw{ f_ => utimes };
+_export_tag qw{ f_ => utimes };
 sub utimes($$$) {
     my ($path, $atime, $mtime) = @_;
     return utimensat undef, $path, $atime, $mtime, 0, UTIME_trunc_µsec;
@@ -1804,7 +1803,7 @@ sub wait4($$) {
 # waitpid2 is like the waitpid builtin, except that it returns the pid & status
 # instead of setting $?, and returns empty (and sets $!) on error.
 
-_export_ok qw{ proc => waitpid2 } if _get_syscall_id 'waitpid', 1;
+_export_tag qw{ proc => waitpid2 } if _get_syscall_id 'waitpid', 1;
 sub waitpid2($$) {
     my ($cpid, $options) = @_;
     my $status = pack 'I*', (0) x 1;
