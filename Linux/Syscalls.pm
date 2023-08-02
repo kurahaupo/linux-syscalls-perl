@@ -1176,6 +1176,76 @@ _export_tag qw( DT_ dirent  =>  getdents
 
 ################################################################################
 
+{
+    package Linux::Syscalls::ioctl;
+    # Perlified version of /usr/include/asm-generic/ioctl.h
+
+    # Universal
+    use constant _IOC_NRBITS   => 8;
+    use constant _IOC_TYPEBITS => 8;
+    use constant _IOC_DIRBITS  => 2;
+
+    # SIZEBITS is (supposedly) platform-specific, however it will always be
+    # BitsPerWord-(sum of other sizes), and since BitsPerWord will normally be
+    # 32, SIZEBITS will normally be 14. (However this might change if a new
+    # ioctl needs a parameter block larger than 16 KiB.)
+
+    use constant _IOC_SIZEBITS => 14;
+
+    # Universally computed; note that the order of the bitfields is fixed for
+    # all implementation.
+    use constant _IOC_NRSHIFT   => 0;                              # 0
+    use constant _IOC_TYPESHIFT => _IOC_NRSHIFT   + _IOC_NRBITS;   # 8
+    use constant _IOC_SIZESHIFT => _IOC_TYPESHIFT + _IOC_TYPEBITS; # 16
+    use constant _IOC_DIRSHIFT  => _IOC_SIZESHIFT + _IOC_SIZEBITS; # 30
+
+    sub __b2m($) { my ($w) = @_; $w = 1 << $w; --$w or --$w; return $w; }
+
+    use constant _IOC_DIRMASK  => __b2m _IOC_DIRBITS;
+    use constant _IOC_SIZEMASK => __b2m _IOC_SIZEBITS;
+    use constant _IOC_TYPEMASK => __b2m _IOC_TYPEBITS;
+    use constant _IOC_NRMASK   => __b2m _IOC_NRBITS;
+
+    #
+    # Direction bits, which any architecture can choose to override
+    # before including this file.
+    #
+
+    use constant {
+        _IOC_NONE  => 0,
+        _IOC_WRITE => 1,
+        _IOC_READ  => 2,
+        _IOC_RDWR  => 3,    # Perlish, not in C header
+    };
+
+    sub _IOC($$$$) {
+        my ($dir, $type, $nr, $size) = @_;
+        use Carp 'confess';
+        grep { ! defined || /\D|^$/ } @_ and confess 'Non-numeric arg';
+
+        return $dir  << _IOC_DIRSHIFT
+             | $size << _IOC_SIZESHIFT
+             | $type << _IOC_TYPESHIFT
+             | $nr   << _IOC_NRSHIFT;
+    }
+
+    #sub _IOC_packsize($) { my ($t) = @_; return $t =~ /\D/ ? length pack $t, (0) x 99 : $t; } # (sizeof(t))
+
+    #/* used to create numbers */
+    sub _IO($$)         { my ($type, $nr)        = @_; return _IOC( _IOC_NONE,  $type, $nr, 0 ); }
+    sub _IOR($$$)       { my ($type, $nr, $size) = @_; return _IOC( _IOC_READ,  $type, $nr, $size ); }
+    sub _IOW($$$)       { my ($type, $nr, $size) = @_; return _IOC( _IOC_WRITE, $type, $nr, $size ); }
+    sub _IOWR($$$)      { my ($type, $nr, $size) = @_; return _IOC( _IOC_RDWR,  $type, $nr, $size ); }
+
+    # used to decode ioctl numbers
+    sub _IOC_DIR($)  { my ($nr) = @_; return $nr >> _IOC_DIRSHIFT  & _IOC_DIRMASK;  }
+    sub _IOC_SIZE($) { my ($nr) = @_; return $nr >> _IOC_SIZESHIFT & _IOC_SIZEMASK; }
+    sub _IOC_TYPE($) { my ($nr) = @_; return $nr >> _IOC_TYPESHIFT & _IOC_TYPEMASK; }
+    sub _IOC_NR($)   { my ($nr) = @_; return $nr >> _IOC_NRSHIFT   & _IOC_NRMASK;   }
+}
+
+################################################################################
+
 #
 # Emulate a hangup on this process's controlling terminal, which should result
 # in all processes in this session being sent SIGHUP when they attempt to
