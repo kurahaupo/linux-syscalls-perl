@@ -1094,6 +1094,21 @@ sub lutimes($$$) {
 ################################################################################
 
 #
+# Emulate a hangup on this process's controlling terminal, which should result
+# in all processes in this session being sent SIGHUP when they attempt to
+# interact with the terminal.
+#
+
+_export_ok 'vhangup';
+
+sub vhangup() {
+    state $syscall_id = _get_syscall_id 'vhangup';
+    return 0 == syscall $syscall_id;
+}
+
+################################################################################
+
+#
 # Exit
 #
 # Invoke the exit syscall directly, with no cleanup.
@@ -1390,21 +1405,6 @@ sub waitid_($$$;$$) {
 #          $ru_minflt, $ru_majflt, $ru_nswap, $ru_inblock, $ru_oublock,
 #          $ru_msgsnd, $ru_msgrcv, $ru_nsignals, $ru_nvcsw, $ru_nivcsw;
 #          $record_rusage ? _unpack_rusage $rusage
-}
-
-################################################################################
-
-#
-# Emulate a hangup on this process's controlling terminal, which should result
-# in all processes in this session being sent SIGHUP when they attempt to
-# interact with the terminal.
-#
-
-_export_ok 'vhangup';
-
-sub vhangup() {
-    state $syscall_id = _get_syscall_id 'vhangup';
-    return 0 == syscall $syscall_id;
 }
 
 ################################################################################
