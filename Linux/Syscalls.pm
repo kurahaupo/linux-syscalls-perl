@@ -1103,25 +1103,36 @@ sub _unpack_stat {
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
 
     use constant {
+      # DT_UNKNOWN  => 0,
         DT_FIFO     => 1,   # S_IFIFO  >> 12
         DT_CHR      => 2,   # S_IFCHR  >> 12
         DT_DIR      => 4,   # S_IFDIR  >> 12
+      # DT_NAM      => 5,   # S_IFNAM  >> 12
         DT_BLK      => 6,   # S_IFBLK  >> 12
         DT_REG      => 8,   # S_IFREG  >> 12
         DT_LNK      => 10,  # S_IFLNK  >> 12
         DT_SOCK     => 12,  # S_IFSOCK >> 12
+      # DT_WHT      => 14,  # whiteout; you should never see these entries
     };
 
-    sub _is_er { $_[0]->_perms & ( $_->_is_eo ? 0400 : $_->_is_eg ? 040 : 04 ) }    # File is readable by effective uid/gid.
-    sub _is_ew { $_[0]->_perms & ( $_->_is_eo ? 0200 : $_->_is_eg ? 020 : 02 ) }    # File is writable by effective uid/gid.
-    sub _is_ex { $_[0]->_perms & ( $_->_is_eo ? 0100 : $_->_is_eg ? 010 : 01 ) }    # File is executable by effective uid/gid.
-    sub _is_eo { $< == $_->uid }                                                    # File is owned by effective uid.
-    sub _is_eg { $( == $_->gid }                                                    # File's primary group is effective gid.
-    sub _is_rr { $_[0]->_perms & ( $_->_is_rO ? 0400 : $_->_is_rg ? 040 : 04 ) }    # File is readable by real uid/gid.
-    sub _is_rw { $_[0]->_perms & ( $_->_is_rO ? 0200 : $_->_is_rg ? 020 : 02 ) }    # File is writable by real uid/gid.
-    sub _is_rx { $_[0]->_perms & ( $_->_is_rO ? 0100 : $_->_is_rg ? 010 : 01 ) }    # File is executable by real uid/gid.
-    sub _is_ro { $> == $_->uid }                                                    # File is owned by real uid.
-    sub _is_rg { $) == $_->gid }                                                    # File's primary group is real gid.
+    sub _is_er { 0444 & $_[0]->_is_eugo_perms } # File is readable by effective uid/gid.
+    sub _is_ew { 0222 & $_[0]->_is_eugo_perms } # File is writable by effective uid/gid.
+    sub _is_ex { 0111 & $_[0]->_is_eugo_perms } # File is executable by effective uid/gid.
+    sub _is_eu { $> == $_[0]->uid }             # File is owned by effective uid.
+    sub _is_eg { $) == $_[0]->gid }             # File's primary group is effective gid.
+    sub _is_eugo_perms { ( $_[0]->_is_eu ? 04700 :
+                           $_[0]->_is_eg ? 02070 :
+                                           01007 ) & $_[0]->_perms; }
+
+    sub _is_rr { 0444 & $_[0]->_is_rugo_perms } # File is readable by real uid/gid.
+    sub _is_rw { 0222 & $_[0]->_is_rugo_perms } # File is writable by real uid/gid.
+    sub _is_rx { 0111 & $_[0]->_is_rugo_perms } # File is executable by real uid/gid.
+    sub _is_ru { $< == $_[0]->uid }             # File is owned by real uid.
+    sub _is_rg { $( == $_[0]->gid }             # File's primary group is real gid.
+    sub _is_rugo_perms { ( $_[0]->_is_ru ? 04700 :
+                           $_[0]->_is_rg ? 02070 :
+                                           01007 ) & $_[0]->_perms; }
+
     sub _is_u { $_[0]->_perms & 04000 }         # File has setuid bit set.
     sub _is_g { $_[0]->_perms & 02000 }         # File has setgid bit set.
     sub _is_k { $_[0]->_perms & 01000 }         # File has sticky bit set.
@@ -1136,9 +1147,9 @@ sub _unpack_stat {
     sub _is_b { $_[0]->_dtype == DT_BLK }       # File is a block special file.
     sub _is_c { $_[0]->_dtype == DT_CHR }       # File is a character special file.
 
-    sub _is_M { $^T - $_[0]->mtime }            # Script start time minus file modification time, in days.
-    sub _is_A { $^T - $_[0]->atime }            # Script start time minus file access time.
-    sub _is_C { $^T - $_[0]->ctime }            # Script start time minus file inode change time (Unix, may differ for other platforms)
+    sub _is_M { ($^T - $_[0]->mtime) / 86400 }  # Script start time minus file modification time, in days.
+    sub _is_A { ($^T - $_[0]->atime) / 86400 }  # Script start time minus file access time.
+    sub _is_C { ($^T - $_[0]->ctime) / 86400 }  # Script start time minus file inode change time (Unix, may differ for other platforms)
   # sub _is_e { 1 },                            # File exists. Necessarily true if we get here
   # sub _is_t { confess "Not implemented" },    # Filehandle is opened to a tty. (Not implemented; need to call tcgetattr() on original FD)
   # sub _is_T { confess "Not implemented" },    # File is an ASCII or UTF-8 text file (heuristic guess). (Not implemented; need to read original FD)
@@ -1150,10 +1161,10 @@ sub _unpack_stat {
         my ($self, $op, undef) = @_;
         state $v = {
           # Effective           Real
-            r =>  \&_is_er,     R =>  \&_is_rr, # File is readable by effective uid/gid.
-            w =>  \&_is_ew,     W =>  \&_is_rw, # File is writable by effective uid/gid.
-            x =>  \&_is_ex,     X =>  \&_is_rx, # File is executable by effective uid/gid.
-            o =>  \&_is_eo,     O =>  \&_is_ro, # File is owned by effective uid.
+            r =>  \&_is_er,     R =>  \&_is_rr, # File is readable by effective/real uid/gid.
+            w =>  \&_is_ew,     W =>  \&_is_rw, # File is writable by effective/real uid/gid.
+            x =>  \&_is_ex,     X =>  \&_is_rx, # File is executable by effective/real uid/gid.
+            o =>  \&_is_eu,     O =>  \&_is_ru, # File is owned by effective/real uid.
             u =>  \&_is_u,  # File has setuid bit set.
             g =>  \&_is_g,  # File has setgid bit set.
             k =>  \&_is_k,  # File has sticky bit set.
