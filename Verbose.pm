@@ -104,12 +104,14 @@ notation introduced in Perl 5.6.
 
 See C<:nocompat> below.
 
-=head3 DEBUG I<BLOCK>
+=head3 DEBUG { I<BLOCK> };
 
 Only invoke I<BLOCK> if debug output is expected from the current context.
 Functionally equivalent to:
 
-    if (v) BLOCK
+    if (vvvvv) { BLOCK }
+
+(Because DEBUG is a unary function, the trailng semicolon is normally required.)
 
 =head2 Control items
 
@@ -150,7 +152,7 @@ package Verbose;
 our @VERSION = 1.002;
 
 use constant default_verbose_level => 1;   # level at which compat-mode v is true without an arg
-use constant default_debug_level   => 1;   # level at which DEBUG blocks run
+use constant default_debug_level   => 5;   # default level at which DEBUG blocks run
 
 my %level_for;
 my %offset_for;
