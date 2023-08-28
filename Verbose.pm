@@ -203,13 +203,16 @@ sub import {
     my $self = shift;
     my ($pkg) = caller;
     my $tag = $pkg;
+
+    # what to export
     my $export_debug = 1;
-    my $export_v = 1;
     my $export_sv = $pkg eq 'main';
-    my $override;
-    my $global_offset = 0;
-    my $want_compat;
+    my $export_v = 1;
     my %exports;
+
+    my $offset_from_global = 0;
+    my $override;
+    my $want_compat;
 
     warn "import: args=[@_]";
     for (@_) {
@@ -225,22 +228,22 @@ sub import {
         elsif ( $_ eq ':compat'         ) { $want_compat = 1 }
         elsif ( /^=|^:set=/             ) { &set_verbose(undef, $pkg, $') }
         elsif ( /^v+$/                  ) { $export_v = length $_ }
-        elsif ( /^[-+]?\d+$/            ) { $global_offset = 0+$_ }
+        elsif ( /^[-+]?\d+$/            ) { $offset_from_global = 0+$_ }
         elsif ( /^[A-Za-z]\w+(::\w+)*$/ ) { $tag = $_ }
         else { _croak_or_die "Don't understand $_"; }
     }
 
     if ($tag) {
         $tag =~ s/::$//;
-        $offset_for{$tag} = $global_offset if ! exists $offset_for{$tag};
-        my $new_level = $global_level - $global_offset;
+        $offset_for{$tag} = $offset_from_global if ! exists $offset_for{$tag};
+        my $new_level = $global_level - $offset_from_global;
         if ( ! exists $level_for{$tag} || $new_level < $level_for{$tag} ) {
             warn "import: Setting tag:$tag to $new_level";
             $level_for{$tag} = $new_level;
         }
         $tag = \$level_for{$tag};
     } else {
-        if ($global_offset) {
+        if ($offset_from_global) {
             _croak_or_die "Can't have an offset from the global level without having a tag";
         }
         warn "import: Using global tag with $global_level";
