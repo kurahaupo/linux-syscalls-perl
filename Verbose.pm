@@ -453,20 +453,28 @@ sub import {
     for my $sym ( keys %exports ) {
         my $val = $exports{$sym};
         local $SIG{__DIE__} = sub {
-            warn $@;
-            printf STDERR "pkg=%s\n"
-                        . "rpkg=%s\n"
-                        . "sym=%s\n"
-                        . "val=%s\n"
+            printf STDERR "thrown=%s\n"
+                        . "pkg=%s\nrpkg=%s\nsym=%s\nval=%s\n"
                         . "rpkg{sym}=%s\n",
-                    $pkg, $rpkg, $sym, $val,
-                    $rpkg->{$sym} // '(undef)';
+                        $@,
+                        $pkg, $rpkg, $sym, $val,
+                        $rpkg->{$sym} // '(undef)';
             $SIG{__DIE__} = undef;  # just in case a DESTROY dies on the way out
             exit 1;
         };
-        if ($rpkg->{$sym}) {
+        if (exists $rpkg->{$sym} && ref \$rpkg->{$sym} eq 'GLOB') {
+            # The symbol table entry already exists as a typeglob, so we must
+            # use one of its slots - we can't use the inline optimizer trick.
+            #
+            # The "exists" precondition is necessary because taking "\" of
+            # something will force it to exist, and that would defeat the
+            # optimizer.
+            #
+            # There's a simpler test but it's quite arcane: if ${pkg::{$sym}}
+            # exists but its ref is falsish, then it's a typeglob.
             if ( ! ref $val ) {
-                # Equivalent to "use constant", but pessimized
+                # If we wanted to export a constant, wrap it as a generator
+                # function; equivalent to pessimized "use constant".
                 my $xval = $val;
                 $val = sub { $xval };
             }
