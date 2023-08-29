@@ -373,7 +373,6 @@ sub import {
 
     my $will_lock;  # delay locking until all args are processed
 
-    warn "import: args=[@_]" if $^C;
     for (@_) {
         if    ( ref($_) eq 'ARRAY'      ) { steal_argv_debug @$_ }
         elsif ( $_ eq ':all'            ) { $export_debug = $export_sv = 1; $export_v ||= 1 }
@@ -400,17 +399,13 @@ sub import {
         $offset_for{$tag} = $offset_from_global if ! exists $offset_for{$tag};
         my $new_level = $global_level - $offset_from_global;
         if ( ! exists $level_for{$tag} || $new_level < $level_for{$tag} ) {
-            warn "import: Setting tag:$tag to $new_level" if $^C;
             $level_for{$tag} = $new_level;
-        } else {
-            warn "import: Leaving tag:$tag at $level_for{$tag}" if $^C;
         }
         $tag = \$level_for{$tag};
     } else {
         if ($offset_from_global) {
             _croak_or_die "Can't have an offset from the global level without having a tag";
         }
-        warn "import: Using global tag with $global_level" if $^C;
         $tag = \$global_level;
     }
 
