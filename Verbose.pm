@@ -1,6 +1,6 @@
 #!/module/for/perl
 
-use 5.008;
+use 5.010;
 use strict;
 use warnings;
 no diagnostics; # they mess up backtrace from 'croak'
@@ -11,33 +11,89 @@ Verbose
 
 =head1 SYNOPSIS
 
-    package main;
-    use Verbose ':argv';
+    # main.pl
+    use Verbose \@ARGV;
     use MyModule;
 
-    package MyModule;
-    use Verbose;
-    print "Some debug info\n" if v;
+    # MyModule.pm
+    package MyModule {
+    use Verbose 'vvv';
+    say 'Some basic info'    if v;
+    say 'Some detailed info' if vv;
+    say 'Routine minutiae'   if vvv;
+    print 'Foo debug info:', Dumper(\%Foo)  if vvvv;
     DEBUG {
         print "Some long-winded debug info...\n";
         for my $item ( @list ) {
             printf "%s=%s\n", $item->name, $item->value;
         }
     };
+    }
 
-    package OtherModule; use Verbose ':class';
+    # OtherModule.pm
+    package OtherModule {
+    use Verbose 'v';
+    say "This won't be output" if v;
+    }
+
+    # command line
+    myprogram --debug=MyModule=5,OtherModule=0,2
 
 =head1 DESCRIPTION
 
 The C<Verbose> package is intended to make it easy to write debugging
-statements that don't get in the way of normal flow control, but at the same
-time to make it easy to control the output so you don't have to wade through
-screeds of stuff that's not relevant to the problem you're trying to fix right
-now.
+statements that don't get in the way of normal flow control, while giving you
+fine-grained control to select the outputs of interest.
 
-Then you invoke your program with C<--debug=>I<controls>, like this:
+Each module that imports C<Verbose> gets its own I<verbosity level>, which can
+be controlled from the command line without needing to add any extra logic.
 
-    myprogram [--normal-options ...] --debug=MyModule=1 [--normal-options ...]
+The effective verbosity level for a module is given by
+
+    I<effective_verbosity> = min( I<module_verbosity>,
+                                  I<global_verbosity> + I<module_offset> )
+
+The I<module_verbosity> can be set in the module itself, so that its output is
+enabled whenever I<global_verbosity> is high enough. Conversely
+I<module_offset> can be set to a negative number to reduce the default
+verbosity of external modules that also use C<Verbose>.
+
+Settings can be obtained
+
+=over 4
+
+=item *
+
+from C<--debug=C<setting,setting,setting,...>> among the program's command line
+arguments; or
+
+=item *
+
+by calling C<set_verbose> with a value obtained from a configuration file or
+database.
+
+=item *
+
+from C<use Verbose qw( :set=I<setting,setting,setting,...> );> (for temporary
+settings while developing the program).
+
+=back
+
+In each case I<settings> is a comma-separated list, where each item is C<I<tag>=I<number>>
+for a per-module setting, or just I<number> for the global setting.
+
+When you invoke your program with C<--debug=I<settings>>, the I<settings>
+are interpreted as a comma-separated list of settings;
+
+    myprogram --debug=MyModule=5,2
+
+will cause the I<C<v> functions> within MyModule to respond with 1 (true) up to
+level 5, while those elsewhere will respond with with 1 only up to level 2.
+
+imports several condition flags (C<v>, C<vv>, C<vvv>, etc,
+collectively called I<C<v> functions>) into each module that uses it; these are
+intended to select "levels" of output, although you can use these condition
+flags to control I<any> activities.
 
 In this case, debugging will be enabled for MyModule, but not for any other
 modules, and the C<--debug> option will be removed from the command line before
@@ -51,7 +107,9 @@ and you can use several in one module (* this isn't implemented yet).
 
 =head2 Generally applicable items
 
-=head3 v vv vvv vvvv ...
+=head3 C<v> functions
+
+C<v> C<vv> C<vvv> C<vvvv> ...
 
 Returns true or false depending on whether debug output is expected from the
 current context. Typically used as
@@ -212,20 +270,19 @@ sub import {
 
     #
     my $debug_level = default_debug_level;
-    my $verbose_level = compat_debug_level;
     my $offset_from_global = 0;
     my $override;
     my $want_compat;
 
     warn "import: args=[@_]";
     for (@_) {
-        if ( ref($_) eq 'ARRAY'         ) { steal_argv_debug @$_ }
+        if    ( ref($_) eq 'ARRAY'      ) { steal_argv_debug @$_ }
         elsif ( $_ eq ':all'            ) { $export_debug = $export_sv = 1; $export_v ||= 1 }
         elsif ( $_ eq ':argv'           ) { steal_argv_debug }
         elsif ( $_ eq 'DEBUG'           ) { $export_debug = 1 }
         elsif (      /^DEBUG=(\d+)$/    ) { $export_debug = 1; $debug_level = $1 }
-        elsif ( $_ eq ':debug'          ) { $override = \&vdebug }
-        elsif ( $_ eq ':none'           ) { $export_debug = $export_sv = $export_v = 0 }
+        elsif ( $_ eq ':debug'          ) { $override = \&vdebug; $debug_level = 0; }
+        elsif ( $_ eq ':none'           ) { $export_debug = $export_sv = $export_v = 0; $debug_level = 1E99; }
         elsif ( $_ eq 'set_verbose'     ) { $export_sv = 1 }
         elsif ( $_ eq ':silent'         ) { $override = \&vsilent }
         elsif ( $_ eq ':nocompat'       ) { $want_compat = 0; $seen_nocompat ||= "$pkg explicitly"; }
@@ -244,6 +301,8 @@ sub import {
         if ( ! exists $level_for{$tag} || $new_level < $level_for{$tag} ) {
             warn "import: Setting tag:$tag to $new_level";
             $level_for{$tag} = $new_level;
+        } else {
+            warn "import: Leaving tag:$tag at $level_for{$tag}";
         }
         $tag = \$level_for{$tag};
     } else {
@@ -267,33 +326,63 @@ sub import {
         }
 
         if ( $want_compat ) {
-            # compatibility mode ("v" is a unary function with default parameter of default_verbose_level)
-            $exports{v} = $override || sub(;$) {
-                #warn "Testing $tag $$tag args=[@_] def=[".(default_verbose_level)."]";
-                return $$tag >= (shift // default_verbose_level);
+            # compatibility mode ("v" is a unary function with default parameter of compat_verbose_level)
+            $exports{v} = $override // sub(;$) {
+                return $$tag >= (shift // compat_verbose_level);
             };
         } else {
             # modern mode ("v" is a nonary function)
             for my $l ( 1 .. $export_v ) {
                 my $ll = $l;
-                my $v = $override || sub() { return $$tag >= $ll; };
+                my $v = $override // sub() { return $$tag >= $ll; };
                 $exports{ 'v' x $l } = $v;
             }
         }
     }
 
     if ( $export_debug ) {
-        $exports{DEBUG} = $override || sub(&) { my $f = shift; goto &$f if $$tag >= $debug_level; };
+        $exports{DEBUG} = $override ? &$override ? sub(&) { my $f = shift; goto &$f; }
+                                                 : sub(&) {}
+                                    : sub(&) { my $f = shift; goto &$f if $$tag >= $debug_level; };
     }
 
     if ( $export_sv ) {
         $exports{'set_verbose'} = \&set_verbose;
     }
 
-    for my $sym ( keys %exports ) {
-        my $r = $pkg.'::'.$sym;
+    my $rpkg = do {
         no strict 'refs';
-        *$r = $exports{$sym};
+        \%{ $pkg.'::' };
+    };
+    for my $sym ( keys %exports ) {
+        my $val = $exports{$sym};
+        local $SIG{__DIE__} = sub {
+            warn $@;
+            printf STDERR "pkg=%s\n", $pkg;
+            printf STDERR "rpkg=%s\n", $rpkg;
+            printf STDERR "sym=%s\n", $sym;
+            printf STDERR "val=%s\n", $val;
+            printf STDERR "rpkg{sym}=%s\n", $rpkg->{$sym} // '(undef)';
+            exit 1;
+        };
+        if ($rpkg->{$sym}) {
+            if ( ! ref $val ) {
+                # Equivalent to "use constant", but pessimized
+                $val = sub { $val };
+            }
+            # typeglob slot automatically selected by ref of $val; any of
+            # SCALAR, ARRAY, HASH, CODE, IO, and FMT.
+            *{$rpkg->{$sym}} = $val;
+        } else {
+            if ( ref $val ) {
+                no strict 'refs';
+                # Automagically create a typeglob
+                *{ $pkg.'::'.$sym } = $val;
+            } else {
+                # Equivalent to "use constant"
+                $rpkg->{$sym} = \$val;
+            }
+        }
     }
 
 }
