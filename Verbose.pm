@@ -151,7 +151,7 @@ package Verbose;
 
 our @VERSION = 1.002;
 
-use constant default_verbose_level => 1;   # level at which compat-mode v is true without an arg
+use constant compat_verbose_level  => 1;   # level at which compat-mode v is true without an arg
 use constant default_debug_level   => 5;   # default level at which DEBUG blocks run
 
 my %level_for;
@@ -210,6 +210,9 @@ sub import {
     my $export_v = 1;
     my %exports;
 
+    #
+    my $debug_level = default_debug_level;
+    my $verbose_level = compat_debug_level;
     my $offset_from_global = 0;
     my $override;
     my $want_compat;
@@ -220,6 +223,7 @@ sub import {
         elsif ( $_ eq ':all'            ) { $export_debug = $export_sv = 1; $export_v ||= 1 }
         elsif ( $_ eq ':argv'           ) { steal_argv_debug }
         elsif ( $_ eq 'DEBUG'           ) { $export_debug = 1 }
+        elsif (      /^DEBUG=(\d+)$/    ) { $export_debug = 1; $debug_level = $1 }
         elsif ( $_ eq ':debug'          ) { $override = \&vdebug }
         elsif ( $_ eq ':none'           ) { $export_debug = $export_sv = $export_v = 0 }
         elsif ( $_ eq 'set_verbose'     ) { $export_sv = 1 }
@@ -279,7 +283,7 @@ sub import {
     }
 
     if ( $export_debug ) {
-        $exports{DEBUG} = $override || sub(&) { my $f = shift; goto &$f if $$tag >= default_debug_level; };
+        $exports{DEBUG} = $override || sub(&) { my $f = shift; goto &$f if $$tag >= $debug_level; };
     }
 
     if ( $export_sv ) {
