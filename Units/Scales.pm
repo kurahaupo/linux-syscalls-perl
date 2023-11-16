@@ -11,7 +11,7 @@ use Exporter 'import';
 our @EXPORT_OK;
 our @EXPORT;
 
-my @si_up = qw( '' k m g t p e z y );
+my @si_up = qw( '' k m g t p e z y r q );
 my %si_up_scales = (
     ''  =>  1,
     d   =>  10,
@@ -50,7 +50,7 @@ sub KB($)    { push @_, 'k'; goto &SI; }
 push @EXPORT_OK, 'SI';
 
 
-my @si_down = qw( '' m µ n p f a z y );
+my @si_down = qw( '' m µ n p f a z y r q );
 my %si_down_scales = (
     ''  =>  1,
     map {
