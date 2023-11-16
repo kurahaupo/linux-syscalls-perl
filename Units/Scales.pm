@@ -33,7 +33,7 @@ sub SI($;$$) {
     my $t = $_[2] || qr/oct\w*|oc|o|byt\w*|by|b/;
     $d = $si_up{lc $d} || $d;
     sub {
-        warn Dumper("SI:", \@_);
+      # warn Dumper("SI:", \@_);
         my $v = shift;
         my $s = $d;
         if ($v =~ s/\D+$//) {
@@ -71,7 +71,7 @@ sub SJ($;$$) {
     my $t = $_[2] || qr/sec\w*|se|s/;
     $d = $si_down{lc $d} || $d;
     sub {
-        warn Dumper("SI:", \@_);
+      # warn Dumper("SI:", \@_);
         my $v = shift;
         my $s = $d;
         if ($v =~ s/\D+$//) {
