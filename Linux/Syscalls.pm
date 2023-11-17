@@ -800,7 +800,10 @@ sub statfs($;$) {
         #  q4  __fsword_t f_spare[4]; /* Padding bytes reserved for future use */
 }
 
+{
+no warnings 'once';
 *statvfs = \&statfs;    # Linux implements statvfs as a library call on top of an extended statfs
+}
 
 _export_ok qw{ statfs statvfs };
 _export_tag qw{
@@ -1393,7 +1396,11 @@ sub renameat($$$$;$) {
   # }
     return $r;
 }
+
+{
+no warnings 'once';
 *renameat2 = \&renameat;
+}
 _export_ok qw{ renameat2 };
 
 ################################################################################
