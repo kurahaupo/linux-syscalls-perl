@@ -1861,6 +1861,8 @@ sub old_getdents_do_not_use_this($;$) {
 package Linux::Syscalls::ioctl {
     # Perlified version of /usr/include/asm-generic/ioctl.h
 
+    use Scalar::Util 'looks_like_number';
+
     # Universal
     use constant _IOC_NRBITS   => 8;
     use constant _IOC_TYPEBITS => 8;
@@ -1901,8 +1903,11 @@ package Linux::Syscalls::ioctl {
 
     sub _IOC($$$$) {
         my ($dir, $type, $nr, $size) = @_;
-        use Carp 'confess';
-        grep { ! defined || /\D|^$/ } @_ and confess 'Non-numeric arg';
+        grep { ! looks_like_number $_ } @_ and do {
+            require 'Carp';
+            Carp:: -> import('confess');
+            confess('Non-numeric arg');
+        };
 
         return $dir  << _IOC_DIRSHIFT
              | $size << _IOC_SIZESHIFT
