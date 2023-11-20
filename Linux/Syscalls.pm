@@ -1017,7 +1017,7 @@ sub linkat($$$$;$) {
 #                                                                                                                                                                 #                       x86_64_x32  <sys/stat.h>                        -_LARGEFILE64_SOURCE    *-__USE_LARGEFILE64    *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -mx32 -DUSE_x32
 #                                                                                                                                                                 # 144 stat64            x86_64_64   <sys/stat.h>                        +_LARGEFILE64_SOURCE=1  *+__USE_LARGEFILE64=1  *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -m64  -DUSE_x64 -D_LARGEFILE64_SOURCE
 #                                                                                                                                                                 #                       x86_64_x32  <sys/stat.h>                        +_LARGEFILE64_SOURCE=1  *+__USE_LARGEFILE64=1  *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -mx32 -DUSE_x32 -D_LARGEFILE64_SOURCE
-{ package Linux::Syscalls::bless::stat; }
+package Linux::Syscalls::bless::stat {}
 
 sub _unpack_stat {
     my ($buffer) = @_;
@@ -1084,9 +1084,7 @@ sub _unpack_stat {
         if defined wantarray;
 }
 
-{
-    package Linux::Syscalls::bless::stat;
-    use parent 'File::stat';
+package Linux::Syscalls::bless::stat {
     sub dev             { $_[0]->[0]  }
     sub ino             { $_[0]->[1]  }
     sub mode            { $_[0]->[2]  }
@@ -1744,8 +1742,7 @@ use constant {
     getdents_maximum_bufsize => 0x100000,
 };
 
-{
-    package Linux::Syscalls::bless::dirent;
+package Linux::Syscalls::bless::dirent {
     sub name  { $_[0]->[0]  }
     sub inode { $_[0]->[1]  }
     sub type  { $_[0]->[2]  }
@@ -1853,8 +1850,7 @@ sub old_getdents_do_not_use_this($;$) {
 
 ################################################################################
 
-{
-    package Linux::Syscalls::ioctl;
+package Linux::Syscalls::ioctl {
     # Perlified version of /usr/include/asm-generic/ioctl.h
 
     # Universal
@@ -1982,8 +1978,7 @@ use constant fiemap_default_bufcount => 1;
 
 use constant FS_IOC_FIEMAP => Linux::Syscalls::ioctl::_IOWR(ord 'f', 11, fiemap_header_size);
 
-{
-    package Linux::Syscalls::bless::fiemap_extent;
+package Linux::Syscalls::bless::fiemap_extent {
     sub logical  { $_[0]->[0]  }
     sub physical { $_[0]->[1]  }
     sub length   { $_[0]->[2]  }
