@@ -83,6 +83,7 @@ BEGIN {
 package Linux::Syscalls::bless::dirent          { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 package Linux::Syscalls::bless::fiemap_extent   { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 package Linux::Syscalls::bless::stat            { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
+package Linux::Syscalls::bless::stat::mutable   { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 package Linux::Syscalls::bless::statfs          { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 package Linux::Syscalls::ioctl                  { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 
@@ -657,7 +658,9 @@ use constant {
     ST_SHARED       => 0x100000,    # Currently shared
 };
 
+
 package Linux::Syscalls::bless::statfs {
+
     use constant {
         ST_VALID => Linux::Syscalls::ST_VALID
     };
@@ -1108,6 +1111,8 @@ package Linux::Syscalls::bless::stat {
     sub _perms          { $_[0]->[2] & 07777 }
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
 
+    sub _mutable        { my ($st, $in_place) = @_; $st = [ @$st ] if ! $in_place; return bless $st, Linux::Syscalls::bless::stat::mutable::; }
+
     use constant {
       # DT_UNKNOWN  => 0,
         DT_FIFO     => 1,   # S_IFIFO  >> 12
@@ -1203,7 +1208,31 @@ package Linux::Syscalls::bless::stat {
         };
         $f->($self);
     };
+}
 
+package Linux::Syscalls::bless::stat::mutable {
+    # A mutable version of bless::stat is intended for use tracking operations
+    # that have been perform on the underlying inode, without having to repeat
+    # the fstat call. Mutable accessors for ino, mode, and blksize are
+    # intentionally omitted.
+    #
+    # For example, after a successful unlink call, simply go $st->nlink--; or
+    # after a successfull chmod(file, $new_perms) call, simply go
+    # $st->_setperms($new_perms).
+    use parent 'Linux::Syscalls::bless::stat';
+    sub nlink   :lvalue { $_[0]->[3]  }
+    sub uid     :lvalue { $_[0]->[4]  }
+    sub gid     :lvalue { $_[0]->[5]  }
+    sub rdev    :lvalue { $_[0]->[6]  }
+    sub size    :lvalue { $_[0]->[7]  }
+    sub atime   :lvalue { $_[0]->[8]  }
+    sub mtime   :lvalue { $_[0]->[9]  }
+    sub ctime   :lvalue { $_[0]->[10] }
+    sub blocks  :lvalue { $_[0]->[12] }
+
+    sub _setperms       { ($_[0]->[2] &= ~07777) |= ($_[1] & 07777); }
+
+    sub _immutable      { my ($st, $in_place) = @_; $st = [ @$st ] if ! $in_place; return bless $st, Linux::Syscalls::bless::stat::; }
 }
 
 _export_ok qw{ statns };
