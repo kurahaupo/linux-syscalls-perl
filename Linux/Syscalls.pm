@@ -1134,9 +1134,9 @@ package Linux::Syscalls::bless::stat {
                            $_[0]->_is_rg ? 02070 :
                                            01007 ) & $_[0]->_perms; }
 
-    sub _is_u { $_[0]->_perms & 04000 }         # File has setuid bit set.
-    sub _is_g { $_[0]->_perms & 02000 }         # File has setgid bit set.
-    sub _is_k { $_[0]->_perms & 01000 }         # File has sticky bit set.
+    sub _is_su { $_[0]->_perms & 04000 }        # File has setuid bit set.
+    sub _is_sg { $_[0]->_perms & 02000 }        # File has setgid bit set.
+    sub _is_sk { $_[0]->_perms & 01000 }        # File has sticky bit set.
 
     sub _is_z { $_[0]->_is_f && ! $_[0]->size } # File has zero size (is empty).
     sub _is_s { $_[0]->_is_f &&   $_[0]->size } # File has nonzero size (returns size in bytes).
@@ -1148,15 +1148,9 @@ package Linux::Syscalls::bless::stat {
     sub _is_b { $_[0]->_dtype == DT_BLK }       # File is a block special file.
     sub _is_c { $_[0]->_dtype == DT_CHR }       # File is a character special file.
 
-    sub _is_M { ($^T - $_[0]->mtime) / 86400 }  # Script start time minus file modification time, in days.
-    sub _is_A { ($^T - $_[0]->atime) / 86400 }  # Script start time minus file access time.
-    sub _is_C { ($^T - $_[0]->ctime) / 86400 }  # Script start time minus file inode change time (Unix, may differ for other platforms)
-  # sub _is_e { 1 },                            # File exists. Necessarily true if we get here
-  # sub _is_t { confess "Not implemented" },    # Filehandle is opened to a tty. (Not implemented; need to call tcgetattr() on original FD)
-  # sub _is_T { confess "Not implemented" },    # File is an ASCII or UTF-8 text file (heuristic guess). (Not implemented; need to read original FD)
-  # sub _is_B { confess "Not implemented" },    # File is a "binary" file (opposite of -T). (Not implemented; need to read original FD)
-
-    use Carp 'confess';
+    sub _age_M { ($^T - $_[0]->mtime) / 86400 } # Script start time minus file modification time, in days.
+    sub _age_A { ($^T - $_[0]->atime) / 86400 } # Script start time minus file access time.
+    sub _age_C { ($^T - $_[0]->ctime) / 86400 } # Script start time minus file inode change time (Unix, may differ for other platforms)
 
     use overload -X => sub {
         my ($self, $op, undef) = @_;
@@ -1166,9 +1160,9 @@ package Linux::Syscalls::bless::stat {
             w =>  \&_is_ew,     W =>  \&_is_rw, # File is writable by effective/real uid/gid.
             x =>  \&_is_ex,     X =>  \&_is_rx, # File is executable by effective/real uid/gid.
             o =>  \&_is_eu,     O =>  \&_is_ru, # File is owned by effective/real uid.
-            u =>  \&_is_u,  # File has setuid bit set.
-            g =>  \&_is_g,  # File has setgid bit set.
-            k =>  \&_is_k,  # File has sticky bit set.
+            u =>  \&_is_su,                     # File has setuid bit set.
+            g =>  \&_is_sg,                     # File has setgid bit set.
+            k =>  \&_is_sk,                     # File has sticky bit set.
 
             z =>  \&_is_z,  # File has zero size (is empty).
             s =>  \&_is_s,  # File has nonzero size (returns size in bytes).
@@ -1180,15 +1174,29 @@ package Linux::Syscalls::bless::stat {
             b =>  \&_is_b,  # File is a block special file.
             c =>  \&_is_c,  # File is a character special file.
 
-            M =>  \&_is_M,  # Script start time minus file modification time, in days.
-            A =>  \&_is_A,  # Script start time minus file access time.
-            C =>  \&_is_C,  # Script start time minus file inode change time (Unix, may differ for other platforms)
-          # e =>  \&_is_e,  # File exists. Necessarily true if we get here
-          # t =>  \&_is_t,  # Filehandle is opened to a tty. (Not implemented; need to call tcgetattr() on original FD)
-          # T =>  \&_is_T,  # File is an ASCII or UTF-8 text file (heuristic guess). (Not implemented; need to read original FD)
-          # B =>  \&_is_B,  # File is a "binary" file (opposite of -T). (Not implemented; need to read original FD)
+            M =>  \&_age_M, # Script start time minus file modification time, in days.
+            A =>  \&_age_A, # Script start time minus file access time.
+            C =>  \&_age_C, # Script start time minus file inode change time (Unix, may differ for other platforms)
+
+            e =>  sub {1},  # File exists, which is necessarily true for fstat
         };
-        $v->{$op}->($self);
+
+        # The tests -t (file is actually a tty), -T (file contents appear to be
+        # ASCII or UTF-8 text), and -B (file contents do not appear to be ASCII
+        # or UTF-8 text) cannot be implemented without additional syscalls
+        # having already been made, since 'struct stat' does not keep the
+        # original filedescriptor on hand. Indeed, it should not keep it, since
+        # the filedescriptor may have be closed since the stat was taken.
+        #
+        #   -t      "no" if type ≠ DT_CHR (!S_ISCHR(mode)), otherwise tcgetattr for confirmation.
+        #   -T, -B  "no" if type ≠ DT_REG (!S_ISREG(mode)), otherwise open+read+close
+
+        my $f = $v->{$op} // sub {
+            require 'Carp';
+            Carp:: -> import('croak');
+            croak("Cannot use $op on result of stat");
+        };
+        $f->($self);
     };
 
 }
