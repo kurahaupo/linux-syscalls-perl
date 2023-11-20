@@ -80,6 +80,12 @@ BEGIN {
     POSIX->import() if $^C;
 }
 
+package Linux::Syscalls::bless::dirent          { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
+package Linux::Syscalls::bless::fiemap_extent   { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
+package Linux::Syscalls::bless::stat            { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
+package Linux::Syscalls::bless::statfs          { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
+package Linux::Syscalls::ioctl                  { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
+
 ################################################################################
 #
 # Fetch a constant without deoptimizing it.
@@ -1017,7 +1023,6 @@ sub linkat($$$$;$) {
 #                                                                                                                                                                 #                       x86_64_x32  <sys/stat.h>                        -_LARGEFILE64_SOURCE    *-__USE_LARGEFILE64    *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -mx32 -DUSE_x32
 #                                                                                                                                                                 # 144 stat64            x86_64_64   <sys/stat.h>                        +_LARGEFILE64_SOURCE=1  *+__USE_LARGEFILE64=1  *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -m64  -DUSE_x64 -D_LARGEFILE64_SOURCE
 #                                                                                                                                                                 #                       x86_64_x32  <sys/stat.h>                        +_LARGEFILE64_SOURCE=1  *+__USE_LARGEFILE64=1  *-__USE_LARGEFILE  -_STAT_VER_LINUX_OLD    +_STAT_VER_KERNEL=0, -_STAT_VER_SVR4,   +_STAT_VER_LINUX=1; COMPILED gcc -mx32 -DUSE_x32 -D_LARGEFILE64_SOURCE
-package Linux::Syscalls::bless::stat {}
 
 sub _unpack_stat {
     my ($buffer) = @_;
