@@ -1207,7 +1207,8 @@ package Linux::Syscalls::bless::stat {
             croak("Cannot use $op on result of stat");
         };
         $f->($self);
-    };
+    },
+    bool => sub {1};
 }
 
 package Linux::Syscalls::bless::stat::mutable {
