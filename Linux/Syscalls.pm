@@ -1788,26 +1788,26 @@ use constant {
 };
 
 {
-my @dt_names = (
-    'unknown',
-    'fifo',
-    'chr',
-    undef,
-    'dir',
-    'nam',
-    'blk',
-    undef,
-    'reg',
-    undef,
-    'lnk',
-    undef,
-    'sock',
-    undef,
-    'wht',
-    undef,
+my %dt_names = (
+    'unknown' => DT_UNKNOWN,
+    'fifo'    => DT_FIFO,
+    'chr'     => DT_CHR,
+    'dir'     => DT_DIR,
+    'nam'     => DT_NAM,
+    'blk'     => DT_BLK,
+    'reg'     => DT_REG,
+    'lnk'     => DT_LNK,
+    'sock'    => DT_SOCK,
+    'wht'     => DT_WHT,
 );
+my @dt_names;
+$#dt_names = 15;
+$dt_names[$dt_names{$_}] = $_ for keys %dt_names;
 sub dt_name($) {
     return $dt_names[$_[0]&15];
+}
+sub dt_val($) {
+    return $dt_names{$_[0]} || ();
 }
 }
 
