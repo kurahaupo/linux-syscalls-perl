@@ -2114,6 +2114,19 @@ sub Exit($) {
 }
 
 #
+# pidfd
+#
+
+_export_tag qw{ proc pidfs => pidfd_open };
+sub pidfd_open($) {
+    my ($pid) = @_;
+    state $syscall_id = _get_syscall_id 'pidfd_open';
+    my $ret = syscall $syscall_id, $pid;
+    return if $ret < 0;
+    return $ret;
+}
+
+#
 # waitid
 #
 # Implement the POSIX waitid call and the Linux-specific extension
@@ -2149,9 +2162,10 @@ my %w_const = (
     WCLONE          =>  0x80000000, # (__WCLONE) Wait only on non-SIGCHLD children
 
     # Values taken from /usr/include/bits/waitflags.h
-    P_ALL           =>  0,         # Any child (ignoring ID)
-    P_PID           =>  1,         # A specific child by PID
-    P_PGID          =>  2,         # Any child within a process group, by PGID
+    P_ALL           =>  0,          # Any child (ignoring ID)
+    P_PID           =>  1,          # A specific child by PID
+    P_PGID          =>  2,          # Any child within a process group, by PGID
+    P_PIDFD         =>  3,          # Child identified by filedescriptor
 
 );
     for my $k (keys %w_const) {
@@ -2181,7 +2195,8 @@ _export_tag qw{ proc si_codes =>
 _export_tag qw{ proc wait_id_types =>
                     P_ALL
                     P_PID
-                    P_PGID };
+                    P_PGID
+                    P_PIDFD };
 
 _export_tag qw{ proc wait_options =>
                     WNOHANG
