@@ -782,6 +782,49 @@ package Linux::Syscalls::bless::statfs {
     sub flag_UNBINDABLE($)  { return $_[0]->[10] & Linux::Syscalls::ST_UNBINDABLE  }
     sub flag_PRIVATE($)     { return $_[0]->[10] & Linux::Syscalls::ST_PRIVATE     }
     sub flag_SHARED($)      { return $_[0]->[10] & Linux::Syscalls::ST_SHARED      }
+
+    BEGIN {
+      # Only create this when Data::Dumper already loaded, or with -c/-W
+      eval q{
+        sub Dump {
+            my $r = $_[0];
+            printf "\ttype: %#.8x (%s)\n",   $r->type, $r->type_name;
+            printf "\tfsid: %#x\n",      $r->fsid;
+
+            if ( not my $f = $r->flags ) {
+                printf "\tflags: %x (NONE)\n", $f;
+            } else {
+                my $g = $f ^ ST_VALID;
+                our @flag_names = qw(
+                    rdonly nosuid nodev noexec synchronous INVALID mandlock
+                    write append immutable noatime nodiratime relatime
+                    FLAG#13 FLAG#14 FLAG#15 FLAG#16
+                    unbindable private FLAG#19 shared
+                );
+                printf "\tflags: %#.4x (%s)\n", $f,
+                    join ",", (map { $g & (1<<$_) && $flag_names[$_] || () } 5, 0 .. 4, 6 .. $#flag_names),
+                    ( $g &= ~0 << $#flag_names+1 ) ? sprintf " +%#x,", $g : ();
+            }
+
+            printf "\tblk-size: %d\n",  $r->bsize;
+            printf "\tfrag-size: %d\n", $r->frsize;
+
+            printf "\tblocks: %d\n",    $r->blocks;
+            printf "\t  free: %d\n",    $r->bfree;
+            printf "\t avail: %d\n",    $r->bavail;
+
+            printf "\tinodes: %d\n",    $r->files;
+            printf "\t  free: %d\n",    $r->ffree;
+
+            printf "\tnamelen: %d\n",   $r->namelen;
+
+            print "\tspares:\n";
+            printf "\t\t%#.8x (%d)\n", $_, $_ for $r->spares;
+            print "\n";
+        }
+        1;
+      } or die $@ if $^C || $^W || exists &Data::Dumper::Dump;
+    }
 }
 
 sub statfs($;$) {
