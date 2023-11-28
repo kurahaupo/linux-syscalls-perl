@@ -1950,8 +1950,6 @@ package Linux::Syscalls::ioctl {
              | $nr   << _IOC_NRSHIFT;
     }
 
-    #sub _IOC_packsize($) { my ($t) = @_; return $t =~ /\D/ ? length pack $t, (0) x 99 : $t; } # (sizeof(t))
-
     #/* used to create numbers */
     sub _IO($$)         { my ($type, $nr)        = @_; return _IOC( _IOC_NONE,  $type, $nr, 0 ); }
     sub _IOR($$$)       { my ($type, $nr, $size) = @_; return _IOC( _IOC_READ,  $type, $nr, $size ); }
