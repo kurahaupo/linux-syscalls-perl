@@ -12,15 +12,49 @@ use Exporter 'import';
 
 use Config;
 
-our $m32 = ! $Config{use64bitint};
-our $use_arch_want_sync_file_range2 = 0;
 our $have_MMU = 1;
+our $m32 = ! $Config{use64bitint};
+our $use_32bit_off_t = 0;
+our $use_arch_want_sync_file_range2 = 0;
+our $use_arch_want_syscall_deprecated = 0;
 our $use_arch_want_syscall_no_at = 0;
 our $use_arch_want_syscall_no_flags = 0;
-our $use_32bit_off_t = 0;
-our $use_arch_want_syscall_deprecated = 0;
+our $use_arch_want_time32_syscalls = 0;
+our $use_syscall_compat = 0;
+
+sub __SYSCALL {
+    my ($nr, $name) = @_;
+    $name =~ s/^__NR_//;
+    $name =~ s/^compat_//;
+    $name =~ s/^sys_//;
+    return $name => $nr;
+}
+
+sub __SC_3264 {
+    my ($_nr, $_32, $_64) = @_;
+    if ($m32) {
+        return __SYSCALL($_nr, $_32);
+    } else {
+        return __SYSCALL($_nr, $_64);
+    }
+}
+
+#if __BITS_PER_LONG == 32 || defined(__SYSCALL_COMPAT)
+#define __SC_3264(_nr, _32, _64) __SYSCALL(_nr, _32)
+#else
+#define __SC_3264(_nr, _32, _64) __SYSCALL(_nr, _64)
+#endif
+
+#ifdef __SYSCALL_COMPAT
+#define __SC_COMP(_nr, _sys, _comp) __SYSCALL(_nr, _comp)
+#define __SC_COMP_3264(_nr, _32, _64, _comp) __SYSCALL(_nr, _comp)
+#else
+#define __SC_COMP(_nr, _sys, _comp) __SYSCALL(_nr, _sys)
+#define __SC_COMP_3264(_nr, _32, _64, _comp) __SC_3264(_nr, _32, _64)
+#endif
 
 our %syscall_map = (
+
         # FROM /usr/include/asm-generic/unistd.h
         #
         # This file contains the system call numbers, based on the
@@ -125,7 +159,7 @@ our %syscall_map = (
         getdents64              => 61,
         ## fs/read_write.c
         ($m32 ? 'llseek'
-              : 'lseek')        => 62,
+              : 'lseek')        => 62,  # lseek64
         read                    => 63,
         write                   => 64,
         readv                   => 65,
@@ -196,12 +230,12 @@ our %syscall_map = (
         delete_module           => 106,
         ## kernel/posix-timers.c
         timer_create            => 107,
-        timer_gettime           => 108,
+        timer_gettime32         => 108,
         timer_getoverrun        => 109,
-        timer_settime           => 110,
+        timer_settime32         => 110,
         timer_delete            => 111,
-        clock_settime           => 112,
-        clock_gettime           => 113,
+        clock_settime32         => 112,
+        clock_gettime32         => 113,
         clock_getres            => 114,
         clock_nanosleep         => 115,
         ## kernel/printk.c
@@ -352,11 +386,13 @@ our %syscall_map = (
         perf_event_open         => 241,
         accept4                 => 242,
         recvmmsg                => 243,
+
         #define __NR_arch_specific_syscall 244
         #
         # Architectures may provide up to 16 syscalls of their own
         # starting with this value.
         #
+
         wait4                   => 260,
         prlimit64               => 261,
         fanotify_init           => 262,
@@ -375,6 +411,95 @@ our %syscall_map = (
         ni_syscall              => 275,
         ni_syscall              => 276,
         seccomp                 => 277,
+
+        getrandom	=> 278,
+        memfd_create	=> 279,
+        bpf	=> 280,
+        execveat	=> 281,
+        userfaultfd	=> 282,
+        membarrier	=> 283,
+        mlock2	=> 284,
+        copy_file_range	=> 285,
+        preadv2	=> 286,
+        pwritev2	=> 287,
+        pkey_mprotect	=> 288,
+        pkey_alloc	=> 289,
+        pkey_free	=> 290,
+        statx	=> 291,
+        $use_arch_want_time32_syscalls || ! $m32 ? (
+#if defined(__ARCH_WANT_TIME32_SYSCALLS) || __BITS_PER_LONG != 32
+        ($m32 ? 'io_pgetevents' : 'io_pgetevents_time32')
+                                => 292,
+        #__SC_COMP_3264(__NR_io_pgetevents, sys_io_pgetevents_time32, sys_io_pgetevents, compat_sys_io_pgetevents)
+#endif
+        ) : (),
+
+        rseq	=> 293,
+        kexec_file_load	=> 294,
+
+        ## 295 through 402 are unassigned to sync up with generic numbers, don't use
+
+#if __BITS_PER_LONG == 32
+    $m32 ? (
+        clock_gettime	=> 403,	clock_gettime64	=> 403,
+        clock_settime	=> 404,	clock_settime64	=> 404,
+        clock_adjtime	=> 405,	clock_adjtime64	=> 405,
+        clock_getres	=> 406,	clock_getres_t64	=> 406,
+        clock_nanosleep	=> 407,	clock_nanosleep_t64	=> 407,
+        timer_gettime	=> 408,	timer_gettime64	=> 408,
+        timer_settime	=> 409,	timer_settime64	=> 409,
+        timerfd_gettime	=> 410,	timerfd_gettime64	=> 410,
+        timerfd_settime	=> 411,	timerfd_settime64	=> 411,
+        utimensat	=> 412,	utimensat_t64	=> 412,
+        pselect6	=> 413,	pselect6_t64	=> 413,
+        ppoll	=> 414,	ppoll_t64	=> 414,
+        io_pgetevents	=> 416,	io_pgetevents_t64	=> 416,
+        recvmmsg	=> 417,	recvmmsg_t64	=> 417,
+        mq_timedsend	=> 418,	mq_timedsend_t64	=> 418,
+        mq_timedreceive	=> 419,	mq_timedreceive_t64	=> 419,
+        semtimedop	=> 420,	semtimedop_t64	=> 420,
+        rt_sigtimedwait	=> 421,	rt_sigtimedwait_t64	=> 421,
+        futex	=> 422,	futex_t64	=> 422,
+        sched_rr_get_interval	=> 423,	sched_rr_get_interval_t64	=> 423,
+    ) : (),
+#endif
+
+        pidfd_send_signal	=> 424,
+        io_uring_setup	=> 425,
+        io_uring_enter	=> 426,
+        io_uring_register	=> 427,
+        open_tree	=> 428,
+        move_mount	=> 429,
+        fsopen	=> 430,
+        fsconfig	=> 431,
+        fsmount	=> 432,
+        fspick	=> 433,
+        pidfd_open	=> 434,
+#ifdef __ARCH_WANT_SYS_CLONE3
+        clone3	=> 435,
+#endif
+        close_range	=> 436,
+
+        openat2	=> 437,
+        pidfd_getfd	=> 438,
+        faccessat2	=> 439,
+        process_madvise	=> 440,
+        epoll_pwait2	=> 441,
+        mount_setattr	=> 442,
+        quotactl_fd	=> 443,
+
+        landlock_create_ruleset	=> 444,
+        landlock_add_rule	=> 445,
+        landlock_restrict_self	=> 446,
+
+#ifdef __ARCH_WANT_MEMFD_SECRET
+        memfd_secret	=> 447,
+#endif
+        process_mrelease	=> 448,
+
+        # Last+1
+        __NR_syscalls           => 449,
+
         #
         # All syscalls below here should go away really,
         # these are provided for both review and as a porting
