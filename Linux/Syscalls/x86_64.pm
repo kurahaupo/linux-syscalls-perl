@@ -5,12 +5,14 @@ use warnings;
 
 package Linux::Syscalls::x86_64;
 
-use Exporter 'import';
-
 use Config;
+use Exporter 'import';
 
 #
 # This file supports x86_64 in both 64-bit and 32-bit modes.
+#
+# The 32-bit mode is untested because I've yet to obtain a version of Perl
+# compiled with '-mx32'. If you have one, please let me know.
 #
 # Alternative names are available for some syscalls:
 #   fadvise                 ← fadvise64
@@ -19,15 +21,30 @@ use Config;
 #   prlimit                 ← prlimit64
 #
 
-my $x32 = ! $Config{use64bitall};
+# On x86 platforms, the choice of architecture is given by this logic (in
+# /usr/include/x86_64-linux-gnu/asm/unistd.h):
+#   ifdef __i386__
+#    include <asm/unistd_32.h>   /* ia32 */
+#   elif defined(__ILP32__)
+#    include <asm/unistd_x32.h>  /* x86_32 */
+#   else
+#    include <asm/unistd_64.h>   /* x86_64 */
+#   endif
+
+my $x32 = $Config{ptrsize} == 4;   # normally 8
 
 our @EXPORT = (qw(
     %pack_map
     %syscall_map
+    $x32
 ));
 
+use constant { X32_SYSCALL_BIT => 0x40000000 };    # 1 << 30
+
 our %syscall_map = (
-    # FROM /usr/include/i386-linux-gnu/asm/unistd_64.h
+
+    # FROM /usr/include/x86_64-linux-gnu/asm/unistd_64.h
+
     read                    =>   0,
     write                   =>   1,
     open                    =>   2,
@@ -346,6 +363,49 @@ our %syscall_map = (
     sched_getattr           => 315,
     renameat2               => 316,
     seccomp                 => 317,
+    getrandom               => 318,
+    memfd_create            => 319,
+    kexec_file_load         => 320,
+    bpf                     => 321,
+    execveat                => 322,
+    userfaultfd             => 323,
+    membarrier              => 324,
+    mlock2                  => 325,
+    copy_file_range         => 326,
+    preadv2                 => 327,
+    pwritev2                => 328,
+    pkey_mprotect           => 329,
+    pkey_alloc              => 330,
+    pkey_free               => 331,
+    statx                   => 332,
+    io_pgetevents           => 333,
+    rseq                    => 334,
+    pidfd_send_signal       => 424,
+    io_uring_setup          => 425,
+    io_uring_enter          => 426,
+    io_uring_register       => 427,
+    open_tree               => 428,
+    move_mount              => 429,
+    fsopen                  => 430,
+    fsconfig                => 431,
+    fsmount                 => 432,
+    fspick                  => 433,
+    pidfd_open              => 434,
+    clone3                  => 435,
+    close_range             => 436,
+    openat2                 => 437,
+    pidfd_getfd             => 438,
+    faccessat2              => 439,
+    process_madvise         => 440,
+    epoll_pwait2            => 441,
+    mount_setattr           => 442,
+    quotactl_fd             => 443,
+    landlock_create_ruleset => 444,
+    landlock_add_rule       => 445,
+    landlock_restrict_self  => 446,
+    memfd_secret            => 447,
+    process_mrelease        => 448,
+
 );
 
 our %pack_map = (
@@ -361,16 +421,16 @@ our %pack_map = (
                    .'x[L11]',   # pad 11 more 32-bit integers
                     # (everything except modes is signed, which is why lx![q] instead of q)
 
-    time_t       => $x32 ? 'l'  : 'q',          # seconds
-    timespec     => $x32 ? 'lL' : 'qLx![q]',    # seconds, nanoseconds
-    timeval      => $x32 ? 'lL' : 'qLx![q]',    # seconds, microseconds
+    time_t       => 'q',          # seconds
+    timespec     => 'qLx![q]',    # seconds, nanoseconds
+    timeval      => 'qLx![q]',    # seconds, microseconds
 );
 
 if ( $x32 ) {
     # Perl compiled as 32-bit (but for x86_64 architecture)
 
     # FROM /usr/include/x86_64-linux-gnu/asm/unistd_x32.h
-    use constant { _B9 => 0x200 };          # 1 << 9
+    use constant { _B9 => 0x200 };              # 1<<9
     $syscall_map{rt_sigaction}      =  0 | _B9; # replaces x86_64 call #13
     $syscall_map{rt_sigreturn}      =  1 | _B9; # replaces x86_64 call #15
     $syscall_map{ioctl}             =  2 | _B9; # replaces x86_64 call #16
@@ -404,9 +464,9 @@ if ( $x32 ) {
     $syscall_map{getsockopt}        = 30 | _B9; # replaces x86_64 call #55
     $syscall_map{io_setup}          = 31 | _B9; # replaces x86_64 call #206
     $syscall_map{io_submit}         = 32 | _B9; # replaces x86_64 call #209
-
-    use constant { _B30 => 0x40000000 };    # 1 << 30
-    $_ |= _B30 for values %syscall_map;
+    $syscall_map{execveat}          = 33 | _B9; # replaces x86_64 call #322
+    $syscall_map{preadv2}           = 34 | _B9; # replaces x86_64 call #327
+    $syscall_map{pwritev2}          = 35 | _B9; # replaces x86_64 call #328
 
     # Only x86_64 - no _32 equivalent
     delete $syscall_map{uselib};
@@ -421,8 +481,11 @@ if ( $x32 ) {
     delete $syscall_map{epoll_wait_old};
     delete $syscall_map{vserver};
 
-#   $pack_map{} = ""; ...
-}
+    $_ |= X32_SYSCALL_BIT for values %syscall_map;
 
+    $pack_map{time_t}   = 'l' ;     # seconds
+    $pack_map{timespec} = 'lL';     # seconds, nanoseconds
+    $pack_map{timeval}  = 'lL';     # seconds, microseconds
+}
 
 1;
