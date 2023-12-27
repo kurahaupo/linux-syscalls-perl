@@ -380,6 +380,7 @@ our %syscall_map = (
         statx                   => 332,
         io_pgetevents           => 333,
         rseq                    => 334,
+
         pidfd_send_signal       => 424,
         io_uring_setup          => 425,
         io_uring_enter          => 426,
