@@ -486,13 +486,13 @@ BEGIN {
 
     # Normalize all of i386, i486, i586, i686, & i786 to "ia32" (which was Intel's official name for it).
     defined && m/^i[3-7]86$/ and $_ = 'ia32' for $running_on_hw, $built_for_hw;
+    my @try = 'generic';
+    push @try, $built_for_hw || ();
+    push @try, $running_on_hw || ();
+    push @try, 'mips_o32' if $running_on_hw eq 'mipsel';
 
     my @e;
-    for my $mm ( do { my %seen; grep { defined && ! $seen{$_}++ }
-        $built_for_hw,
-        $running_on_hw,
-        'generic',
-    } ) {
+    for my $mm ( do { my %seen; grep { defined && ! $seen{$_}++ } @try } ) {
         my $m = "${built_for_os}::Syscalls::$mm";
         warn "Trying to load $m" if $^C && $^W;
         eval qq{
