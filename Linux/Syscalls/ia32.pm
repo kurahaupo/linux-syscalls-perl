@@ -6,8 +6,8 @@ use warnings;
 package Linux::Syscalls::ia32;
 
 #
-# This file supports i386, i586 & i686
-
+# This file supports i386, i586 & i686, in 32-bit mode.
+#
 # On x86 platforms, the choice of architecture is given by this logic (in
 # /usr/include/x86_64-linux-gnu/asm/unistd.h):
 #   ifdef __i386__
