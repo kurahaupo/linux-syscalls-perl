@@ -13,61 +13,35 @@ use Exporter 'import';
 use Config;
 
 our $have_MMU = 1;
-our $m32 = ! $Config{use64bitint};
-our $use_32bit_off_t = 0;
-our $use_arch_want_sync_file_range2 = 0;
+our $m32 = ! $Config{use64bitint};              # in 32-bit mode
+our $use_32bit_off_t = $m32;
+our $use_32bit_time_t = 0;                      # only on very old Linux (effectively never)
+our $use_arch_want_sync_file_range_padding_arg = 0; # only ARM & PowerPC, and only 32-bit
 our $use_arch_want_syscall_deprecated = 0;
-our $use_arch_want_syscall_no_at = 0;
-our $use_arch_want_syscall_no_flags = 0;
-our $use_arch_want_time32_syscalls = 0;
-our $use_syscall_compat = 0;
+our $use_arch_want_syscall_without_at = 0;      # fstat etc (in addition to fstatat)
+our $use_arch_want_syscall_without_flags = 0;
 
-sub __SYSCALL {
-    my ($nr, $name) = @_;
-    $name =~ s/^__NR_//;
-    $name =~ s/^compat_//;
-    $name =~ s/^sys_//;
-    return $name => $nr;
-}
-
-sub __SC_3264 {
-    my ($_nr, $_32, $_64) = @_;
-    if ($m32) {
-        return __SYSCALL($_nr, $_32);
-    } else {
-        return __SYSCALL($_nr, $_64);
-    }
-}
-
-#if __BITS_PER_LONG == 32 || defined(__SYSCALL_COMPAT)
-#define __SC_3264(_nr, _32, _64) __SYSCALL(_nr, _32)
-#else
-#define __SC_3264(_nr, _32, _64) __SYSCALL(_nr, _64)
-#endif
-
-#ifdef __SYSCALL_COMPAT
-#define __SC_COMP(_nr, _sys, _comp) __SYSCALL(_nr, _comp)
-#define __SC_COMP_3264(_nr, _32, _64, _comp) __SYSCALL(_nr, _comp)
-#else
-#define __SC_COMP(_nr, _sys, _comp) __SYSCALL(_nr, _sys)
-#define __SC_COMP_3264(_nr, _32, _64, _comp) __SC_3264(_nr, _32, _64)
-#endif
+# In older architectures there are groups of syscalls (each with their own name
+# and number) that all perform substantially the same task, but the newer
+# syscalls have additional options or wider arguments. Generally the newest of
+# such a group is "maximal", having the most features and/or widest arguments.
+#
+# Linux porting policy suggest that only the maximal syscall of each such group
+# be included in the generic syscalls list, with the other names provided by
+# libc wrappers. Generally that maximal syscall is the only one we actually
+# use, and the name chosen here reflects that.
+#
+# Most of these names are merely placeholders until the relevant functions are
+# written and ported to each platform, at which point these choices will be
+# re-assessed, guided by compatibility with syscall.pl.
+#
+# Where versions with narrower arguments are enabled, they generally have a
+# width suffix added.
 
 our %syscall_map = (
 
         # FROM /usr/include/asm-generic/unistd.h
-        #
-        # This file contains the system call numbers, based on the
-        # layout of the x86-64 architecture, which embeds the
-        # pointer to the syscall in the table.
-        #
-        # As a basic principle, no duplication of functionality
-        # should be added, e.g. we don't use lseek when llseek
-        # is present. New architectures should use this file
-        # and implement the less feature-full calls in user space.
-        #
-        # CC denotes "COMPAT" mode
-        #
+
         io_setup                => 0,
         io_destroy              => 1,
         io_submit               => 2,
@@ -99,9 +73,7 @@ our %syscall_map = (
         ## fs/fcntl.c
         dup                     => 23,
         dup3                    => 24,
-        ($m32 ? 'fcntl64'
-              : 'fcntl')        => 25,
-        CCfcntl64               => 25,
+        fcntl                   => 25,      fcntl64                 => 25,
         ## fs/inotify_user.c
         inotify_init1           => 26,
         inotify_add_watch       => 27,
@@ -121,24 +93,16 @@ our %syscall_map = (
         linkat                  => 37,
         renameat                => 38,
         ## fs/namespace.c
-        umount                  => 39,
+        umount2                 => 39,      # umount(P) ⇒ umount2(P,0)
         mount                   => 40,
         pivot_root              => 41,
         ## fs/nfsctl.c
-        ni_syscall              => 42,
+    #   not_implemented_42      => 42,
         ## fs/open.c
-        ($m32 ? 'statfs64'
-              : 'statfs')       => 43,
-        CCstatfs64              => 43,
-        ($m32 ? 'fstatfs64'
-              : 'fstatfs')      => 44,
-        CCfstatfs64             => 44,
-        ($m32 ? 'truncate64'
-              : 'truncate')     => 45,
-        CCtruncate64            => 45,
-        ($m32 ? 'ftruncate64'
-              : 'ftruncate')    => 46,
-        CCftruncate64           => 46,
+        statfs                  => 43,      statfs64                => 43,
+        fstatfs                 => 44,      fstatfs64               => 44,
+        truncate                => 45,      truncate64              => 45,
+        ftruncate               => 46,      ftruncate64             => 46,
         fallocate               => 47,
         faccessat               => 48,
         chdir                   => 49,
@@ -156,10 +120,9 @@ our %syscall_map = (
         ## fs/quota.c
         quotactl                => 60,
         ## fs/readdir.c
-        getdents64              => 61,
+        getdents                => 61,      getdents64              => 61,
         ## fs/read_write.c
-        ($m32 ? 'llseek'
-              : 'lseek')        => 62,  # lseek64
+        lseek                   => 62,      lseek64                 => 62,      llseek                  => 62,
         read                    => 63,
         write                   => 64,
         readv                   => 65,
@@ -171,8 +134,8 @@ our %syscall_map = (
         ## fs/sendfile.c
         sendfile64              => 71,
         ## fs/select.c
-        pselect6                => 72,
-        ppoll                   => 73,
+        pselect6                => 72,      pselect64               => 72,      # unless in 32-bit mode; actual syscall is pselect6, which modifies the timeout even on EINTR
+        ppoll                   => 73,      ppoll64                 => 73,      # unless in 32-bit mode
         ## fs/signalfd.c
         signalfd4               => 74,
         ## fs/splice.c
@@ -181,25 +144,19 @@ our %syscall_map = (
         tee                     => 77,
         ## fs/stat.c
         readlinkat              => 78,
-        ($m32 ? 'fstatat64'
-              : 'newfstatat')     => 79,
-        ($m32 ? 'fstat64'
-              : 'newfstat')     => 80,
+        fstatat                 => 79,      fstatat64               => 79,
+        fstat                   => 80,      fstat64                 => 80,
         ## fs/sync.c
         sync                    => 81,
         fsync                   => 82,
         fdatasync               => 83,
-    $use_arch_want_sync_file_range2 ? (
-        sync_file_range2        => 84,
-    ) : (
-        sync_file_range         => 84,
-    ),
+        sync_file_range         => 84,      # for 32-bit on ARM & PowerPC this might be sync_file_range2 (to allow for padding arg)
         ## fs/timerfd.c
         timerfd_create          => 85,
-        timerfd_settime         => 86,
-        timerfd_gettime         => 87,
+        timerfd_settime         => 86,      timerfd_settime64       => 86,      # unless in 32-bit mode
+        timerfd_gettime         => 87,      timerfd_gettime64       => 87,      # unless in 32-bit mode
         ## fs/utimes.c
-        utimensat               => 88,
+        utimensat               => 88,      utimensat64             => 88,      # unless in 32-bit mode
         ## kernel/acct.c
         acct                    => 89,
         ## kernel/capability.c
@@ -215,7 +172,7 @@ our %syscall_map = (
         set_tid_address         => 96,
         unshare                 => 97,
         ## kernel/futex.c
-        futex                   => 98,
+        futex                   => 98,      futex64                 => 98,      # unless in 32-bit-mode
         set_robust_list         => 99,
         get_robust_list         => 100,
         ## kernel/hrtimer.c
@@ -230,14 +187,14 @@ our %syscall_map = (
         delete_module           => 106,
         ## kernel/posix-timers.c
         timer_create            => 107,
-        timer_gettime32         => 108,
+        timer_gettime           => 108,     timer_gettime64         => 108,     # unless in 32-bit mode
         timer_getoverrun        => 109,
-        timer_settime32         => 110,
+        timer_settime           => 110,     timer_settime64         => 110,     # unless in 32-bit mode
         timer_delete            => 111,
-        clock_settime32         => 112,
-        clock_gettime32         => 113,
-        clock_getres            => 114,
-        clock_nanosleep         => 115,
+        clock_settime           => 112,     clock_settime64         => 112,     # unless in 32-bit mode
+        clock_gettime           => 113,     clock_gettime64         => 113,     # unless in 32-bit mode
+        clock_getres            => 114,     clock_getres64          => 114,     # unless in 32-bit mode
+        clock_nanosleep         => 115,     clock_nanosleep64       => 115,     # unless in 32-bit mode
         ## kernel/printk.c
         syslog                  => 116,
         ## kernel/ptrace.c
@@ -252,7 +209,7 @@ our %syscall_map = (
         sched_yield             => 124,
         sched_get_priority_max  => 125,
         sched_get_priority_min  => 126,
-        sched_rr_get_interval   => 127,
+        sched_rr_get_interval   => 127,     sched_rr_get_interval64 => 127,     # unless in 32-bit-mode
         ## kernel/signal.c
         restart_syscall         => 128,
         kill                    => 129,
@@ -263,7 +220,7 @@ our %syscall_map = (
         rt_sigaction            => 134,
         rt_sigprocmask          => 135,
         rt_sigpending           => 136,
-        rt_sigtimedwait         => 137,
+        rt_sigtimedwait         => 137,     rt_sigtimedwait64       => 137,     # unless in 32-bit-mode
         rt_sigqueueinfo         => 138,
         rt_sigreturn            => 139,
         ## kernel/sys.c
@@ -287,7 +244,7 @@ our %syscall_map = (
         setsid                  => 157,
         getgroups               => 158,
         setgroups               => 159,
-        newuname                => 160,
+        uname                   => 160,
         sethostname             => 161,
         setdomainname           => 162,
         getrlimit               => 163,
@@ -312,8 +269,8 @@ our %syscall_map = (
         ## ipc/mqueue.c
         mq_open                 => 180,
         mq_unlink               => 181,
-        mq_timedsend            => 182,
-        mq_timedreceive         => 183,
+        mq_timedsend            => 182,     mq_timedsend64          => 182,     # unless in 32-bit-mode
+        mq_timedreceive         => 183,     mq_timedreceive64       => 183,     # unless in 32-bit-mode
         mq_notify               => 184,
         mq_getsetattr           => 185,
         ## ipc/msg.c
@@ -324,7 +281,7 @@ our %syscall_map = (
         ## ipc/sem.c
         semget                  => 190,
         semctl                  => 191,
-        semtimedop              => 192,
+        semtimedop              => 192,     semtimedop64            => 192,     # unless in 32-bit-mode
         semop                   => 193,
         ## ipc/shm.c
         shmget                  => 194,
@@ -360,11 +317,20 @@ our %syscall_map = (
         ## arch/example/kernel/sys_example.c
         clone                   => 220,
         execve                  => 221,
-        ($m32 ? 'mmap2'
-              : 'mmap')         => 222,
+        # Syscall 222 implements two different syscalls, depending on the
+        # architecture:
+        #   → on 32-bit platforms (with 32-bit off_t and 64-bit loff_t), the file offset is in
+        #     PAGES, as documented in "man mmap2";
+        #   → on 64-bit platforms (with 64-bit off_t), the file offset is (as
+        #     usual) in bytes, as documented in "man mmap".
+    $use_32bit_off_t ? (
+        mmap2                   => 222,
+    ) : (
+        mmap                    => 222,
+    ),
         ## mm/fadvise.c
-        fadvise64_64            => 223,
-      $have_MMU ? (
+        fadvise                 => 223,     fadvise64               => 223,     # (note strange naming of the fadvise syscall, either fadvise64 or fadvise64_64)
+    $have_MMU ? (
         swapon                  => 224,
         swapoff                 => 225,
         mprotect                => 226,
@@ -381,11 +347,11 @@ our %syscall_map = (
         set_mempolicy           => 237,
         migrate_pages           => 238,
         move_pages              => 239,
-      ) : (),
+    ) : (),
         rt_tgsigqueueinfo       => 240,
         perf_event_open         => 241,
         accept4                 => 242,
-        recvmmsg                => 243,
+        recvmmsg                => 243,     recvmmsg64              => 243,     # unless in 32-bit-mode
 
         #define __NR_arch_specific_syscall 244
         #
@@ -399,7 +365,7 @@ our %syscall_map = (
         fanotify_mark           => 263,
         name_to_handle_at       => 264,
         open_by_handle_at       => 265,
-        clock_adjtime           => 266,
+        clock_adjtime           => 266,     clock_adjtime64         => 266,     # unless in 32-bit mode
         syncfs                  => 267,
         setns                   => 268,
         sendmmsg                => 269,
@@ -407,9 +373,9 @@ our %syscall_map = (
         process_vm_writev       => 271,
         kcmp                    => 272,
         finit_module            => 273,
-        ni_syscall              => 274,
-        ni_syscall              => 275,
-        ni_syscall              => 276,
+    #   not_implemented_274     => 274,
+    #   not_implemented_275     => 275,
+    #   not_implemented_276     => 276,
         seccomp                 => 277,
 
         getrandom               => 278,
@@ -426,14 +392,7 @@ our %syscall_map = (
         pkey_alloc              => 289,
         pkey_free               => 290,
         statx                   => 291,
-        $use_arch_want_time32_syscalls || ! $m32 ? (
-#if defined(__ARCH_WANT_TIME32_SYSCALLS) || __BITS_PER_LONG != 32
-        ($m32 ? 'io_pgetevents' : 'io_pgetevents_time32')
-                                => 292,
-        #__SC_COMP_3264(__NR_io_pgetevents, sys_io_pgetevents_time32, sys_io_pgetevents, compat_sys_io_pgetevents)
-#endif
-        ) : (),
-
+        io_pgetevents           => 292,     io_pgetevents64         => 292,     # unless in 32-bit mode
         rseq                    => 293,
         kexec_file_load         => 294,
 
@@ -441,26 +400,27 @@ our %syscall_map = (
 
 #if __BITS_PER_LONG == 32
     $m32 ? (
-        clock_gettime           => 403,     clock_gettime64         => 403,
-        clock_settime           => 404,     clock_settime64         => 404,
-        clock_adjtime           => 405,     clock_adjtime64         => 405,
-        clock_getres            => 406,     clock_getres_t64        => 406,
-        clock_nanosleep         => 407,     clock_nanosleep_t64     => 407,
-        timer_gettime           => 408,     timer_gettime64         => 408,
-        timer_settime           => 409,     timer_settime64         => 409,
-        timerfd_gettime         => 410,     timerfd_gettime64       => 410,
-        timerfd_settime         => 411,     timerfd_settime64       => 411,
-        utimensat               => 412,     utimensat_t64           => 412,
-        pselect6                => 413,     pselect6_t64            => 413,
-        ppoll                   => 414,     ppoll_t64               => 414,
-        io_pgetevents           => 416,     io_pgetevents_t64       => 416,
-        recvmmsg                => 417,     recvmmsg_t64            => 417,
-        mq_timedsend            => 418,     mq_timedsend_t64        => 418,
-        mq_timedreceive         => 419,     mq_timedreceive_t64     => 419,
-        semtimedop              => 420,     semtimedop_t64          => 420,
-        rt_sigtimedwait         => 421,     rt_sigtimedwait_t64     => 421,
-        futex                   => 422,     futex_t64               => 422,
-        sched_rr_get_interval   => 423,     sched_rr_get_interval_t64 => 423,
+        # Only present in later versions of /usr/include/asm-generic/unistd.h
+        clock_gettime           => 403,     clock_gettime64         => 403,     clock_gettime32         => 113,
+        clock_settime           => 404,     clock_settime64         => 404,     clock_settime32         => 112,
+        clock_adjtime           => 405,     clock_adjtime64         => 405,     clock_adjtime32         => 266,
+        clock_getres            => 406,     clock_getres64          => 406,     clock_getres32          => 114, # __NR_clock_getres_time64=406
+        clock_nanosleep         => 407,     clock_nanosleep64       => 407,     clock_nanosleep32       => 115,
+        timer_gettime           => 408,     timer_gettime64         => 408,     timer_gettime32         => 108,
+        timer_settime           => 409,     timer_settime64         => 409,     timer_settime32         => 110,
+        timerfd_gettime         => 410,     timerfd_gettime64       => 410,     timerfd_gettime32       => 87,
+        timerfd_settime         => 411,     timerfd_settime64       => 411,     timerfd_settime32       => 86,
+        utimensat               => 412,     utimensat64             => 412,     utimensat32             => 88,
+        pselect6                => 413,     pselect64               => 413,     pselect32               => 72,
+        ppoll                   => 414,     ppoll64                 => 414,     ppoll                   => 73,
+        io_pgetevents           => 416,     io_pgetevents64         => 416,     io_pgetevents32         => 292,
+        recvmmsg                => 417,     recvmmsg64              => 417,     recvmmsg32              => 243,
+        mq_timedsend            => 418,     mq_timedsend64          => 418,     mq_timedsend32          => 182,
+        mq_timedreceive         => 419,     mq_timedreceive64       => 419,     mq_timedreceive32       => 183,
+        semtimedop              => 420,     semtimedop64            => 420,     semtimedop32            => 192,
+        rt_sigtimedwait         => 421,     rt_sigtimedwait64       => 421,     rt_sigtimedwait32       => 137,
+        futex                   => 422,     futex64                 => 422,     futex32                 => 98,
+        sched_rr_get_interval   => 423,     sched_rr_get_interval64 => 423,     sched_rr_get_interval32 => 127, # __NR_sched_rr_get_interval_time64=423
     ) : (),
 #endif
 
@@ -501,83 +461,75 @@ our %syscall_map = (
         __NR_syscalls           => 449,
 
         #
-        # All syscalls below here should go away really,
-        # these are provided for both review and as a porting
-        # help for the C library version.
+        # Linux porting guidelines suggest that all the following syscalls
+        # should be omitted when porting to a new architecture.
         #
-        # Last chance: are any of these important enough to
-        # enable by default?
-        #
-    $use_arch_want_syscall_no_at ? (
-        open                    => 1024,
-        link                    => 1025,
-        unlink                  => 1026,
-        mknod                   => 1027,
-        chmod                   => 1028,
-        chown                   => 1029,
-        mkdir                   => 1030,
-        rmdir                   => 1031,
-        lchown                  => 1032,
-        access                  => 1033,
-        rename                  => 1034,
-        readlink                => 1035,
-        symlink                 => 1036,
-        utimes                  => 1037,
-        ($m32 ? 'stat64'
-              : 'newstat')      => 1038,
-        ($m32 ? 'lstat64'
-              : 'newlstat')     => 1039,
+    $use_arch_want_syscall_without_at ? (
+        open                    => 1024,    # use openat2 instead
+        link                    => 1025,    # use linkat instead
+        unlink                  => 1026,    # use unlinkat instead
+        mknod                   => 1027,    # use mknodat instead
+        chmod                   => 1028,    # use fchmodat instead
+        chown                   => 1029,    # use fchownat instead
+        mkdir                   => 1030,    # use mkdirat instead
+        rmdir                   => 1031,    # use unlinkat with AT_REMOVEDIR instead
+        lchown                  => 1032,    # use fchownat with AT_SYMLINK_NOFOLLOW instead
+        access                  => 1033,    # use faccessat instead
+        rename                  => 1034,    # use renameat instead
+        readlink                => 1035,    # use readlinkat instead
+        symlink                 => 1036,    # use symlinkat instead
+        utimes                  => 1037,    # use futimesat instead (or utimensat, converting from nanoseconds)
+        stat64                  => 1038,    # use fstatat instead
+        lstat64                 => 1039,    # use fstatat with AT_SYMLINK_NOFOLLOW instead
     ) : (),
-    $use_arch_want_syscall_no_flags ? (
-        pipe                    => 1040,
-        dup2                    => 1041,
-        epoll_create            => 1042,
-        inotify_init            => 1043,
-        eventfd                 => 1044,
-        signalfd                => 1045,
+    $use_arch_want_syscall_without_flags ? (
+        pipe                    => 1040,    # use pipe2 instead
+        dup2                    => 1041,    # use dup3 instead
+        epoll_create            => 1042,    # use epoll_create1 instead
+        inotify_init            => 1043,    # use inotify_init1 instead
+        eventfd                 => 1044,    # use eventfd2 instead
+        signalfd                => 1045,    # use signalfd4 instead
     ) : (),
-    $m32 && $use_32bit_off_t ? ( ## 32 bit off_t syscalls
-        sendfile                => 1046,
-        ftruncate               => 1047,
-        truncate                => 1048,
-        newstat                 => 1049,
-        newlstat                => 1050,
-        newfstat                => 1051,
-        fcntl                   => 1052,
-        fadvise64               => 1053,
-        newfstatat              => 1054,
-        fstatfs                 => 1055,
-        statfs                  => 1056,
-        lseek                   => 1057,
-        mmap                    => 1058,
+    $use_32bit_off_t ? ( ## 32 bit off_t syscalls
+        sendfile32              => 1046,    # ⎫
+        ftruncate32             => 1047,    # ⎮
+        truncate32              => 1048,    # ⎮
+        stat32                  => 1049,    # ⎮     (aka newstat)
+        lstat32                 => 1050,    # ⎮     (aka newlstat)
+        fstat32                 => 1051,    # ⎮     (aka newfstat)
+        fcntl32                 => 1052,    # ⎬ use 64-bit versions instead
+        fadvise32               => 1053,    # ⎮     (note strange naming of the fadvise syscall, either fadvise64 or fadvise64_64)
+        fstatat32               => 1054,    # ⎮     (aka newfstatat)
+        fstatfs32               => 1055,    # ⎮
+        statfs32                => 1056,    # ⎮
+        lseek32                 => 1057,    # ⎭
+        mmap32                  => 1058,    # use mmap2 instead (which take a 32-bit page offset rather than a byte offset, up to 16 TiB)
     ) : (),
     $use_arch_want_syscall_deprecated ? (
-        alarm                   => 1059,
-        getpgrp                 => 1060,
-        pause                   => 1061,
-        time                    => 1062,
-        utime                   => 1063,
-        creat                   => 1064,
-        getdents                => 1065,
-        futimesat               => 1066,
-        select                  => 1067,
-        poll                    => 1068,
-        epoll_wait              => 1069,
-        ustat                   => 1070,
-        vfork                   => 1071,
-        wait4                   => 1072,
-        recv                    => 1073,
-        send                    => 1074,
-        bdflush                 => 1075,
-        oldumount               => 1076,
+        alarm                   => 1059,    # use a timer instead
+        getpgrp                 => 1060,    # use getpgid instead
+        pause                   => 1061,    # use sigsuspend instead
+        time                    => 1062,    # use clock_gettime with CLOCK_REALTIME instead
+        utime                   => 1063,    # use utimensat instead
+        creat                   => 1064,    # use openat with O_CREAT instead
+        getdents32              => 1065,    # use getdents64 instead
+        futimesat               => 1066,    # use utimensat instead
+        select                  => 1067,    # use epoll_* or pselect6 or ppoll instead
+        poll                    => 1068,    # use epoll_* or pselect6 or ppoll instead
+        epoll_wait              => 1069,    # use epoll_pwait instead
+        ustat                   => 1070,    # use statfs instead
+        vfork                   => 1071,    # use clone or clone3 instead
+        wait4                   => 1072,    # use waitid instead
+        recv                    => 1073,    # use recvfrom or recvmsg instead
+        send                    => 1074,    # use sendto or sendmsg instead
+        bdflush                 => 1075,    # no-op (delete rather than replace)
+    #   oldumount               => 1076,    # use umount2
         uselib                  => 1077,
         sysctl                  => 1078,
-      $have_MMU ? (
-        fork                    => 1079,
-      ) : (
-    #   ni_syscall              => 1079,  # not-implemented
-      ),
     ) : (), ## $use_arch_want_syscall_deprecated
+    $have_MMU && $use_arch_want_syscall_deprecated ? (
+        fork                    => 1079,    # use clone or clone3 instead
+    ) : (),
 );
 
 our %pack_map = (
@@ -586,19 +538,20 @@ our %pack_map = (
     timeval  => 'qLx![q]',
 );
 
-our @EXPORT = qw(
-
+our @EXPORT_OK = qw(
     $have_MMU
     $m32
     $use_32bit_off_t
-    $use_arch_want_sync_file_range2
+    $use_32bit_time_t
+    $use_arch_want_sync_file_range_padding_arg
     $use_arch_want_syscall_deprecated
-    $use_arch_want_syscall_no_at
-    $use_arch_want_syscall_no_flags
+    $use_arch_want_syscall_without_at
+    $use_arch_want_syscall_without_flags
+);
 
+our @EXPORT = qw(
     %syscall_map
     %pack_map
-
 );
 
 1;
