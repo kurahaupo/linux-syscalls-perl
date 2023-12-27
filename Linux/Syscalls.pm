@@ -1,7 +1,8 @@
 #! /module/for/perl
 
 # Linux::Syscalls implements perl subs for Linux syscalls that are missing
-# from module POSIX. (Some are POSIX, some are Linux innovations.)
+# from module POSIX. (Some are POSIX, some are Linux innovations, some are
+# extensions of POSIX.)
 #
 # Where a whole family of calls are provided, generally they all call the new
 # syscall, with various fixed options. Examples include:
@@ -31,13 +32,15 @@
 # numeric value would normally be presented, and provide a sane & relevant
 # default in its place:
 #   * the UID & GID arguments to the *chown family may be given as C<undef> to
-#     mean "don't change", which avoids the user having to know that C<-1> is a
-#     magic value for this purpose; alternatively they may be given an an empty
-#     string to mean "now".
+#     mean "don't change" (which avoids the user having to know that C<-1> is a
+#     magic value for this purpose);
+#   * timestamps given to the utime* family may be given as an empty string to
+#     mean "now", or as C<undef> to mean "don't change" (which avoids the user
+#     having to craft an intentionally broken timespec value).
 #   * the dir_fd argument(s) to the *at family may be given as C<undef> to mean
 #     AT_FDCWD.
-#   * the path argument(s) to the *at family may be given as C<undef> to mean
-#     "apply the AT_EMPTY_PATH flag, and pass an empty path";
+#   * the path argument(s) to the *at family may be given as C<undef> as
+#     shorthand for passing an empty path with the AT_EMPTY_PATH flag;
 #
 # In some cases one or more blessed objects may be returned:
 #   * fiemap (fiemap_extent)
@@ -159,7 +162,7 @@ use constant {
 };
 
 use constant {
-    AT_SYMLINK_NOFOLLOW =>  0x100,
+    AT_SYMLINK_NOFOLLOW =>  0x100,      # not for fchmodat
     AT_EACCESS          =>  0x200,      # only for faccessat
     AT_REMOVEDIR        =>  0x200,      # only for unlink (behave like rmdir)
     AT_SYMLINK_FOLLOW   =>  0x400,
