@@ -475,13 +475,18 @@ our $running_on_os;
 our $running_on_hw;
 
 BEGIN {
-    # Pull in %syscall_map and %pack_map from
-    $built_for_os = ucfirst $^O;
+    # Pull in %syscall_map and %pack_map for the current arch
+
+    ($built_for_hw, $built_for_os, undef) = split '-', $Config{archname};
+    $built_for_os //= $^O;
     my ($running_on_os, undef, undef, undef, $running_on_hw, undef) = uname;
-    $built_for_os eq 'Linux' or die "Perl not built for Linux\n";
+    $_ = ucfirst lc $_ for $built_for_os, $running_on_os;
+
     $running_on_os eq $built_for_os or die "Perl built for '$built_for_os' but running on '$running_on_os'\n";
+
     # Normalize all of i386, i486, i586, i686, & i786 to "ia32" (which was Intel's official name for it).
     defined && m/^i[3-7]86$/ and $_ = 'ia32' for $running_on_hw, $built_for_hw;
+
     my @e;
     for my $mm ( do { my %seen; grep { defined && ! $seen{$_}++ }
         $built_for_hw,
@@ -501,7 +506,7 @@ BEGIN {
     }
     no diagnostics;
     @e and die "@e\n";
-};
+}
 
 sub _get_syscall_id($;$) {
     my ($name, $quiet) = @_;
