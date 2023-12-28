@@ -43,7 +43,7 @@ my $arch_m64 = $Config{use64bitint} && 1 || 0;
 my $short = $arch_hw eq 'mipsel'; # && ! $arch_m64;
 my $pfmt_word   = $short ? 'L'  : 'Q';
 my $pfmt_bcount = $short ? 'L'  : 'Q';
-my $pfmt_fsid   = $short ? 'i2' : 'i2';
+my $pfmt_fsid   = $short ? 'I2' : 'I2';
 
 eval qq{
     use constant {
