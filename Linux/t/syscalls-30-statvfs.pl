@@ -9,6 +9,44 @@ use warnings;
 
 use POSIX;
 
+use constant {
+    DFM_DUMP    => 0,
+    DFM_BLOCKS  => 1,
+    DFM_INODES  => 2,
+    DFM_BOTH    => 3,
+};
+
+my $df_mode = DFM_BOTH;
+my $debug = 1;
+
+use Getopt::Long qw( :config bundling );
+sub S(\$$) { my ($r, $v) = @_; return sub { $$r = $v } }
+GetOptions
+    'd|dump'    => S($df_mode,DFM_DUMP),
+    'i|inodes'  => S($df_mode,DFM_INODES),
+    'b|blocks'  => S($df_mode,DFM_BLOCKS),
+    '2|both'    => S($df_mode,DFM_BOTH),
+    'x|debug'   => S($debug, 1),
+    'q|quiet'   => S($debug, 0),
+    'h|help'    => sub { print <<EndOfHelp }, or exit 64;
+$0 [options]
+    -d --dump
+    -i --inodes
+    -b --blocks
+    -2 --both
+EndOfHelp
+
+use Config;
+my ($arch_hw, $arch_os, undef) = split '-', $Config{archname};
+my $arch_m64 = $Config{use64bitint} && 1 || 0;
+
+# Note: Debian for MIPS is compiled as MIPSel-o32, meaning
+#   1. little endian
+#   2. 32-bit registers are used to pass values in and out of the kernel
+#   3. 32-bit address space.
+# So always assume 32-bit for mipsel.
+my $small = $arch_hw eq 'mipsel'; # && ! $arch_m64;
+
 #require "syscall.ph";
 #BEGIN { require 'asm/unistd_32.ph' };
 BEGIN { require 'asm/unistd.ph' };
@@ -22,28 +60,19 @@ sub st {
     my $pfmt = $self->pfmt || return;
     $! = 0;
     my $res = pack $pfmt, (0) x 32;
-    warn sprintf "Trying syscall %u with %u-byte buffer",  $kern, length($res);
+    warn sprintf "Trying syscall %u with %u-byte buffer",  $kern, length($res)
+        if $debug;
     syscall( $kern, $path, $res ) == -1 && $! and die $!;
-    return unpack $pfmt.'C*', $res if wantarray;
+    return unpack $pfmt.'Q*', $res if wantarray;
     return $res;
 }
 #use constant size => 0x100;
 use constant size => 0x100;
 use constant kern => undef;
 
-use Config;
-my ($arch_hw, $arch_os, undef) = split '-', $Config{archname};
-my $arch_m64 = $Config{use64bitint} && 1 || 0;
-
-# Note: Debian for MIPS is compiled as MIPSel-o32, meaning
-#   1. little endian
-#   2. 32-bit registers are used to pass values in and out of the kernel
-#   3. 32-bit address space.
-# So always assume 32-bit for mipsel.
-my $short = $arch_hw eq 'mipsel'; # && ! $arch_m64;
-my $pfmt_word   = $short ? 'L'  : 'Q';
-my $pfmt_bcount = $short ? 'L'  : 'Q';
-my $pfmt_fsid   = $short ? 'I2' : 'I2';
+my $pfmt_word   = $small ? 'L'  : 'Q';
+my $pfmt_bcount = $small ? 'L'  : 'Q';
+my $pfmt_fsid   = $small ? 'I2' : 'I2';
 
 eval qq{
     use constant {
@@ -68,10 +97,7 @@ package Linux::Syscalls::test::fs::fstatfs64 {}
 package Linux::Syscalls::test::fs::statfs    {}
 package Linux::Syscalls::test::fs::statfs64  {}
 
-{
 my @S;
-
-BEGIN {
 
 @S = qw(
         fstatfs
@@ -79,7 +105,10 @@ BEGIN {
         statfs
         statfs64
 
+        _oldoldstatfs
+        _oldstatfs
         newstatfs
+        oldoldstatfs
         oldstatfs
         statfs32
        );
@@ -98,14 +127,13 @@ for my $s (@S) {
     eval qq{
         package $p;
         use constant kern => $kk;
-        use constant size => $s;
     } if $kk;
 }
-}
 
-for my $t (@S) {
-    printf " -> %5s %s\n", "Linux::Syscalls::test::fs::$t"->ok ? " CAN " : "can't", $t;
-}
+if ($debug) {
+    for my $t (@S) {
+        printf " -> %5s %s\n", "Linux::Syscalls::test::fs::$t"->ok ? " CAN " : "can't", $t;
+    }
 }
 
 sub hunp {
@@ -117,50 +145,79 @@ sub hunp {
 
 for my $argv (@ARGV) {
 
-    print $argv, "\n";
+    print $argv, "\n" if ! $df_mode;
 
-    eval {
-        my $pfmt = Linux::Syscalls::test::fs::statfs::->pfmt;
-        my $res = Linux::Syscalls::test::fs::statfs::->st($argv);
-    #   $res =~ s/(?:\0\0\0\0)+$//;
+    for my $syscall ( @S ) {
 
-        printf STDERR " statfs len=%u hex=[%s]\n", length($res), hunp $res;
-        printf STDERR "        unpack=[%s]\n", $pfmt;
+        $syscall =~ /^f/ and next;
 
-        my ($type, $bsize1, $btotal, $bfree, $bavail, $itotal, $ifree, $fsid0,
-            $fsid1, $maxnamlen, $bsize2, @R) = unpack $pfmt.'Q*', $res;
+        my $cpkg = "Linux::Syscalls::test::fs::${syscall}::";
 
-        my $iavail = $ifree - shift @R;  # might not be anything there?
-        @R == 0 or warn sprintf "Remaining %u junk data points after bsize2 path=%s\n", 0+@R, $argv;
+        exists &{$cpkg.'kern'} or next;
 
-        printf "\ttype=%#x, maxlen=%u,\n"
-              ."\tblocks=[size=%u/%u, total=%u, free=%u, avail=%u],\n"
-              ."\tinodes=[total=%u, free=%u, avail=%u],\n"
-              ."\tfsid=%#x:%#x,\n"
-              ."\tr=[%s]\n",
-                $type, $maxnamlen,
-                $bsize1, $bsize2,
-                $btotal, $bfree, $bavail,
-                $itotal, $ifree, $iavail,
-                $fsid0, $fsid1, join ',', @R;
-        1;
-    } or warn " statfs FAILED $! $@\n"
-        if Linux::Syscalls::test::fs::statfs::->ok;
+        my $pkg = eval $cpkg or die "Can't eval $cpkg";
 
-    eval {
-        my $pfmt = Linux::Syscalls::test::fs::statfs64::->pfmt;
-        my $res = Linux::Syscalls::test::fs::statfs64::->st($argv);
-        printf STDERR " statfs64 len=%u, hex=[%s]\n", length($res), hunp $res;
-        $res =~ s/(?:\0\0\0\0)+$//;
-        my ($type, @r) = unpack "L*", $res;
+        $pkg->ok or next;
 
-        print "$argv: type=$type, r=[@r]\n";
+        my $pfmt = $pkg->pfmt;
+        my $res = eval {
+            $pkg->st($argv);
+        } or do { warn " $syscall FAILED $@\n\t$!"; next };
 
-        1;
-    } or
-        warn "statfs64 $argv: $!\n"
-        if Linux::Syscalls::test::fs::statfs64::->ok;
+        my ($type,
+            $bsize, $btotal, $bfree, $bavail,
+            $itotal, $ifree,
+            $fsid0, $fsid1, $maxnamlen, $io_size,
+            undef, undef, undef, undef, @R) = unpack $pfmt.'Q*', $res;
 
+        #my $iavail = $ifree;    # no reserved inodes, so not separate
+
+        @R == 0 or warn sprintf "Remaining %u junk data points after io_size\n", 0+@R;
+
+        if (! $df_mode || $debug) {
+
+            printf " %-14s len=%u hex=[%s]\n", $syscall, length($res), hunp $res;
+            my @ux = unpack $small ? 'L*' : 'Q*', $res;
+            for my $i ( 0 .. $#ux ) {
+                printf "\t\t%6u:\t%-14u (%#x)\n", $i, $ux[$i], $ux[$i]
+
+            }
+            printf "\t\tunpack=[%s]\n", $pfmt;
+            printf "\t\ttype=%#x,\n"
+                  ."\t\tblocks=[size=%u, total=%u, free=%u, avail=%u],\n"
+                  ."\t\tinodes=[total=%u, free=%u],\n"
+                  ."\t\tfsid=%#x:%#x, maxlen=%u, io_size=%u,\n"
+                  ."\t\tr=[%s]\n",
+                    $type,
+                    $bsize,
+                    $btotal, $bfree, $bavail,
+                    $itotal, $ifree,
+                    $fsid0, $fsid1, $maxnamlen, $io_size, join ',', @R;
+        }
+
+        $_ *= $bsize || 1 for $btotal, $bfree, $bavail;
+        #Filesystem           1K-blocks      Used Available Use% Mounted on
+        #overlay                 220080    137752     77492  64% /
+        printf "%-20s %9u %9u %9u %6.2f%% %s\n",
+            "TYPE#$type",
+            $btotal/1024, ($btotal - $bfree)/1024, $bfree/1024,
+            100 - 100*$bavail/$btotal,
+            $argv,
+            if $df_mode & DFM_BLOCKS;
+        #Filesystem              Inodes      Used Available Use% Mounted on
+        #overlay                      0         0         0   0% /
+        printf "%-20s %9u %9u %9u %6.2f%% %s\n",
+            "TYPE#$type",
+            $itotal, $itotal - $ifree, $ifree,
+            100 - ($itotal ? 100*$ifree/$itotal : 100),
+            $argv,
+            if $df_mode & DFM_INODES;
+
+
+
+    }
+
+    print "\n";
 }
 
 1;
