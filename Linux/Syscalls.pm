@@ -51,7 +51,7 @@
 # any invariant prefix so that (for example) stat returns an object with an
 # "ino" method rather than a "st_ino" method.
 #
-# To make stat and lstat usable as a drop-in replacement for the built-in stat
+# To make stat and lstat usable as drop-in replacements for the built-in stat
 # and lstat, they return the same list as provided by those functions when
 # wantarray is true, and only return a blessed object when wantarray is false.
 
