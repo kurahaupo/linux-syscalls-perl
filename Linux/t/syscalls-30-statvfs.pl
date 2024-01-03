@@ -82,6 +82,22 @@ eval qq{
     };
 };
 
+sub pfmt_mips_o32 {
+    return 'LLx4LLx8LX12LLx4I2LX32Lx28LL5';
+}
+
+sub pfmt_mips_n32 {
+    return 'LLx888x168X2488x8I2LX608x56LL6';
+}
+
+sub pfmt_ia32 {
+    return 'LLQQQQQI2LLLL4';
+}
+
+sub pfmt_x86_64 {
+    return 'QQQQQQQI2QQQQ4';
+}
+
 sub pfmt {
     my ($st) = @_;
   # return 'L2Q5i2L3L4'
@@ -159,7 +175,7 @@ for my $argv (@ARGV) {
 
         $pkg->ok or next;
 
-        my $pfmt = $pkg->pfmt;
+        my $pfmt = $small ? $pkg->pfmt_mips_o32 : $pkg->pfmt;
         my $res = eval {
             $pkg->st($argv);
         } or do { warn " $syscall FAILED $@\n\t$!"; next };
@@ -198,7 +214,7 @@ for my $argv (@ARGV) {
         $_ *= $bsize || 1 for $btotal, $bfree, $bavail;
         #Filesystem           1K-blocks      Used Available Use% Mounted on
         #overlay                 220080    137752     77492  64% /
-        printf "%-20s %9u %9u %9u %6.2f%% %s\n",
+        printf "%-20s %9d %9d %9d %6.2f%% %s\n",
             "TYPE#$type",
             $btotal/1024, ($btotal - $bfree)/1024, $bfree/1024,
             100 - 100*$bavail/$btotal,
@@ -206,7 +222,7 @@ for my $argv (@ARGV) {
             if $df_mode & DFM_BLOCKS;
         #Filesystem              Inodes      Used Available Use% Mounted on
         #overlay                      0         0         0   0% /
-        printf "%-20s %9u %9u %9u %6.2f%% %s\n",
+        printf "%-20s %9d %9d %9d %6.2f%% %s\n",
             "TYPE#$type",
             $itotal, $itotal - $ifree, $ifree,
             100 - ($itotal ? 100*$ifree/$itotal : 100),
