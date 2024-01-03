@@ -30,7 +30,6 @@ our $use_syscall_compat = 0;
 # so that the bare names have the nearest semantics to x86_64 (32-bit UID, GID,
 # & PID, and 64-bit everything else).
 
-
 our %syscall_map = (
 
         # FROM https://syscalls.w3challs.com/?arch=mips_o32
@@ -234,10 +233,8 @@ our %syscall_map = (
         rt_sigtimedwait         => 4197,  #  const sigset_t *uthese,siginfo_t *uinfo,const struct timespec *uts,size_t sigsetsize        # kernel/signal.c:2805
         rt_sigqueueinfo         => 4198,  #  pid_t pid,int sig,siginfo_t *uinfo        # kernel/signal.c:2938
         rt_sigsuspend           => 4199,  #  sigset_t *unewset,size_t sigsetsize        # kernel/signal.c:3274
-        pread                   => 4200,  #  char *buf size_t count,loff_t pos        # fs/read_write.c:495
-        pread64                 => 4200,  #  char *buf size_t count,loff_t pos        # fs/read_write.c:495
-        pwrite                  => 4201,  #  const char *buf size_t count,loff_t pos        # fs/read_write.c:524
-        pwrite64                => 4201,  #  const char *buf size_t count,loff_t pos        # fs/read_write.c:524
+        pread                   => 4200,    pread64                 => 4200,  #  char *buf size_t count,loff_t pos        # fs/read_write.c:495
+        pwrite                  => 4201,    pwrite64                => 4201,  #  const char *buf size_t count,loff_t pos        # fs/read_write.c:524
         chown                   => 4202,  #  const char *filename,uid_t user,gid_t group        # fs/open.c:540
         getcwd                  => 4203,  #  char *buf,unsigned long size        # fs/dcache.c:2885
         capget                  => 4204,  #  cap_user_header_t header,cap_user_data_t dataptr        # kernel/capability.c:158
@@ -247,23 +244,16 @@ our %syscall_map = (
         getpmsg                 => 4208,  #  -        # Not implemented
         putpmsg                 => 4209,  #  -        # Not implemented
         mmap2                   => 4210,  #  unsigned long addr,unsigned long len,unsigned long prot,unsigned long flags,unsigned long fd,unsigned long pgoff        # mm/mmap.c:1105
-        truncate                => 4211,  #  loff_t length        # fs/open.c:188
-        truncate64              => 4211,  #  loff_t length        # fs/open.c:188
-        ftruncate               => 4212,  #  loff_t length        # fs/open.c:200
-        ftruncate64             => 4212,  #  loff_t length        # fs/open.c:200
-        stat                    => 4213,  #  const char *filename,struct stat64 *statbuf        # fs/stat.c:372
-        stat64                  => 4213,  #  const char *filename,struct stat64 *statbuf        # fs/stat.c:372
-        lstat                   => 4214,  #  const char *filename,struct stat64 *statbuf        # fs/stat.c:384
-        lstat64                 => 4214,  #  const char *filename,struct stat64 *statbuf        # fs/stat.c:384
-        fstat                   => 4215,  #  unsigned long fd,struct stat64 *statbuf        # fs/stat.c:396
-        fstat64                 => 4215,  #  unsigned long fd,struct stat64 *statbuf        # fs/stat.c:396
+        truncate                => 4211,    truncate64              => 4211,  #  loff_t length        # fs/open.c:188
+        ftruncate               => 4212,    ftruncate64             => 4212,  #  loff_t length        # fs/open.c:200
+        stat                    => 4213,    stat64                  => 4213,  #  const char *filename,struct stat64 *statbuf        # fs/stat.c:372
+        lstat                   => 4214,    lstat64                 => 4214,  #  const char *filename,struct stat64 *statbuf        # fs/stat.c:384
+        fstat                   => 4215,    fstat64                 => 4215,  #  unsigned long fd,struct stat64 *statbuf        # fs/stat.c:396
         pivot_root              => 4216,  #  const char *new_root,const char *put_old        # fs/namespace.c:2453
         mincore                 => 4217,  #  unsigned long start,size_t len,unsigned char *vec        # mm/mincore.c:266
         madvise                 => 4218,  #  unsigned long start,size_t len_in,int behavior        # mm/madvise.c:362
-        getdents                => 4219,  #  unsigned int fd,struct linux_dirent64 *dirent,unsigned int count        # fs/readdir.c:272
-        getdents64              => 4219,  #  unsigned int fd,struct linux_dirent64 *dirent,unsigned int count        # fs/readdir.c:272
-        fcntl                   => 4220,  #  unsigned int fd,unsigned int cmd,unsigned long arg        # fs/fcntl.c:468
-        fcntl64                 => 4220,  #  unsigned int fd,unsigned int cmd,unsigned long arg        # fs/fcntl.c:468
+        getdents                => 4219,    getdents64              => 4219,  #  unsigned int fd,struct linux_dirent64 *dirent,unsigned int count        # fs/readdir.c:272
+        fcntl                   => 4220,    fcntl64                 => 4220,  #  unsigned int fd,unsigned int cmd,unsigned long arg        # fs/fcntl.c:468
         reserved221             => 4221,  #  -        # Not implemented
         gettid                  => 4222,  #  -        # kernel/timer.c:1569
         readahead               => 4223,  #  loff_t offset size_t count        # mm/readahead.c:579
@@ -280,8 +270,7 @@ our %syscall_map = (
         lremovexattr            => 4234,  #  const char *pathname,const char *name        # fs/xattr.c:620
         fremovexattr            => 4235,  #  int fd,const char *name        # fs/xattr.c:638
         tkill                   => 4236,  #  pid_t pid,int sig        # kernel/signal.c:2923
-        sendfile                => 4237,  #  int out_fd,int in_fd,loff_t *offset,size_t count        # fs/read_write.c:992
-        sendfile64              => 4237,  #  int out_fd,int in_fd,loff_t *offset,size_t count        # fs/read_write.c:992
+        sendfile                => 4237,    sendfile64              => 4237,  #  int out_fd,int in_fd,loff_t *offset,size_t count        # fs/read_write.c:992
         futex                   => 4238,  #  u32 *uaddr,int op,u32 val,struct timespec *utime,u32 *uaddr2,u32 val3        # kernel/futex.c:2680
         sched_setaffinity       => 4239,  #  pid_t pid,unsigned int len,unsigned long *user_mask_ptr        # kernel/sched/core.c:4626
         sched_getaffinity       => 4240,  #  pid_t pid,unsigned int len,unsigned long *user_mask_ptr        # kernel/sched/core.c:4677
@@ -298,10 +287,8 @@ our %syscall_map = (
         remap_file_pages        => 4251,  #  unsigned long start,unsigned long size,unsigned long prot,unsigned long pgoff,unsigned long flags        # mm/fremap.c:122
         set_tid_address         => 4252,  #  int *tidptr        # kernel/fork.c:1109
         restart_syscall         => 4253,  #  -        # kernel/signal.c:2501
-        fadvise                 => 4254,  #  loff_t offset size_t len,int advice        # mm/fadvise.c:148
-        fadvise64               => 4254,  #  loff_t offset size_t len,int advice        # mm/fadvise.c:148
-        statfs                  => 4255,  #  const char *pathname,size_t sz,struct statfs64 *buf        # fs/statfs.c:175
-        statfs64                => 4255,  #  const char *pathname,size_t sz,struct statfs64 *buf        # fs/statfs.c:175
+        fadvise                 => 4254,    fadvise64               => 4254,  #  loff_t offset size_t len,int advice        # mm/fadvise.c:148
+        statfs                  => 4255,    statfs64                => 4255,  #  const char *pathname,size_t sz,struct statfs64 *buf        # fs/statfs.c:175
         fstatfs64               => 4256,  #  unsigned int fd,size_t sz,struct statfs64 *buf        # fs/statfs.c:196
         timer_create            => 4257,  #  const clockid_t which_clock,struct sigevent *timer_event_spec,timer_t *created_timer_id        # kernel/posix-timers.c:535
         timer_settime           => 4258,  #  timer_t timer_id,int flags,const struct itimerspec *new_setting,struct itimerspec *old_setting        # kernel/posix-timers.c:819
@@ -338,8 +325,7 @@ our %syscall_map = (
         mknodat                 => 4290,  #  int dfd,const char *filename,umode_t mode,unsigned dev        # fs/namei.c:2646
         fchownat                => 4291,  #  int dfd,const char *filename,uid_t user,gid_t group,int flag        # fs/open.c:559
         futimesat               => 4292,  #  int dfd,const char *filename,struct timeval *utimes        # fs/utimes.c:193
-        fstatat                 => 4293,  #  int dfd,const char *filename,struct stat64 *statbuf,int flag        # fs/stat.c:407
-        fstatat64               => 4293,  #  int dfd,const char *filename,struct stat64 *statbuf,int flag        # fs/stat.c:407
+        fstatat                 => 4293,    fstatat64               => 4293,  #  int dfd,const char *filename,struct stat64 *statbuf,int flag        # fs/stat.c:407
         unlinkat                => 4294,  #  int dfd,const char *pathname,int flag        # fs/namei.c:2968
         renameat                => 4295,  #  int olddfd,const char *oldname,int newdfd,const char *newname        # fs/namei.c:3309
         linkat                  => 4296,  #  int olddfd,const char *oldname,int newdfd,const char *newname,int flags        # fs/namei.c:3097
@@ -384,8 +370,7 @@ our %syscall_map = (
         recvmmsg                => 4335,  #  int fd,struct mmsghdr *mmsg,unsigned int vlen,unsigned int flags,struct timespec *timeout        # net/socket.c:2313
         fanotify_init           => 4336,  #  unsigned int flags,unsigned int event_f_flags        # fs/notify/fanotify/fanotify_user.c:679
         fanotify_mark           => 4337,  #  unsigned int flags __u64 mask,int dfd const char *pathname        # fs/notify/fanotify/fanotify_user.c:767
-        prlimit                 => 4338,  #  pid_t pid,unsigned int resource,const struct rlimit64 *new_rlim,struct rlimit64 *old_rlim        # kernel/sys.c:1599
-        prlimit64               => 4338,  #  pid_t pid,unsigned int resource,const struct rlimit64 *new_rlim,struct rlimit64 *old_rlim        # kernel/sys.c:1599
+        prlimit                 => 4338,    prlimit64               => 4338,  #  pid_t pid,unsigned int resource,const struct rlimit64 *new_rlim,struct rlimit64 *old_rlim        # kernel/sys.c:1599
         name_to_handle_at       => 4339,  #  int dfd,const char *name,struct file_handle *handle,int *mnt_id,int flag        # fs/fhandle.c:92
         open_by_handle_at       => 4340,  #  int mountdirfd,struct file_handle *handle,int flags        # fs/fhandle.c:257
         clock_adjtime           => 4341,  #  const clockid_t which_clock,struct timex *utx        # kernel/posix-timers.c:983
@@ -402,6 +387,8 @@ our %pack_map = (
     timespec => 'qLx![q]',
     timeval  => 'qLx![q]',
 );
+
+# for statfs see https://git.kernel.org/pub/scm/linux/kernel/git/mips/linux.git/tree/arch/mips/include/asm/statfs.h?id=365b18189789bfa1acd9939e6312b8a4b4577b28
 
 our @EXPORT = qw(
 

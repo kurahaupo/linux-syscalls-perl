@@ -51,10 +51,8 @@ our %syscall_map = (
         rt_sigaction            => 5013,  # int sig,const struct sigaction *act,struct sigaction *oact,size_t sigsetsize        # kernel/signal.c:3174
         rt_sigprocmask          => 5014,  # int how,sigset_t *nset,sigset_t *oset,size_t sigsetsize        # kernel/signal.c:2591
         ioctl                   => 5015,  # unsigned int fd,unsigned int cmd,unsigned long arg        # fs/ioctl.c:604
-        pread                   => 5016,  # char *buf,size_t count,loff_t pos        # fs/read_write.c:495
-        pread64                 => 5016,  # char *buf,size_t count,loff_t pos        # fs/read_write.c:495
-        pwrite                  => 5017,  # const char *buf size_t count,loff_t pos        # fs/read_write.c:524
-        pwrite64                => 5017,  # const char *buf size_t count,loff_t pos        # fs/read_write.c:524
+        pread                   => 5016,    pread64                 => 5016,  # char *buf,size_t count,loff_t pos        # fs/read_write.c:495
+        pwrite                  => 5017,    pwrite64                => 5017,  # const char *buf size_t count,loff_t pos        # fs/read_write.c:524
         readv                   => 5018,  # unsigned long fd,const struct iovec *vec,unsigned long vlen        # fs/read_write.c:787
         writev                  => 5019,  # unsigned long fd,const struct iovec *vec,unsigned long vlen        # fs/read_write.c:808
         access                  => 5020,  # const char *filename,int mode        # fs/open.c:370
@@ -252,8 +250,7 @@ our %syscall_map = (
         set_tid_address         => 5212,  # int *tidptr        # kernel/fork.c:1109
         restart_syscall         => 5213,  # -        # kernel/signal.c:2501
         semtimedop              => 5214,  # int semid,struct sembuf *tsops,unsigned nsops,const struct timespec *timeout        # ipc/sem.c:1330
-        fadvise                 => 5215,  # loff_t offset size_t len,int advice        # mm/fadvise.c:148
-        fadvise64               => 5215,  # loff_t offset size_t len,int advice        # mm/fadvise.c:148
+        fadvise                 => 5215,    fadvise64               => 5215,  # loff_t offset size_t len,int advice        # mm/fadvise.c:148
         timer_create            => 5216,  # const clockid_t which_clock,struct sigevent *timer_event_spec,timer_t *created_timer_id        # kernel/posix-timers.c:535
         timer_settime           => 5217,  # timer_t timer_id,int flags,const struct itimerspec *new_setting,struct itimerspec *old_setting        # kernel/posix-timers.c:819
         timer_gettime           => 5218,  # timer_t timer_id,struct itimerspec *setting        # kernel/posix-timers.c:715
@@ -289,8 +286,7 @@ our %syscall_map = (
         mknodat                 => 5249,  # int dfd,const char *filename,umode_t mode,unsigned dev        # fs/namei.c:2646
         fchownat                => 5250,  # int dfd,const char *filename,uid_t user,gid_t group,int flag        # fs/open.c:559
         futimesat               => 5251,  # int dfd,const char *filename,struct timeval *utimes        # fs/utimes.c:193
-        fstatat                 => 5252,  # int dfd,const char *filename,struct stat *statbuf,int flag        # fs/stat.c:269
-        newfstatat              => 5252,  # int dfd,const char *filename,struct stat *statbuf,int flag        # fs/stat.c:269
+        fstatat                 => 5252,    fstatat64               => 5252,    newfstatat              => 5252,  # int dfd,const char *filename,struct stat *statbuf,int flag        # fs/stat.c:269
         unlinkat                => 5253,  # int dfd,const char *pathname,int flag        # fs/namei.c:2968
         renameat                => 5254,  # int olddfd,const char *oldname,int newdfd,const char *newname        # fs/namei.c:3309
         linkat                  => 5255,  # int olddfd,const char *oldname,int newdfd,const char *newname,int flags        # fs/namei.c:3097
@@ -335,8 +331,7 @@ our %syscall_map = (
         recvmmsg                => 5294,  # int fd,struct mmsghdr *mmsg,unsigned int vlen,unsigned int flags,struct timespec *timeout        # net/socket.c:2313
         fanotify_init           => 5295,  # unsigned int flags,unsigned int event_f_flags        # fs/notify/fanotify/fanotify_user.c:679
         fanotify_mark           => 5296,  # unsigned int flags __u64 mask,int dfd const char *pathname        # fs/notify/fanotify/fanotify_user.c:767
-        prlimit                 => 5297,  # pid_t pid,unsigned int resource,const struct rlimit64 *new_rlim,struct rlimit64 *old_rlim        # kernel/sys.c:1599
-        prlimit64               => 5297,  # pid_t pid,unsigned int resource,const struct rlimit64 *new_rlim,struct rlimit64 *old_rlim        # kernel/sys.c:1599
+        prlimit                 => 5297,    prlimit64               => 5297,  # pid_t pid,unsigned int resource,const struct rlimit64 *new_rlim,struct rlimit64 *old_rlim        # kernel/sys.c:1599
         name_to_handle_at       => 5298,  # int dfd,const char *name,struct file_handle *handle,int *mnt_id,int flag        # fs/fhandle.c:92
         open_by_handle_at       => 5299,  # int mountdirfd,struct file_handle *handle,int flags        # fs/fhandle.c:257
         clock_adjtime           => 5300,  # const clockid_t which_clock,struct timex *utx        # kernel/posix-timers.c:983
