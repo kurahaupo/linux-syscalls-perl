@@ -381,7 +381,8 @@ sub _seconds_to_timespec($) {
 
 sub _timespec_to_seconds($$) {
     my $f = \&_SC_timespec_to_seconds;
-    $f = \&Time::Nanosecond::new_timespec if exists &Time::Nanosecond::new_timespec;
+    $f = \&Time::Nanosecond::new_timespec if exists
+          &Time::Nanosecond::new_timespec;
     no warnings 'redefine';
     *_timespec_to_seconds = $f;
     goto &$f;
@@ -474,8 +475,14 @@ our $built_for_hw;
 our $running_on_os;
 our $running_on_hw;
 
-BEGIN {
-    # Pull in %syscall_map and %pack_map for the current arch
+# syscall_map and pack_map are only provided by the per-arch files.
+our %syscall_map;
+our %pack_map;
+
+UNITCHECK {
+    # Pull in %syscall_map and %pack_map for the current arch. Do this *after*
+    # the rest of this module has been compiled, so that the per-arch file can
+    # override whatever it needs to.
 
     ($built_for_hw, $built_for_os, undef) = split '-', $Config{archname};
     $built_for_os //= $^O;
@@ -494,15 +501,15 @@ BEGIN {
     my @e;
     for my $mm ( do { my %seen; grep { defined && ! $seen{$_}++ } @try } ) {
         my $m = "${built_for_os}::Syscalls::$mm";
-        warn "Trying to load $m" if $^C && $^W;
-        eval qq{
-            use $m;
-          # printf "syscall_map=%s\\n", scalar %syscall_map;
-          # printf "pack_map=%s\\n", scalar %pack_map;
+        warn "Trying to load $m" if $^C || $^W;
+        eval q{
+            use }.$m.q{;
+         ## warn sprintf "syscall_map=%s\n", scalar %syscall_map;
+         ## warn sprintf "pack_map=%s\n", scalar %pack_map;
             1;
         } and last;
         push @e, $@;
-        warn "Failed to load $m; $@" if $^C;
+        warn "Failed to load $m; $@" if $^C || $^W;
     }
     no diagnostics;
     @e and die "@e\n";
@@ -510,7 +517,7 @@ BEGIN {
 
 sub _get_syscall_id($;$) {
     my ($name, $quiet) = @_;
-    warn "looking up syscall number for '$name'\n" if $^C && ! $quiet;
+    warn "looking up syscall number for '$name'\n" if ($^C || $^W) && ! $quiet;
     if ( !$skip_syscall_ph ) {
         my $func = 'SYS_' . $name;
         require 'syscall.ph';
@@ -518,14 +525,18 @@ sub _get_syscall_id($;$) {
         if (exists &$func) {
             #goto &$func;
             my $r = &$func();
-            warn sprintf "syscall number for %s is %d\n", $name, $r if $^C && ! $quiet;
+            warn sprintf "syscall number for %s is %d\n", $name, $r if ($^C || $^W) && ! $quiet;
             return $r;
         }
-        warn "syscall.ph doesn't define $func, having to guess...\n" if $^C && ! $quiet;
+        warn "syscall.ph doesn't define $func, having to guess...\n" if ($^C || $^W) && ! $quiet;
     }
 
     my $s = $syscall_map{$name};
-    $s // warn "Syscall $name not known for @{[$running_on_os // ()]} / @{[$running_on_hw // ()]}\n" if ! $quiet;
+    $s // do {
+        warn "Syscall $name not known for @{[$running_on_os // ()]} / @{[$running_on_hw // ()]}\n" if ! $quiet;
+     ## use Data::Dumper;
+     ## warn Dumper(\%syscall_map);
+    };
     return $s;
 }
 
@@ -1337,8 +1348,8 @@ sub fstatat($$;$) {
     _resolve_dir_fd_path $dir_fd, $path, $flags or return;
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'newfstatat';
-    #warn "syscall=$syscall_id, dir_fd=$dir_fd, path=$path, buffer=".length($buffer)."-bytes, flags=$flags\n";
-    0 == syscall $syscall_id, $dir_fd, $path, $buffer, $flags or return;
+    my $r = syscall $syscall_id, $dir_fd, $path, $buffer, $flags;
+    0 == $r or return;
     return _unpack_stat($buffer);
 }
 
