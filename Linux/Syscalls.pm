@@ -1556,6 +1556,83 @@ sub rmdirat($$) {
 }
 
 ################################################################################
+#
+# According to "man perlfunc", we have send and recv but not sendmsg or
+# recvmsg. This oversight makes it difficult-to-impossible to implement then
+# rtnetlink socket protocol.
+#
+
+# These need some fairly messy wrangling of raw memory addresses, via two
+# levels:
+
+# struct msghdr
+#   void         *msg_name;       /* optional address */
+#   socklen_t     msg_namelen;    /* size of address */
+#   struct iovec *msg_iov;        /* scatter/gather array */
+#   size_t        msg_iovlen;     /* # elements in msg_iov */
+#   void         *msg_control;    /* ancillary data, see below */
+#   size_t        msg_controllen; /* ancillary data buffer len */
+
+# struct iovec
+#   void  *iov_base;              /* Starting address */
+#   size_t iov_len;               /* Number of bytes to transfer */
+
+
+use constant {
+    iovec_pack      => 'C0(PIz![P])*',
+    msghdr_pack     => 'C0(PIz![P])3',
+};
+
+sub recvmsg($;$$$$) {
+    my ($fd, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
+
+    $flags //= 0;
+    $maxmsglen //= 0;   # Useful for PEEK
+    my $msg_buf = "A" x $maxmsglen;
+    my $iov = pack iovec_pack, $msg_buf, $maxmsglen;
+
+    wantarray or $maxctrllen = $maxnamelen = 0;     # don't ask for what we're not going to use
+
+    my $name = "N" x $maxnamelen if $maxnamelen;    # $name is undef if $maxnamelen is false
+    my $ctrl = "C" x $maxctrllen if $maxctrllen;
+
+    my $msghdr = pack msghdr_pack, $name, $maxnamelen, $iov, 1, $ctrl, $maxctrllen;
+
+    state $syscall_id = _get_syscall_id 'recvmsg';
+    my $ret = syscall $syscall_id, $fd, $msghdr, $flags;
+
+    return if $ret < 0;
+
+    my (undef, $namelen, undef, undef, undef, $ctrllen) = unpack msghdr_pack, $msghdr;
+
+    my @R = substr($msg_buf,0,$ret);
+    return $R[0] if ! wantarray;
+
+    # Remaining array elements are sparse, undef if not requested.
+    $R[1] = substr($ctrl,0,$ctrllen) if $maxctrllen;
+    $R[2] = substr($name,0,$namelen) if $maxnamelen;
+
+    return @R;
+}
+
+sub sendmsg($$$;$$) {
+    my ($fd, $flags, $msg, $ctrl, $name) = @_;
+
+    $flags //= 0;
+    my $iov = pack iovec_pack, $msg, length($msg);
+
+    my $msghdr = pack msghdr_pack, $name, length($name), $iov, 1, $ctrl, length($ctrl);
+
+    state $syscall_id = _get_syscall_id 'sendmsg';
+    my $ret = syscall $syscall_id, $fd, $msghdr, $flags;
+
+    return if $ret < 0;
+    return $ret || "0 but true";
+}
+
+_export_tag qw{ msg => recvmsg sendmsg };
+
+################################################################################
 
 sub _normalize_utimens($$) {
     my ($t, $time_res) = @_;
