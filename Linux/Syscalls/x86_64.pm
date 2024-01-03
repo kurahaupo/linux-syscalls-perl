@@ -307,7 +307,7 @@ our %syscall_map = (
         mknodat                 => 259,
         fchownat                => 260,
         futimesat               => 261,
-        fstatat                 => 262,     newfstatat              => 262,
+        fstatat                 => 262,     fstatat64               => 262,     newfstatat              => 262,
         unlinkat                => 263,
         renameat                => 264,
         linkat                  => 265,
