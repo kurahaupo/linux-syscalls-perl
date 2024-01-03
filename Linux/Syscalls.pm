@@ -1585,47 +1585,35 @@ use constant {
 
 sub recvmsg($;$$$$) {
     my ($fd, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
-
+    _map_fd($fd);
     $flags //= 0;
     $maxmsglen //= 0;   # Useful for PEEK
     my $msg_buf = "A" x $maxmsglen;
     my $iov = pack iovec_pack, $msg_buf, $maxmsglen;
-
     wantarray or $maxctrllen = $maxnamelen = 0;     # don't ask for what we're not going to use
-
     my $name = "N" x $maxnamelen if $maxnamelen;    # $name is undef if $maxnamelen is false
     my $ctrl = "C" x $maxctrllen if $maxctrllen;
-
     my $msghdr = pack msghdr_pack, $name, $maxnamelen, $iov, 1, $ctrl, $maxctrllen;
-
     state $syscall_id = _get_syscall_id 'recvmsg';
     my $ret = syscall $syscall_id, $fd, $msghdr, $flags;
-
     return if $ret < 0;
-
     my (undef, $namelen, undef, undef, undef, $ctrllen) = unpack msghdr_pack, $msghdr;
-
     my @R = substr($msg_buf,0,$ret);
     return $R[0] if ! wantarray;
-
     # Remaining array elements are sparse, undef if not requested.
     $R[1] = substr($ctrl,0,$ctrllen) if $maxctrllen;
     $R[2] = substr($name,0,$namelen) if $maxnamelen;
-
     return @R;
 }
 
 sub sendmsg($$$;$$) {
     my ($fd, $flags, $msg, $ctrl, $name) = @_;
-
+    _map_fd($fd);
     $flags //= 0;
     my $iov = pack iovec_pack, $msg, length($msg);
-
     my $msghdr = pack msghdr_pack, $name, length($name), $iov, 1, $ctrl, length($ctrl);
-
     state $syscall_id = _get_syscall_id 'sendmsg';
     my $ret = syscall $syscall_id, $fd, $msghdr, $flags;
-
     return if $ret < 0;
     return $ret || "0 but true";
 }
