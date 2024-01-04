@@ -46,7 +46,8 @@ void show_msghdr(const struct msghdr *m) {
             "\t%zu\t%zu\tmsg_iov=%p\n"
             "\t%zu\t%zu\tmsg_iovlen=%zu\n"
             "\t%zu\t%zu\tmsg_control=%p\n"
-            "\t%zu\t%zu\tmsg_controllenru_nivcsw=%zu\n"
+            "\t%zu\t%zu\tmsg_controllen=%zu\n"
+            "\t%zu\t%zu\tmsg_flags=%#x\n"
             "\t(%zu total size)\n"
             , offsetof(typeof(*m), msg_name),          sizeof(m->msg_name),        m->msg_name
             , offsetof(typeof(*m), msg_namelen),       sizeof(m->msg_namelen),     m->msg_namelen
@@ -54,6 +55,7 @@ void show_msghdr(const struct msghdr *m) {
             , offsetof(typeof(*m), msg_iovlen),        sizeof(m->msg_iovlen),      m->msg_iovlen
             , offsetof(typeof(*m), msg_control),       sizeof(m->msg_control),     m->msg_control
             , offsetof(typeof(*m), msg_controllen),    sizeof(m->msg_controllen),  m->msg_controllen
+            , offsetof(typeof(*m), msg_flags),         sizeof(m->msg_flags),       m->msg_flags
             , sizeof(*m));
 
     hexdump(m, sizeof *m);
