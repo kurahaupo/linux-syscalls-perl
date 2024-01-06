@@ -197,14 +197,14 @@ SCOPE  inline size_t sxprintf(SX b, char const *fmt, ...) {
     }
     _Bool once = 0;
     for(;;) {
-        size_t capacity = sxcapacity(b) - sxlength(b);
+        size_t avail = sxcapacity(b) - sxlength(b);
         va_list aq;
         va_copy(aq, ap);
-        ssize_t output_size = vsnprintf(b->cur, capacity, fmt, aq);
+        ssize_t output_size = vsnprintf(b->cur, avail, fmt, aq);
         va_end(aq);
         if (output_size < 0)
             pdie(88, "FAIL:   sxprintf: vsnprint failed");
-        if (output_size < capacity) {
+        if (output_size < avail) {
             result = output_size;
             b->cur += output_size;
             break;

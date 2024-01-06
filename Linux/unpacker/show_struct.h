@@ -292,7 +292,7 @@ SCOPE  inline void EndStruct(TK *tr) {
             sxpeek(tr->fieldnames),
             sxpeek(tr->packfmt),
             tr->struct_name,
-            (size_t) tr->struct_size,
+            tr->struct_size,
             sxpeek(tr->extra_perl));
     char const * env = Pbuildenv("\n#   ");
     if (env) {
