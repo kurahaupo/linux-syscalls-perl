@@ -3,11 +3,54 @@
 #include <sys/resource.h>
 #include <sys/socket.h>
 
-#include <math.h>   /* sin(A) */
 #include <stddef.h> /* offsetof(T,F) */
 #include <stdio.h>
 #include <string.h> /* strlen(S) */
 
+#undef  PENV_WANT_STAT
+#undef  PENV_WANT_LARGEFILE
+#undef  PENV_WANT_STAT_VER
+
+#include "show_struct.h"
+
+/*
+ *  struct msghdr is used by the sendmsg and recvmsg system calls
+ *  defined in #include <bits/socket.h>
+ *
+ *  struct msghdr {
+ *      void *msg_name;             // Address to send to/receive from.
+ *      socklen_t msg_namelen;      // Length of address data.
+ *
+ *      struct iovec *msg_iov;      // Vector of data to send/receive into.
+ *      size_t msg_iovlen;          // Number of elements in the vector.
+ *
+ *      void *msg_control;          // Ancillary data (eg BSD filedesc passing).
+ *      size_t msg_controllen;      // Ancillary data buffer length.
+ *                                     !! The type should be socklen_t but the
+ *                                     definition of the kernel is incompatible
+ *                                     with this.
+ *
+ *      int msg_flags;              // Flags on received message.
+ *  };
+ *
+ */
+
+void Pmsghdr(void) {
+    puts("");
+   #define T struct msghdr
+   Begin();
+   Fptr(msg_name, "");
+   F(msg_namelen);
+   Fptr(msg_iov, "array of struct iovec[]");
+   F(msg_iovlen);
+   Fptr(msg_control, "");
+   F(msg_controllen);
+   F(msg_flags);
+    End();
+   #undef T
+}
+
+#if 0
 void hexdump(const void *p_, size_t l) {
     const char *p = p_;
     size_t i;
@@ -61,9 +104,13 @@ void show_msghdr(const struct msghdr *m) {
     hexdump(m, sizeof *m);
         putchar('\n');
 }
+#endif
 
 int main() {
 
+    Pmsghdr();
+
+#if 0
 {
     struct iovec iv = {0};
     show_iovec(&iv);
@@ -78,5 +125,6 @@ int main() {
     struct msghdr msghdr = {0};
     show_msghdr(&msghdr);
 }
+#endif
     return 0;
 }
