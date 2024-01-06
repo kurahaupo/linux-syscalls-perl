@@ -362,8 +362,8 @@ use constant {
 #
 
 use constant {
-    struct_ifinfomsg_pack       =>  'CxSiC4',
-    struct_ifinfomsg_len        =>     8,   # == 1+1+2+4
+    struct_prefixmsg_pack       =>  'CxSiC4',
+    struct_prefixmsg_len        =>     8,   # == 1+1+2+4
 };
 
     #struct prefixmsg {
@@ -742,6 +742,9 @@ our %EXPORT_TAGS = (
 
         struct_ifinfomsg_pack
         struct_ifinfomsg_len
+
+        struct_prefixmsg_pack
+        struct_prefixmsg_len
     ]],
 
     nduseropt => [qw[
