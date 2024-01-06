@@ -8,12 +8,18 @@ package Linux::IpRoute2 v0.0.1;
 
 package Linux::IpRoute2::connector {
 
+    use Carp 'croak';
+
     use Linux::Syscalls qw( :msg );
 
     use Socket qw(
         SOCK_CLOEXEC
         SOCK_RAW
     );
+
+    #use constant {
+    #    _____ => 18,
+    #};
 
     # from [iproute2]include/uapi/linux/netlink.h
     use Linux::IpRoute2::rtnetlink qw(
@@ -50,10 +56,20 @@ package Linux::IpRoute2::connector {
         def_recvbuf_size    =>  0x100000,   # 1048576
     };
 
-    sub new {
+    sub open_route {
         my $self = shift;
         my $class = ref $self || $self;
-        socket my $sock, PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE   or die "Cannot create NETLINK socket";
+
+        my ($group_subs) = @_;
+
+        my $protocol = NETLINK_ROUTE;
+
+        @_ == 1 or croak 'Wrong number of args; expected 1 (plus "this"), but got '.(0+@_);
+
+        $group_subs //= 0;
+        $protocol //= NETLINK_ROUTE;
+
+        socket my $sock, PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, $protocol       or die "Cannot create NETLINK socket";
 
         $self = bless {
                 sock => $sock,
@@ -62,7 +78,7 @@ package Linux::IpRoute2::connector {
         $self->set_sndbufsz(def_sendbuf_size);
         $self->set_rcvbufsz(def_recvbuf_size);
         $self->set_netlink_opt(NETLINK_EXT_ACK, 1);
-        bind $sock, pack 'S@12', AF_NETLINK, 0, 0                           or die "Cannot bind 4 for $self";
+        bind $sock, pack 'Sx[S]Q', AF_NETLINK, $group_subs                  or die "Cannot bind(AF_LENLINK, pid=0, groups=$group_subs for $self";
 
         my $rta = $self->get_sockinfo;
         warn sprintf "Got data=[%s]\n", unpack "H*", $rta;
@@ -71,6 +87,8 @@ package Linux::IpRoute2::connector {
 
         $self->{sockname_hex} = unpack "H*", $rta;
         $self->{sockname} = { type => $rta_type, pid => $rta_pid, groups => $rta_groups };
+
+        $self->{seq} = $^T;
 
 
         return $self;
@@ -104,7 +122,12 @@ package Linux::IpRoute2::connector {
         my ($self, $flags, $msg, $ctrl, $name) = @_;
         my $sock = $self->{sock};
         return sendmsg $sock, $flags, $msg, $ctrl, $name;
-      # sendmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}], msg_controllen=0, msg_flags=0}, 0) = 52
+      # sendmsg(4,
+      #         { msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
+      #           msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}],
+      #           msg_controllen=0,
+      #           msg_flags=0},
+      #         0) = 52
     }
 
     sub mrecv {
@@ -135,12 +158,63 @@ package Linux::IpRoute2::connector {
 }
 
 use Linux::Syscalls qw( :msg );
-use Linux::IpRoute2::rtnetlink qw( NETLINK_GET_STRICT_CHK );
+use Linux::IpRoute2::rtnetlink qw(
+    :pack
+    NETLINK_GET_STRICT_CHK
+    NLM_F_REQUEST
+    RTM_GETLINK
+    RTEXT_FILTER_VF
+    RTEXT_FILTER_SKIP_STATS
+);
+
+use constant {
+    IFLA_UNSPEC             =>     0,
+    IFLA_ADDRESS            =>     1,
+    IFLA_BROADCAST          =>     2,
+    IFLA_IFNAME             =>     3,
+    IFLA_MTU                =>     4,
+    IFLA_LINK               =>     5,
+    IFLA_QDISC              =>     6,
+    IFLA_STATS              =>     7,
+    IFLA_COST               =>     8,
+    IFLA_PRIORITY           =>     9,
+    IFLA_MASTER             =>    10,
+    IFLA_WIRELESS           =>    11,      # Wireless Extension event - see wireless.h
+    IFLA_PROTINFO           =>    12,      # Protocol specific information for a link
+    IFLA_TXQLEN             =>    13,
+    IFLA_MAP                =>    14,
+    IFLA_WEIGHT             =>    15,
+    IFLA_OPERSTATE          =>    16,
+    IFLA_LINKMODE           =>    17,
+    IFLA_LINKINFO           =>    18,
+    IFLA_NET_NS_PID         =>    19,
+    IFLA_IFALIAS            =>    20,
+    IFLA_NUM_VF             =>    21,      # Number of VFs if device is SR-IOV PF
+    IFLA_VFINFO_LIST        =>    22,
+    IFLA_STATS64            =>    23,
+    IFLA_VF_PORTS           =>    24,
+    IFLA_PORT_SELF          =>    25,
+    IFLA_AF_SPEC            =>    26,
+    IFLA_GROUP              =>    27,      # Group the device belongs to */
+    IFLA_NET_NS_FD          =>    28,
+    IFLA_EXT_MASK           =>    29,      # Extended info mask, VFs, etc */
+    IFLA_PROMISCUITY        =>    30,      # Promiscuity count: > 0 means acts PROMISC */
+    IFLA_NUM_TX_QUEUES      =>    31,
+    IFLA_NUM_RX_QUEUES      =>    32,
+    IFLA_CARRIER            =>    33,
+    IFLA_PHYS_PORT_ID       =>    34,
+    IFLA_CARRIER_CHANGES    =>    35,
+    IFLA_PHYS_SWITCH_ID     =>    36,
+    IFLA_LINK_NETNSID       =>    37,
+    IFLA_PHYS_PORT_NAME     =>    38,
+    IFLA_PROTO_DOWN         =>    39,
+  # __IFLA_MAX              =>    39 | 3,
+};
 
 BEGIN { *AF_NETLINK = \&Linux::IpRoute2::connector::AF_NETLINK }
 
 use constant {
-    netlink_socket_name => pack('S@12', AF_NETLINK),
+    netlink_socket_name => pack('S@12', AF_NETLINK),    # port_ID=0, groups=0x0000000000000000
 };
 
 sub _show_msg($$$$$$) {
@@ -169,31 +243,86 @@ sub _show_msg($$$$$$) {
     printf "\e[m\n";
 }
 
-sub iprt2_connect {
+sub _set_len(\$) {
+    my ($ref) = @_;
+    substr($$ref, 0, 4) = pack 'L', length $$ref;
+}
+
+sub _add_rtattr(\$$$@) {
+    my ($ref, $type, $pack_fmt, @pack_args) = @_;
+    my $body = pack $pack_fmt, @pack_args;
+    $$ref .= pack 'SSax![L]', 4+length($body), $type, $body;
+    _set_len $$ref;
+}
+
+sub iprt2_connect_route {
+    my $self = shift;
+    my $class = ref $self || $self;
+
+    my ($group_subs) = @_;
+
     $< == 0 or die "Must be root";
-    my $c3 = Linux::IpRoute2::connector::->new(@_);
+    my $f3 = Linux::IpRoute2::connector::->open_route($group_subs);
 
-    $c3->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
+    $f3->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
-    my $c4 = Linux::IpRoute2::connector::->new(@_);
+    my $f4 = Linux::IpRoute2::connector::->open_route($group_subs);
 
-    # sendmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}], msg_controllen=0, msg_flags=0}, 0) = 52
+    # sendmsg(4,
+    #         { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+    #           msg_iov(1)=[{ "4\0\0\0"     "\22\0\1\0"     #  struct nlmsghdr: msglen (0x34), type (18), flags (1),
+    #                         "i\362\230e"  "\0\0\0\0"      #                   seq (time), port_id
+    #                         "\0\0\0\0"    "\0\0\0\0"      #  struct ifinfomsg ifi_family ifi_type, ifi_index
+    #                         "\0\0\0\0"    "\0\0\0\0"      #                   ifi_flags ifi_change
+    #                         "\10\0\35\0"  "\t\0\0\0"      #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS == 9))
+    #                         "\t\0\3\0"    "eth0\0\0\0\0", #  ifla:(len(9), type(3), str("eth0\0"), pad(3))
+    #                         52}],
+    #           msg_controllen=0,
+    #           msg_flags=0 },
+    #         0) = 52
     my $request_flags = 0;
-    my $request = pack 'LSSq@52', 0x34, 18, 1, $^T+1;
+    my $iface_name = 'eth0';
+    my $port_id = 0;
+    my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack,
+                       struct_nlmsghdr_len  + struct_ifinfomsg_len, RTM_GETLINK, NLM_F_REQUEST, ++$f4->{seq}, $port_id,
+                       (0) x 5;
+    _add_rtattr $request, IFLA_EXT_MASK, 'L', RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS;
+    _add_rtattr $request, IFLA_IFNAME, 'Z', $iface_name;
+
         # HINT: 0x34 appears to be the size of the reply received later
         # No idea why the current time ($^T) needs to be in the packet, but it matches the observed behaviour.
     my $request_to = netlink_socket_name;
     _show_msg 0, undef, $request_flags, $request, undef, $request_to;
-    $c4->msend($request_flags, $request, undef, $request_to) or die "Could not send";;
+    $f4->msend($request_flags, $request, undef, $request_to) or die "Could not send";;
 
-    # recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
-    my ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from) = $c4->mrecv(MSG_PEEK|MSG_TRUNC, 0, 0, 0x400);
-    _show_msg 1, $rlen, $reply_flags, $reply, $reply_ctrl, $reply_from;
+    # recvmsg(4,
+    #         {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
+    #          msg_iov(1)=[{NULL, 0}],
+    #          msg_controllen=0,
+    #          msg_flags=MSG_TRUNC},
+    #         MSG_PEEK|MSG_TRUNC) = 1020
+    my ($rlen1, $reply_flags, $reply, $reply_ctrl, $reply_from) = $f4->mrecv(MSG_PEEK|MSG_TRUNC, 0, 0, 0x400);
+    _show_msg 1, $rlen1, $reply_flags, $reply, $reply_ctrl, $reply_from;
+
+    $rlen1 > 0 or do { warn "Couldn't peek!"; return };
+    # recvmsg(4,
+    #         {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
+    #          msg_iov(1)=[{"\374\3\0\0\20\0\0\0\23\326\224e\217u\357\212\0\0\1\0\2\0\0\0C\20\1\0\0\0\0\0"..., 32768}],
+    #          msg_controllen=0,
+    #          msg_flags=0},
+    #         0) = 1020
+    (my $rlen2, $reply_flags, $reply, $reply_ctrl, $reply_from) = $f4->mrecv(0, 0x8000, 0, 0x400);
+    _show_msg 1, $rlen2, $reply_flags, $reply, $reply_ctrl, $reply_from;
 
     return bless {
-        c3 => $c3,
-        c4 => $c4,
-    };
+        F3 => $f3,  # not yet clear why there's more than one...
+        F4 => $f4,
+    }, $class;
+}
+
+sub TEST {
+    use Data::Dumper;
+    say Dumper(__PACKAGE__->iprt2_connect_route(0));
 }
 
 use Exporter 'import';
@@ -203,13 +332,17 @@ our @EXPORT = qw( iprt2_connect );
 
 __END__
 
+Note: "pid" in this context is "port ID".
+
++ strace -s 4096 -e socket,bind,connect,setsockopt,getsockopt,getsockname,sendmsg,recvmsg,shutdown,close ip -6 addr show eth0
+...
+
 socket(PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 3
 setsockopt(3, SOL_SOCKET, SO_SNDBUF, [32768], 4) = 0
 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
 setsockopt(3, SOL_NETLINK, 11, [1], 4)  = 0
 bind(3, {sa_family=AF_NETLINK, pid=0, groups=00000000}, 12) = 0
-getsockname(3, {sa_family=AF_NETLINK, pid=24411, groups=00000000}, [12]) = 0
-
+getsockname(3, {sa_family=AF_NETLINK, pid=15990, groups=00000000}, [12]) = 0
 setsockopt(3, SOL_NETLINK, 12, [1], 4)  = 0
 
 socket(PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 4
@@ -217,21 +350,75 @@ setsockopt(4, SOL_SOCKET, SO_SNDBUF, [32768], 4) = 0
 setsockopt(4, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
 setsockopt(4, SOL_NETLINK, 11, [1], 4)  = 0
 bind(4, {sa_family=AF_NETLINK, pid=0, groups=00000000}, 12) = 0
-getsockname(4, {sa_family=AF_NETLINK, pid=-1964018289, groups=00000000}, [12]) = 0
-
-
-sendmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}], msg_controllen=0, msg_flags=0}, 0) = 52
-recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
-brk(NULL)                               = 0x1337000
-brk(0x1360000)                          = 0x1360000
-recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\374\3\0\0\20\0\0\0\23\326\224e\217u\357\212\0\0\1\0\2\0\0\0C\20\1\0\0\0\0\0"..., 32768}], msg_controllen=0, msg_flags=0}, 0) = 1020
+getsockname(4, {sa_family=AF_NETLINK, pid=-774776507, groups=00000000}, [12]) = 0
+sendmsg(4,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{"4\0\0\0\22\0\1\0i\362\230e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\10\0\35\0\t\0\0\0\t\0\3\0eth0\0\0\0\0", 52}],
+          msg_controllen=0,
+          msg_flags=0 },
+        0) = 52
+recvmsg(4,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{NULL, 0}],
+          msg_controllen=0,
+          msg_flags=MSG_TRUNC },
+        MSG_PEEK|MSG_TRUNC) = 1020
+recvmsg(4,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{"\374\3\0\0\20\0\0\0i\362\230eE\331\321\321\0\0\1\0\2\0\0\0C\20\1\0\0\0\0\0\t\0\3\0eth0\0\0\0\0\10\0\r\0\350\3\0\0\5\0\20\0\6\0\0\0\5\0\21\0\0\0\0\0\10\0\4\0\334\5\0\0\10\0002\0<\0\0\0\10\0003\0\334\5\0\0\10\0\33\0\0\0\0\0\10\0\36\0\1\0\0\0\10\0\37\0\5\0\0\0\10\0(\0\377\377\0\0\10\0)\0\0\0\1\0\10\0 \0\5\0\0\0\5\0!\0\1\0\0\0\7\0\6\0mq\0\0\10\0#\0\1\0\0\0\10\0/\0\1\0\0\0\10\0000\0\0\0\0\0\5\0'\0\0\0\0\0$\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\21\0\0\0\0\0\0\0\n\0\1\0\0\34#\rv\314\0\0\n\0\2\0\377\377\377\377\377\377\0\0\304\0\27\0\277\254\303\0\0\0\0\00074\207\0\0\0\0\0;I\233\24\2\0\0\0\233\277ug\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\246\f\35\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\0\7\0\277\254\303\00074\207\0;I\233\24\233\277ug\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\246\f\35\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\10\0\25\0\0\0\0\0\f\0+\0\5\0\2\0\0\0\0\0\n\0006\0\0\34#\rv\314\0\0\220\1\32\0\210\0\2\0\204\0\1\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\20'\0\0\350\3\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\1\n\0\10\0\1\0000\0\0\200\24\0\5\0\377\377\0\0t\31\0\0\254R\0\0\350\3\0\0\344\0\2\0\0\0\0\0@\0\0\0\334\5\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\377\377\377\377\240\17\0\0\350\3\0\0\0\0\0\0\200:\t\0\200Q\1\0\3\0\0\0X\2\0\0\20\0\0\0\0\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0`\352\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\20'\0\0\350\3\0\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\200\3566\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\377\377\0\0\377\377\377\377\20\0004\200\v\0005\0enp9s0\0\0\21\0008\0000000:09:00.0\0\0\0\0\10\0009\0pci\0", 32768}],
+          msg_controllen=0,
+          msg_flags=0 },
+        0) = 1020
 close(4)                                = 0
 
-sendmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"(\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\n\0\0\0\2\0\0\0\0\0\0\0\0\0\0\0"..., 40}], msg_controllen=0, msg_flags=0}, 0) = 40
-recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
-recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\374\3\0\0\20\0\0\0\23\326\224e[_\0\0\0\0\1\0\2\0\0\0C\20\1\0\0\0\0\0"..., 32768}], msg_controllen=0, msg_flags=0}, 0) = 1020
-sendto(3, "\30\0\0\0\26\0\1\3\24\326\224e\0\0\0\0\n\0\0\0\2\0\0\0\0\0\0\0\0\0\0\0"..., 152, 0, NULL, 0) = 152
-recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 144
-recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"H\0\0\0\24\0\"\0\24\326\224e[_\0\0\n@\0\0\2\0\0\0\24\0\1\0$\3X\n"..., 32768}], msg_controllen=0, msg_flags=0}, 0) = 144
-recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 20
-recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\24\0\0\0\3\0\"\0\24\326\224e[_\0\0\0\0\0\0", 32768}], msg_controllen=0, msg_flags=0}, 0) = 20
+sendmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{"(\0\0\0\22\0\1\0i\362\230e\0\0\0\0\n\0\0\0\2\0\0\0\0\0\0\0\0\0\0\0\10\0\35\0\t\0\0\0", 40}],
+          msg_controllen=0,
+          msg_flags=0 },
+        0) = 40
+recvmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{NULL, 0}],
+          msg_controllen=0,
+          msg_flags=MSG_TRUNC },
+        MSG_PEEK|MSG_TRUNC) = 1020
+recvmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{"\374\3\0\0\20\0\0\0i\362\230ev>\0\0\0\0\1\0\2\0\0\0C\20\1\0\0\0\0\0\t\0\3\0eth0\0\0\0\0\10\0\r\0\350\3\0\0\5\0\20\0\6\0\0\0\5\0\21\0\0\0\0\0\10\0\4\0\334\5\0\0\10\0002\0<\0\0\0\10\0003\0\334\5\0\0\10\0\33\0\0\0\0\0\10\0\36\0\1\0\0\0\10\0\37\0\5\0\0\0\10\0(\0\377\377\0\0\10\0)\0\0\0\1\0\10\0 \0\5\0\0\0\5\0!\0\1\0\0\0\7\0\6\0mq\0\0\10\0#\0\1\0\0\0\10\0/\0\1\0\0\0\10\0000\0\0\0\0\0\5\0'\0\0\0\0\0$\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\21\0\0\0\0\0\0\0\n\0\1\0\0\34#\rv\314\0\0\n\0\2\0\377\377\377\377\377\377\0\0\304\0\27\0\277\254\303\0\0\0\0\00074\207\0\0\0\0\0;I\233\24\2\0\0\0\233\277ug\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\246\f\35\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0d\0\7\0\277\254\303\00074\207\0;I\233\24\233\277ug\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\246\f\35\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\10\0\25\0\0\0\0\0\f\0+\0\5\0\2\0\0\0\0\0\n\0006\0\0\34#\rv\314\0\0\220\1\32\0\210\0\2\0\204\0\1\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\20'\0\0\350\3\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\1\n\0\10\0\1\0000\0\0\200\24\0\5\0\377\377\0\0t\31\0\0\254R\0\0\350\3\0\0\344\0\2\0\0\0\0\0@\0\0\0\334\5\0\0\1\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\377\377\377\377\240\17\0\0\350\3\0\0\0\0\0\0\200:\t\0\200Q\1\0\3\0\0\0X\2\0\0\20\0\0\0\0\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0`\352\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\20'\0\0\350\3\0\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\200\3566\0\0\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\0\0\0\377\377\0\0\377\377\377\377\20\0004\200\v\0005\0enp9s0\0\0\21\0008\0000000:09:00.0\0\0\0\0\10\0009\0pci\0", 32768}],
+          msg_controllen=0,
+          msg_flags=0 },
+        0) = 1020
+recvmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{NULL, 0}],
+          msg_controllen=0,
+          msg_flags=MSG_TRUNC },
+        MSG_PEEK|MSG_TRUNC) = 144
+recvmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{"H\0\0\0\24\0\"\0j\362\230ev>\0\0\n@\0\0\2\0\0\0\24\0\1\0$\3X\n\302]\0\1\2\34#\377\376\rv\314\24\0\6\0\3316\0\0\31P\1\0004\3234\1MM\265\3\10\0\10\0\0\1\0\0H\0\0\0\24\0\"\0j\362\230ev>\0\0\n@\200\375\2\0\0\0\24\0\1\0\376\200\0\0\0\0\0\0\2\34#\377\376\rv\314\24\0\6\0\377\377\377\377\377\377\377\377t\31\0\0t\31\0\0\10\0\10\0\200\0\0\0", 32768}],
+          msg_controllen=0,
+          msg_flags=0 },
+        0) = 144
+recvmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{NULL, 0}],
+          msg_controllen=0,
+          msg_flags=MSG_TRUNC },
+        MSG_PEEK|MSG_TRUNC) = 20
+recvmsg(3,
+        { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
+          msg_iov(1)=[{"\24\0\0\0\3\0\"\0j\362\230ev>\0\0\0\0\0\0", 32768}],
+          msg_controllen=0,
+          msg_flags=0 },
+        0) = 20
+
+...
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    altname enp9s0
+    inet6 2403:580a:c25d:1:21c:23ff:fe0d:76cc/64 scope global dynamic mngtmpaddr
+       valid_lft 86041sec preferred_lft 14041sec
+    inet6 fe80::21c:23ff:fe0d:76cc/64 scope link
+       valid_lft forever preferred_lft forever
++++ exited with 0 +++
