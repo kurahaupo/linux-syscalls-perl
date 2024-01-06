@@ -145,11 +145,11 @@ use constant {
 
 # rtm_flags
 use constant {
-    RTM_F_NOTIFY        => 0x100,   # Notify user of route change
-    RTM_F_CLONED        => 0x200,   # This route is cloned
-    RTM_F_EQUALIZE      => 0x400,   # Multipath equalizer: NI
-    RTM_F_PREFIX        => 0x800,   # Prefix addresses
-    RTM_F_LOOKUP_TABLE  => 0x1000,  # set rtm_table to FIB lookup result
+    RTM_F_NOTIFY        => _B  8,   #  0x100    Notify user of route change
+    RTM_F_CLONED        => _B  9,   #  0x200    This route is cloned
+    RTM_F_EQUALIZE      => _B 10,   #  0x400    Multipath equalizer: NI
+    RTM_F_PREFIX        => _B 11,   #  0x800    Prefix addresses
+    RTM_F_LOOKUP_TABLE  => _B 12,   # 0x1000    set rtm_table to FIB lookup result
 };
 
 use constant {
@@ -196,12 +196,12 @@ use constant {
 
 
 use constant {
-    RTNH_F_DEAD                 =>   1,     # Nexthop is dead (used by multipath)
-    RTNH_F_PERVASIVE            =>   2,     # Do recursive gateway lookup
-    RTNH_F_ONLINK               =>   4,     # Gateway is forced on link
-    RTNH_F_OFFLOAD              =>   8,     # offloaded route
-    RTNH_F_LINKDOWN             =>  16,     # carrier-down on nexthop
-    RTNH_COMPARE_MASK           =>  25,     # == RTNH_F_DEAD | RTNH_F_LINKDOWN | RTNH_F_OFFLOAD
+    RTNH_F_DEAD         =>  _B 0,   #  1    Nexthop is dead (used by multipath)
+    RTNH_F_PERVASIVE    =>  _B 1,   #  2    Do recursive gateway lookup
+    RTNH_F_ONLINK       =>  _B 2,   #  4    Gateway is forced on link
+    RTNH_F_OFFLOAD      =>  _B 3,   #  8    offloaded route
+    RTNH_F_LINKDOWN     =>  _B 4,   # 16    carrier-down on nexthop
+    RTNH_COMPARE_MASK   =>    25,   # == RTNH_F_DEAD | RTNH_F_LINKDOWN | RTNH_F_OFFLOAD
 };
 
 #qw{
@@ -448,25 +448,25 @@ use constant {
 
 # RTnetlink multicast groups - backwards compatibility for userspace
 use constant {
-    RTMGRP_LINK                 =>  1,
-    RTMGRP_NOTIFY               =>  2,
-    RTMGRP_NEIGH                =>  4,
-    RTMGRP_TC                   =>  8,
+    RTMGRP_LINK                 => _B  0,  # =       1
+    RTMGRP_NOTIFY               => _B  1,  # =       2
+    RTMGRP_NEIGH                => _B  2,  # =       4
+    RTMGRP_TC                   => _B  3,  # =       8
 
-    RTMGRP_IPV4_IFADDR          =>  0x10,
-    RTMGRP_IPV4_MROUTE          =>  0x20,
-    RTMGRP_IPV4_ROUTE           =>  0x40,
-    RTMGRP_IPV4_RULE            =>  0x80,
+    RTMGRP_IPV4_IFADDR          => _B  4,  # =    0x10
+    RTMGRP_IPV4_MROUTE          => _B  5,  # =    0x20
+    RTMGRP_IPV4_ROUTE           => _B  6,  # =    0x40
+    RTMGRP_IPV4_RULE            => _B  7,  # =    0x80
 
-    RTMGRP_IPV6_IFADDR          =>  0x100,
-    RTMGRP_IPV6_MROUTE          =>  0x200,
-    RTMGRP_IPV6_ROUTE           =>  0x400,
-    RTMGRP_IPV6_IFINFO          =>  0x800,
+    RTMGRP_IPV6_IFADDR          => _B  8,  # =   0x100
+    RTMGRP_IPV6_MROUTE          => _B  9,  # =   0x200
+    RTMGRP_IPV6_ROUTE           => _B 10,  # =   0x400
+    RTMGRP_IPV6_IFINFO          => _B 11,  # =   0x800
 
-    RTMGRP_DECnet_IFADDR        =>  0x1000,
-    RTMGRP_DECnet_ROUTE         =>  0x4000,
+    RTMGRP_DECnet_IFADDR        => _B 12,  # =  0x1000
+    RTMGRP_DECnet_ROUTE         => _B 14,  # =  0x4000
 
-    RTMGRP_IPV6_PREFIX          =>  0x20000,
+    RTMGRP_IPV6_PREFIX          => _B 17,  # = 0x20000
 };
 
 # RTnetlink multicast groups (enum rtnetlink_groups)
