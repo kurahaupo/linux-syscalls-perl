@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 
 #include <stddef.h> /* offsetof(T,F) */
+#include <unistd.h> /* fork */
 
 #include <stdio.h>
 #include <math.h>   /* sin(A) */
