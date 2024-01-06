@@ -8,32 +8,47 @@ package Linux::IpRoute2 v0.0.1;
 
 package Linux::IpRoute2::connector {
 
-    use Linux::Syscalls qw( sendmsg recvmsg );
+    use Linux::Syscalls qw( :msg );
 
     use Socket qw(
         SOCK_CLOEXEC
         SOCK_RAW
     );
 
+    # from [iproute2]include/uapi/linux/netlink.h
+    use Linux::IpRoute2::rtnetlink qw(
+        NETLINK_ROUTE
+        NETLINK_EXT_ACK
+    );
     # Socket should have these but doesn't ...
     use constant {
-        AF_NETLINK          =>  16, # == PF_NETLINK
-        NETLINK_ROUTE       =>   0,
-        PF_NETLINK          =>  16, # == AF_NETLINK
-        SOL_NETLINK         => 270,
-        SOL_SOCKET          =>   1,
-        SO_RCVBUF           =>   8,
-        SO_SNDBUF           =>   7,
+        AF_NETLINK              =>  16,
+
+        SO_SNDBUF               =>   7,
+        SO_RCVBUF               =>   8,
+
+        SOL_SOCKET              =>   1,
+        SOL_NETLINK             => 270,
+    };
+    use constant {
+        PF_NETLINK              =>  AF_NETLINK,
     };
 
-    my %af_names = (
-        'AF_NETLINK' => AF_NETLINK,
-    );
+    my %af_names = map {
+        ( ( my $x = $_ ) =~ s/^AF_(.*)/\L$1/ => eval $_ )
+    } qw{ AF_NETLINK };
+    my @af_names;
+    $af_names[$af_names{$_}] = $_ for keys %af_names;
 
     # Built-in functions:
     #   getsockname
     #   setsockopt
     #   socket
+
+    use constant {
+        def_sendbuf_size    =>    0x8000,   #   32768
+        def_recvbuf_size    =>  0x100000,   # 1048576
+    };
 
     sub new {
         my $self = shift;
@@ -44,10 +59,10 @@ package Linux::IpRoute2::connector {
                 sock => $sock,
             }, $class;
 
-        $self->set_sndbufsz(32768);
-        $self->set_rcvbufsz(1048576);
-        $self->set_netlink(11, 1);
-        bind $sock, pack 'S@12', AF_NETLINK, 0, 0                           or die "Cannot bind 4";         # sa_family=AF_NETLINK, pid=0, groups=00000000
+        $self->set_sndbufsz(def_sendbuf_size);
+        $self->set_rcvbufsz(def_recvbuf_size);
+        $self->set_netlink_opt(NETLINK_EXT_ACK, 1);
+        bind $sock, pack 'S@12', AF_NETLINK, 0, 0                           or die "Cannot bind 4 for $self";
 
         my $rta = $self->get_sockinfo;
         warn sprintf "Got data=[%s]\n", unpack "H*", $rta;
@@ -73,7 +88,7 @@ package Linux::IpRoute2::connector {
         setsockopt $sock, SOL_SOCKET, SO_RCVBUF, pack "L", $size            or die "Cannot setsockopt RCVBUF $size for $self";
     }
 
-    sub set_netlink {
+    sub set_netlink_opt {
         my ($self, $opt, $value) = @_;
         my $sock = $self->{sock};
         setsockopt $sock, SOL_NETLINK, $opt, pack "L", $value               or die "Cannot setsockopt SOL_NETLINK, $opt ,$value for $self";
@@ -86,18 +101,16 @@ package Linux::IpRoute2::connector {
     }
 
     sub msend {
-        my ($self, $msg, $flags) = @_;
+        my ($self, $flags, $msg, $ctrl, $name) = @_;
         my $sock = $self->{sock};
-        my $fd = fileno($sock) // die "No fd for $self";
-        send $sock, $msg, $flags;
+        return sendmsg $sock, $flags, $msg, $ctrl, $name;
       # sendmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}], msg_controllen=0, msg_flags=0}, 0) = 52
     }
 
     sub mrecv {
-        my ($self, $msg) = @_;
+        my ($self, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
         my $sock = $self->{sock};
-        my $fd = fileno($sock) // die "No fd for $self";
-      # recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
+        return recvmsg $sock, $flags, $maxmsglen, $maxctrllen, $maxnamelen;
     }
 
     sub close {
@@ -106,7 +119,7 @@ package Linux::IpRoute2::connector {
         close $sock or die "Cannot close socket $sock for ipr2 $self; #!";
     }
 
-    use overload {
+    use overload (
         '""' => sub {
             my ($self) = @_;
             my $r = sprintf "IPR2_rtnetlink_connector(%#p)", $self;
@@ -116,22 +129,70 @@ package Linux::IpRoute2::connector {
             }
             return $r;
         },
-    };
+    );
 
     BEGIN { *DESTROY = \&close };
 }
 
+use Linux::Syscalls qw( :msg );
+use Linux::IpRoute2::rtnetlink qw( NETLINK_GET_STRICT_CHK );
+
+BEGIN { *AF_NETLINK = \&Linux::IpRoute2::connector::AF_NETLINK }
+
+use constant {
+    netlink_socket_name => pack('S@12', AF_NETLINK),
+};
+
+sub _show_msg($$$$$$) {
+    my ($direction, $status, $flags, $data, $ctrl, $name) = @_;
+
+    printf "%s:\n", $direction ? "\e[1;34mReply" : "\e[1;35mRequest";
+    printf " status %d (maybe length of packet)\n", $status if defined $status;
+    if ( defined $flags ) {
+        my $of = $flags;
+        my $sf = join ',',
+                    grep  {
+                        $of ^ ($of &= ~ eval 'MSG_' . uc $_)
+                    } qw(
+                        oob         peek        dontroute   ctrunc      proxy
+                        trunc       dontwait    eor         waitall     fin
+                        syn         confirm     rst         errqueue    nosignal
+                        more        waitforone  fastopen    cmsg_cloexec
+                    );
+        $sf = join '+', $sf || (), $of || ();
+        $sf ||= 'none';
+        printf "  flags %#x (%s)\n", $flags, $sf;
+    }
+    printf "   data [%s]\n",                          defined $data ? unpack("H*", $data) : "(none)";
+    printf "   ctrl [%s]\n",                          defined $ctrl ? unpack("H*", $ctrl) : "(none)";
+    printf " %6s [%s]\n", $direction ? "from" : "to", defined $name ? unpack("H*", $name) : "(unspecified)";
+    printf "\e[m\n";
+}
+
 sub iprt2_connect {
     $< == 0 or die "Must be root";
-    my $c1 = Linux::IpRoute2::connector::->new(@_);
+    my $c3 = Linux::IpRoute2::connector::->new(@_);
 
-    $c1->set_netlink(12, 1);
+    $c3->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
-    my $c2 = Linux::IpRoute2::connector::->new(@_);
+    my $c4 = Linux::IpRoute2::connector::->new(@_);
+
+    # sendmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}], msg_controllen=0, msg_flags=0}, 0) = 52
+    my $request_flags = 0;
+    my $request = pack 'LSSq@52', 0x34, 18, 1, $^T+1;
+        # HINT: 0x34 appears to be the size of the reply received later
+        # No idea why the current time ($^T) needs to be in the packet, but it matches the observed behaviour.
+    my $request_to = netlink_socket_name;
+    _show_msg 0, undef, $request_flags, $request, undef, $request_to;
+    $c4->msend($request_flags, $request, undef, $request_to) or die "Could not send";;
+
+    # recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
+    my ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from) = $c4->mrecv(MSG_PEEK|MSG_TRUNC, 0, 0, 0x400);
+    _show_msg 1, $rlen, $reply_flags, $reply, $reply_ctrl, $reply_from;
 
     return bless {
-        c1 => $c1,
-        c2 => $c2,
+        c3 => $c3,
+        c4 => $c4,
     };
 }
 
