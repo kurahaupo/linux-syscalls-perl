@@ -72,6 +72,10 @@ use Fcntl qw( S_IFMT );
 use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor uname );
 # Avoid «use Errno qw( E... );» as it results in dup import warnings with perl -Wc
 
+use constant {
+    zero_but_true => '0 but true',
+};
+
 BEGIN {
     # When in syntax-checking mode, check for clashes with the POSIX module,
     # which (unhelpfully) exports everything by default, including optional
@@ -814,6 +818,7 @@ package Linux::Syscalls::bless::statfs {
                 printf "\tflags: %x (NONE)\n", $f;
             } else {
                 my $g = $f ^ ST_VALID;
+                no warnings 'qw'; # don't complain about '#'
                 our @flag_names = qw(
                     rdonly nosuid nodev noexec synchronous INVALID mandlock
                     write append immutable noatime nodiratime relatime
@@ -1413,7 +1418,7 @@ sub openat($$;$$) {
     state $syscall_id = _get_syscall_id 'openat';
     my $r = syscall $syscall_id, $dir_fd, $path, $flags, $mode;
     return if $r < 0;
-    return $r || '0 but true';
+    return $r || zero_but_true;
 }
 
 # Undecided whether I should expose this publicly.
@@ -1603,8 +1608,8 @@ use constant {
 };
 
 use constant {
-    iovec_pack      => 'C0(PIz![P])*',
-    msghdr_pack     => 'C0(PIz![P])3',
+    iovec_pack      => 'C0(PIx![P])*',
+    msghdr_pack     => 'C0(PIx![P])3L',
 };
 
 sub recvmsg($;$$$$) {
@@ -1612,21 +1617,23 @@ sub recvmsg($;$$$$) {
     _map_fd($fd);
     $flags //= 0;
     $maxmsglen //= 0;   # Useful for PEEK
-    my $msg_buf = "A" x $maxmsglen;
+    my $msg_buf = 'A' x $maxmsglen if $maxmsglen;   # pass NULL if unwanted
     my $iov = pack iovec_pack, $msg_buf, $maxmsglen;
     wantarray or $maxctrllen = $maxnamelen = 0;     # don't ask for what we're not going to use
-    my $name = "N" x $maxnamelen if $maxnamelen;    # $name is undef if $maxnamelen is false
-    my $ctrl = "C" x $maxctrllen if $maxctrllen;
-    my $msghdr = pack msghdr_pack, $name, $maxnamelen, $iov, 1, $ctrl, $maxctrllen;
+    my $name = 'N' x $maxnamelen if $maxnamelen;    # $name is undef if $maxnamelen is false
+    my $ctrl = 'C' x $maxctrllen if $maxctrllen;
+    my $msghdr = pack msghdr_pack, $name, $maxnamelen, $iov, 1, $ctrl, $maxctrllen, 0;
     state $syscall_id = _get_syscall_id 'recvmsg';
     my $ret = syscall $syscall_id, $fd, $msghdr, $flags;
     return if $ret < 0;
-    my (undef, $namelen, undef, undef, undef, $ctrllen) = unpack msghdr_pack, $msghdr;
-    my @R = substr($msg_buf,0,$ret);
-    return $R[0] if ! wantarray;
-    # Remaining array elements are sparse, undef if not requested.
-    $R[1] = substr($ctrl,0,$ctrllen) if $maxctrllen;
-    $R[2] = substr($name,0,$namelen) if $maxnamelen;
+    return $ret if ! wantarray && $flags & MSG_PEEK;
+    my (undef, $namelen, undef, undef, undef, $ctrllen, $rflags) = unpack msghdr_pack, $msghdr;
+    my @R;
+    $R[0] = $ret || zero_but_true;
+    $R[1] = $rflags;
+    $R[2] = substr($msg_buf, 0, $ret)  if $maxmsglen;
+    $R[3] = substr($ctrl, 0, $ctrllen) if $maxctrllen;
+    $R[4] = substr($name, 0, $namelen) if $maxnamelen;
     return @R;
 }
 
@@ -1635,11 +1642,11 @@ sub sendmsg($$$;$$) {
     _map_fd($fd);
     $flags //= 0;
     my $iov = pack iovec_pack, $msg, length($msg);
-    my $msghdr = pack msghdr_pack, $name, length($name), $iov, 1, $ctrl, length($ctrl);
+    my $msghdr = pack msghdr_pack, $name, length($name//''), $iov, 1, $ctrl, length($ctrl//''), $flags;
     state $syscall_id = _get_syscall_id 'sendmsg';
     my $ret = syscall $syscall_id, $fd, $msghdr, $flags;
     return if $ret < 0;
-    return $ret || "0 but true";
+    return $ret || zero_but_true;
 }
 
 _export_tag qw{ msg => recvmsg sendmsg
