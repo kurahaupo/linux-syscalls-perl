@@ -69,6 +69,11 @@ SCOPE  inline void sxdestroy(SX b) {
         free(b);
 }
 
+EXTERN inline size_t sxlength(SX b) ;
+SCOPE  inline size_t sxlength(SX b) {
+    return b->cur || b->start ? b->cur - b->start : 0;    /* (NULL-NULL) yields 0 on all known architectures, but let's be 100% standards-compliant */
+}
+
 EXTERN inline char const *sxpeek(SX b) ;
 SCOPE  inline char const *sxpeek(SX b) {
     // Look at the internal buffer; this will be invalidated by the next sx
@@ -81,7 +86,6 @@ SCOPE  inline char *sxfinal(SX b) {
     // Return a mallocked "copy" of the string within b, and destroy b;
     // since it's already mallocked, this is very cheap.
     char *ret = b->start;
-    //free(b->start);
     b->start = b->end = b->cur = NULL;
     sxdestroy(b);
     return ret;
@@ -110,8 +114,9 @@ SCOPE  inline void sxresize(SX b, size_t make_room_for) {
 
 ////////////////////////////////////////
 
-EXTERN inline void sxprintf(SX b, char const *fmt, ...) ;
-SCOPE  inline void sxprintf(SX b, char const *fmt, ...) {
+EXTERN inline size_t sxprintf(SX b, char const *fmt, ...) ;
+SCOPE  inline size_t sxprintf(SX b, char const *fmt, ...) {
+    size_t result;
     va_list ap;
     va_start(ap, fmt);
     if (0) {
@@ -134,6 +139,7 @@ SCOPE  inline void sxprintf(SX b, char const *fmt, ...) {
         if (output_size < 0)
             pdie(88, "sxprintf: vsnprint failed");
         if (output_size < avail) {
+            result = output_size;
             b->cur += output_size;
             break;
         }
@@ -147,6 +153,7 @@ SCOPE  inline void sxprintf(SX b, char const *fmt, ...) {
                 (void*) b, b->cur, b->start, b->end, b->bufalloc, b->selfalloc);
     }
     va_end(ap);
+    return result;
 }
 
 #undef EXTERN
