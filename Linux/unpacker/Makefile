@@ -4,6 +4,7 @@ CFLAGS += -I../../../iproute2/include/uapi -I../../../../iproute2/include/uapi -
 
 all::	linux-exit-status-test-c
 all::	show_dirent_struct
+all::	show_if_link
 all::	show_ifinfomsg_struct
 all::	show_msghdr_struct
 all::	show_stat_struct
@@ -25,6 +26,9 @@ linux-exit-status-test-c: linux-exit-status-test-c.o
 
 show_dirent_struct:     show_dirent_struct.o
 	$(CC) $(CFLAGS) show_dirent_struct.o $(LDFLAGS) -o $@
+
+show_if_link:           show_if_link.o die.o
+	$(CC) $(CFLAGS) show_if_link.o die.o $(LDFLAGS) -o $@
 
 show_ifinfomsg_struct:  show_ifinfomsg_struct.o die.o
 	$(CC) $(CFLAGS) show_ifinfomsg_struct.o die.o $(LDFLAGS) -o $@
@@ -59,6 +63,11 @@ linux-exit-status-test-c.o: linux-exit-status-test-c.c
 log2ceil.o: log2ceil.c
 log2ceil.o: log2ceil.h
 show_dirent_struct.o: show_dirent_struct.c
+show_if_link.o: die.h
+show_if_link.o: log2ceil.h
+show_if_link.o: show_if_link.c
+show_if_link.o: show_struct.h
+show_if_link.o: sxbuf.h
 show_ifinfomsg_struct.o: die.h
 show_ifinfomsg_struct.o: log2ceil.h
 show_ifinfomsg_struct.o: show_ifinfomsg_struct.c
