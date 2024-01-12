@@ -17,11 +17,6 @@ package Linux::IpRoute2::connector {
         SOCK_RAW
     );
 
-    #use constant {
-    #    _____ => 18,
-    #};
-
-    # from [iproute2]include/uapi/linux/netlink.h
     use Linux::IpRoute2::rtnetlink qw(
         NETLINK_ROUTE
         NETLINK_EXT_ACK
@@ -89,7 +84,6 @@ package Linux::IpRoute2::connector {
         $self->{sockname} = { type => $rta_type, pid => $rta_pid, groups => $rta_groups };
 
         $self->{seq} = $^T;
-
 
         return $self;
     }
@@ -166,50 +160,10 @@ use Linux::IpRoute2::rtnetlink qw(
     RTEXT_FILTER_VF
     RTEXT_FILTER_SKIP_STATS
 );
-
-use constant {
-    IFLA_UNSPEC             =>     0,
-    IFLA_ADDRESS            =>     1,
-    IFLA_BROADCAST          =>     2,
-    IFLA_IFNAME             =>     3,
-    IFLA_MTU                =>     4,
-    IFLA_LINK               =>     5,
-    IFLA_QDISC              =>     6,
-    IFLA_STATS              =>     7,
-    IFLA_COST               =>     8,
-    IFLA_PRIORITY           =>     9,
-    IFLA_MASTER             =>    10,
-    IFLA_WIRELESS           =>    11,      # Wireless Extension event - see wireless.h
-    IFLA_PROTINFO           =>    12,      # Protocol specific information for a link
-    IFLA_TXQLEN             =>    13,
-    IFLA_MAP                =>    14,
-    IFLA_WEIGHT             =>    15,
-    IFLA_OPERSTATE          =>    16,
-    IFLA_LINKMODE           =>    17,
-    IFLA_LINKINFO           =>    18,
-    IFLA_NET_NS_PID         =>    19,
-    IFLA_IFALIAS            =>    20,
-    IFLA_NUM_VF             =>    21,      # Number of VFs if device is SR-IOV PF
-    IFLA_VFINFO_LIST        =>    22,
-    IFLA_STATS64            =>    23,
-    IFLA_VF_PORTS           =>    24,
-    IFLA_PORT_SELF          =>    25,
-    IFLA_AF_SPEC            =>    26,
-    IFLA_GROUP              =>    27,      # Group the device belongs to */
-    IFLA_NET_NS_FD          =>    28,
-    IFLA_EXT_MASK           =>    29,      # Extended info mask, VFs, etc */
-    IFLA_PROMISCUITY        =>    30,      # Promiscuity count: > 0 means acts PROMISC */
-    IFLA_NUM_TX_QUEUES      =>    31,
-    IFLA_NUM_RX_QUEUES      =>    32,
-    IFLA_CARRIER            =>    33,
-    IFLA_PHYS_PORT_ID       =>    34,
-    IFLA_CARRIER_CHANGES    =>    35,
-    IFLA_PHYS_SWITCH_ID     =>    36,
-    IFLA_LINK_NETNSID       =>    37,
-    IFLA_PHYS_PORT_NAME     =>    38,
-    IFLA_PROTO_DOWN         =>    39,
-  # __IFLA_MAX              =>    39 | 3,
-};
+use Linux::IpRoute2::if_link qw(
+    IFLA_EXT_MASK
+    IFLA_IFNAME
+);
 
 BEGIN { *AF_NETLINK = \&Linux::IpRoute2::connector::AF_NETLINK }
 
