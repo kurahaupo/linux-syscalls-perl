@@ -53,9 +53,9 @@ void Plink_info_request(void) {
 
    #define T struct link_info_request
     Begin();
-    Fdefault(hdr,"");
-    Fdefault(ifm,"");
-    Fdefault(buf,"array");
+    Fblob(hdr);
+    Fblob(ifm);
+    Fblob2(buf,"array");
     End();
    #undef T
 };
