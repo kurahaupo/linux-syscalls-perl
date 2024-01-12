@@ -1,6 +1,6 @@
 # vim: set ts=8 :
 
-CFLAGS += -g
+CFLAGS += -I../../../iproute2/include/uapi -I../../../../iproute2/include/uapi -D_DEFAULT_SOURCE=1 -I/mnt/sda6/usr/include -g
 
 all::	linux-exit-status-test-c
 all::	show_dirent_struct
