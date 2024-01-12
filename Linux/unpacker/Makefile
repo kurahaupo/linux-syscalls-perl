@@ -1,5 +1,7 @@
 # vim: set ts=8 :
 
+CFLAGS += -g
+
 all: linux-exit-status-test-c show_dirent_struct show_stat_struct show_statvfs_struct show_timex_struct show_waitid
 
 test_one::
