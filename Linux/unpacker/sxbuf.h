@@ -1,11 +1,13 @@
 #ifndef INCLUDED_sxbuf_h
 #define INCLUDED_sxbuf_h
 
+#include <memory.h> /* memcpy */
+#include <stdbool.h>
 #include <stdio.h> /* fprintf, stderr */
 #include <stdlib.h> /* size_t */
-//#include <stdint.h>
 //#include <math.h>
 //#include <stdarg.h>
+//#include <stdint.h>
 
 #include "die.h"
 #include "log2ceil.h"
@@ -19,16 +21,26 @@
 #define EXTERN static
 #endif
 
+#define sxDebug 0
+
+#ifndef sxDebug
+int sxDebug = 1;
+#endif
+
 typedef struct sxbuf {
-    char *cur;
     char *start;
+    char *cur;
     char *end;
     _Bool bufalloc;
     _Bool selfalloc;
-} SX[1];
+} SX[1], *SXP;
 
 EXTERN inline void sxinit(SX b) ;
 SCOPE  inline void sxinit(SX b) {
+    static SX empty;
+    *b = *empty;
+    return;
+
     size_t new_size = 0;
     char * np = malloc(new_size);
     if (!np && new_size)
@@ -38,8 +50,16 @@ SCOPE  inline void sxinit(SX b) {
         //if (new_size > 0) b->cur[0] = 0;
         b->end = (char*) np + new_size;
     }
-    b->bufalloc = 1;
-    b->selfalloc = 0;
+    b->bufalloc = true;
+    b->selfalloc = false;
+}
+
+EXTERN inline SXP sxnew(void) ;
+SCOPE  inline SXP sxnew(void) {
+    SXP b = malloc(sizeof(SX));
+    sxinit(b);
+    b->selfalloc = true;
+    return b;
 }
 
 # if 0
@@ -49,7 +69,7 @@ SCOPE  inline struct sxbuf sxnew(void) {
     if (!b)
         die(2, "malloc(%zu) failed", sizeof *b);
     sxinit(b);
-    b->selfalloc = 1;
+    b->selfalloc = true;
 }
 # endif
 
@@ -62,11 +82,18 @@ SCOPE  inline void sxreset(SX b) {
 
 EXTERN inline void sxdestroy(SX b) ;
 SCOPE  inline void sxdestroy(SX b) {
+    if (!b)
+        return;
     if (b->bufalloc)
         free(b->start);
     b->start = b->cur = b->end = NULL;
-    if (b->selfalloc)
+    if (b->selfalloc)   /* from sxnew? */
         free(b);
+}
+
+EXTERN inline size_t sxcapacity(SX b) ;
+SCOPE  inline size_t sxcapacity(SX b) {
+    return b->end || b->start ? b->end - b->start : 0;    /* (NULL-NULL) yields 0 on all known architectures, but let's be 100% standards-compliant */
 }
 
 EXTERN inline size_t sxlength(SX b) ;
@@ -91,25 +118,65 @@ SCOPE  inline char *sxfinal(SX b) {
     return ret;
 }
 
-EXTERN inline void sxresize(SX b, size_t make_room_for) ;
-SCOPE  inline void sxresize(SX b, size_t make_room_for) {
-    if (!b->bufalloc)
-        die(88, "sxresize: external buffer overflowed");
+EXTERN inline void sxinfo(char const*step, char const*func, SX b) ;
+SCOPE  inline void sxinfo(char const*step, char const*func, SX b) {
+    fprintf(stderr, "%-7s %s: b=%p [start=%p, cur=%p, end=%p%s%s]",
+            step, func,
+            b,
+            b->start, b->cur, b->end,
+            b->bufalloc?",balloc":"",
+            b->selfalloc?",salloc":"");
+}
+
+EXTERN inline void sxsetsize(SX b, size_t requested_size, bool force_alloc) ;
+SCOPE  inline void sxsetsize(SX b, size_t requested_size, bool force_alloc) {
+    if (sxDebug) {
+        sxinfo("START:", __FUNCTION__, b);
+        fprintf(stderr, ", req_sz=%zu\n", requested_size);
+    }
     /* round request up to a power of 2, capped at 16MiB */
-    size_t off      = b->start ? b->cur - b->start : 0;
-    size_t old_size = b->start ? b->end - b->start : 0;
-    size_t requested_size = off + make_room_for;
-    size_t new_size = 1 << log2ceil(requested_size + 1, 23);
-    if (0)
-        fprintf(stderr, "sxresize: round up request from %zu to %zu\n", requested_size, new_size);
-    void * np = realloc(b->start, new_size);
-    if (!np)
-        die(88, "sxresize: realloc(%zu) failed within sxresize", new_size);
-    if (0 && np != b->start)
-        fprintf(stderr, "realloc moved block from %p (%zu bytes) to %p (%zu bytes)\n", b->start, old_size, np, new_size);
-    b->cur = (char*) np + off;
+    size_t new_capacity = 1 << log2ceil(requested_size + 1, 23);
+    if (sxDebug)
+        fprintf(stderr, "        %s: round up request from %zu to %zu\n", __FUNCTION__, requested_size, new_capacity);
+    size_t old_capacity = sxcapacity(b);
+    if (old_capacity == new_capacity && !force_alloc)
+        return;
+    void * np = b->start;
+    if (b->bufalloc) {
+        np = realloc(b->start, new_capacity);
+        if (!np)
+            die(88, "realloc(%zu) failed within %s", new_capacity, __FUNCTION__);
+    } else {
+        if (new_capacity <= old_capacity && !force_alloc) {
+            return;
+        }
+        /* make a copy */
+        np = malloc(new_capacity);
+        if (!np)
+            die(88, "malloc(%zu) failed within %s", new_capacity, __FUNCTION__);
+        size_t min_capacity = old_capacity < new_capacity
+                            ? old_capacity : new_capacity;
+        if (min_capacity)
+            memcpy(np, b->start, min_capacity);
+        b->bufalloc = true;
+    }
+    if (sxDebug)
+        if (np != b->start) {
+            sxinfo("", __FUNCTION__, b);
+            fprintf(stderr, " moved block from %p (%zu bytes) to %p (%zu bytes)\n", b->start, old_capacity, np, new_capacity);
+        }
+    size_t length = sxlength(b);
+    if (length > new_capacity)
+        length = new_capacity;
     b->start = np;
-    b->end = (char*) np + new_size;
+    b->cur = (char*) np + length;
+    b->end = (char*) np + new_capacity;
+}
+
+EXTERN inline void sxresize(SX b, ssize_t make_room_for, bool force_alloc) ;
+SCOPE  inline void sxresize(SX b, ssize_t make_room_for, bool force_alloc) {
+    /* round request up to a power of 2, capped at 16MiB */
+    sxsetsize(b, sxlength(b) + make_room_for, force_alloc);
 }
 
 ////////////////////////////////////////
@@ -119,10 +186,9 @@ SCOPE  inline size_t sxprintf(SX b, char const *fmt, ...) {
     size_t result;
     va_list ap;
     va_start(ap, fmt);
-    if (0) {
-        fprintf(stderr,
-                "SX: BEGIN   b=%p [ cur=%p start=%p end=%p bufalloc=%d selfalloc=%d ], fmt=%p, args... [",
-                (void*) b, b->cur, b->start, b->end, b->bufalloc, b->selfalloc, fmt);
+    if (sxDebug) {
+        sxinfo("BEGIN:", __FUNCTION__, b);
+        fprintf(stderr, ", fmt=\"%s\", args... [", fmt);
         va_list aq;
         va_copy(aq, ap);
         ssize_t n = vfprintf(stderr, fmt, aq);
@@ -131,26 +197,25 @@ SCOPE  inline size_t sxprintf(SX b, char const *fmt, ...) {
     }
     _Bool once = 0;
     for(;;) {
-        size_t avail = b->cur == NULL ? 0 : b->end-b->cur;
+        size_t capacity = sxcapacity(b) - sxlength(b);
         va_list aq;
         va_copy(aq, ap);
-        ssize_t output_size = vsnprintf(b->cur, avail, fmt, aq);
+        ssize_t output_size = vsnprintf(b->cur, capacity, fmt, aq);
         va_end(aq);
         if (output_size < 0)
-            pdie(88, "sxprintf: vsnprint failed");
-        if (output_size < avail) {
+            pdie(88, "FAIL:   sxprintf: vsnprint failed");
+        if (output_size < capacity) {
             result = output_size;
             b->cur += output_size;
             break;
         }
         if (once++)
-            die(88, "resizing more than once!!");
-        sxresize(b, output_size);
+            die(88, "FAIL:   sxprintf: resizing more than once!!");
+        sxresize(b, output_size, false);
     }
-    {
-    if (0)
-        fprintf(stderr, "SX: RESULT b=%p [ cur=%p start=%p end=%p bufalloc=%d selfalloc=%d ]\n",
-                (void*) b, b->cur, b->start, b->end, b->bufalloc, b->selfalloc);
+    if (sxDebug) {
+        sxinfo("RESULT:", __FUNCTION__, b);
+        fputs("\n", stderr);
     }
     va_end(ap);
     return result;
