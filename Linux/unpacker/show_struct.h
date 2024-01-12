@@ -1,7 +1,8 @@
 #ifndef DEFINED_show_struct_h
 #define DEFINED_show_struct_h
 
-#include <string.h> /* strlen */
+#include <stdint.h>     /* the [u]int[n]_t types used as selectors for _Generic */
+#include <string.h>     /* strlen */
 
 #include "sxbuf.h"
 
@@ -216,19 +217,38 @@ SCOPE  inline char const * perl_unpack_fmt(int sz, int pad, int *countp) {
     return b;
 }
 
-EXTERN inline void Field(TK *tr, size_t off, size_t sz, FMode mode, char const *name, char const * extra) ;
-SCOPE  inline void Field(TK *tr, size_t off, size_t sz, FMode mode, char const *name, char const * extra) {
+enum { UnlimitedRepeat = (size_t)-1U };
+
+EXTERN inline void Field(TK *tr, size_t off, size_t sz, size_t isz, FMode mode, char const *name, char const * extra) ;
+SCOPE  inline void Field(TK *tr, size_t off, size_t sz, size_t isz, FMode mode, char const *name, char const * extra) {
     if (off != tr->prev_off) {
         int d = (int)off-(int)tr->prev_off;
         char const * pfmt = perl_unpack_fmt(d, 1, NULL);
         printf("   %+3d   %s\n", d, pfmt);
         sxprintf(tr->packfmt, "%s", pfmt);
     }
+
+    int repeat = 1;
+    if (!isz)
+        isz = sz;
+    else
+        repeat = sz / isz;
+
     tr->prev_off = off+sz;
     int count;
-    char const * pfmt = perl_unpack_fmt(sz, 0, &count);
+    char const * pfmt = perl_unpack_fmt(isz, 0, &count);
+
+    if (repeat != 1 && strlen(pfmt) != 1)
+        sxprintf(tr->packfmt, "(%s)", pfmt);
+    else
+        sxprintf(tr->packfmt, "%s", pfmt);
+
+    if (repeat == UnlimitedRepeat)
+        sxprintf(tr->packfmt, "*");
+    else if (repeat != 1)
+        sxprintf(tr->packfmt, "%zu", repeat);
+
     printf("%3zu %2zu   %-6s  %s%s\n", off, sz, pfmt, name, extra);
-    sxprintf(tr->packfmt, "%s", pfmt);
 
     if ( tr->strip_prefix ) {
         char const *p = tr->strip_prefix;
@@ -261,17 +281,24 @@ SCOPE  inline void Field(TK *tr, size_t off, size_t sz, FMode mode, char const *
 
 EXTERN inline void EndStruct(TK *tr) ;
 SCOPE  inline void EndStruct(TK *tr) {
-    int diff = (int)tr->struct_size - (int)tr->prev_off;
-    if (diff)
-        printf("   %+3d\n", diff);
+    if (tr->struct_size != tr->prev_off) {
+        int d = (int)tr->struct_size - (int)tr->prev_off;
+        char const * pfmt = perl_unpack_fmt(d, 1, NULL);
+        printf("   %+3d   %s\n", d, pfmt);
+        sxprintf(tr->packfmt, "%s", pfmt);
+    }
     printf("%6zu }\n", tr->struct_size);
-    printf("BEGIN PERL:\n\nmy (%s) =\n            unpack '%s', $in; \t# %s (%zu bytes)\n%s\n",
+    printf("BEGIN PERL:\n\nmy (%s) = unpack\n            '%s',\n            $in; \t# %s (%zu bytes)\n%s\n",
             sxpeek(tr->fieldnames),
             sxpeek(tr->packfmt),
             tr->struct_name,
-            tr->struct_size,
+            (size_t) tr->struct_size,
             sxpeek(tr->extra_perl));
-    printf("# Build Env:%s\n", Pbuildenv("\n#   "));
+    char const * env = Pbuildenv("\n#   ");
+    if (env) {
+        printf("# Build Env:%s\n", env);
+        free((void*)env);       // stupidly, free does not accept const void*
+    }
     puts("\nEND PERL");
     sxdestroy(tr->packfmt);
     sxdestroy(tr->fieldnames);
@@ -286,21 +313,32 @@ SCOPE  inline void EndStruct(TK *tr) {
 #define STR(X) STR2(X)
 #define STR2(X) #X
 
-# define Begin()    Begin1(NULL)
+# define Begin()        Begin1(NULL)
 # define Begin1(pref)   TK tracker; T sample_struct; StartStruct(&tracker, &sample_struct, sizeof sample_struct, STR(T), pref)
-# define End()      EndStruct(&tracker)
+
+# define End()          EndStruct(&tracker)
+
+# define Foffset(X)     offsetof(T,X)
+# define Fsize(X)       sizeof sample_struct.X
+# define Fcommon(X)     &tracker, Foffset(X), Fsize(X)
+# define Fsigned(X)     (((__typeof(sample_struct.X))-1) > 0 ? FM_unsigned : FM_signed)
 
 /* Fint & Ffloat can adapt to different arg sizes */
-# define Fint(X,E)    Field(&tracker, offsetof(T,X), sizeof sample_struct.X, ((__typeof(sample_struct.X))-1) > 0 ? FM_unsigned : FM_signed, #X, E)
-# define Ffloat(X,E)  Field(&tracker, offsetof(T,X), sizeof sample_struct.X, FM_float, #X, E)
+# define Fint(X,E)      Field(Fcommon(X), 0, Fsigned(X), #X, E)
+# define Ffloat(X,E)    Field(Fcommon(X), 0, FM_float, #X, E)
 
-# define Ftimeval(X,E)  Field(&tracker, offsetof(T,X), sizeof sample_struct.X, FM_struct_timeval, #X, E)
-# define Ftimespec(X,E) Field(&tracker, offsetof(T,X), sizeof sample_struct.X, FM_struct_timespec, #X, E)
+# define FAint(X,E)     Field(Fcommon(X), Fsize(X[0]), Fsigned(X[0]), #X, E)
+# define FAfloat(X,E)   Field(Fcommon(X), Fsize(X[0]), FM_float, #X, E)
 
-# define Fptr(X,E)    Field(&tracker, offsetof(T,X), sizeof sample_struct.X, FM_pointer, #X, E)
+# define Ftimeval(X,E)  Field(Fcommon(X), 0, FM_struct_timeval, #X, E)
+# define Ftimespec(X,E) Field(Fcommon(X), 0, FM_struct_timespec, #X, E)
+
+# define Fptr(X,E)      Field(Fcommon(X), 0, FM_pointer, #X, E)
 
 /* If all else fails */
-# define Fdefault(X,E) Field(&tracker, offsetof(T,X), sizeof sample_struct.X, FM_blob, #X, E)
+# define Fdefault(X,E)  Fblob2(X,E)
+# define Fblob2(X,E)    Field(Fcommon(X), 1, FM_blob, #X, E)
+# define Fblob(X)       Fblob2(X, "")
 
 // Tweak the following to match the available numeric types in your compiler...
 
@@ -314,6 +352,7 @@ SCOPE  inline void EndStruct(TK *tr) {
                          uint32_t : Fint(X,E),   \
                           int64_t : Fint(X,E),   \
                          uint64_t : Fint(X,E),   \
+           long long unsigned int : Fint(X,E),   \
                        __int128_t : Fint(X,E),   \
                       __uint128_t : Fint(X,E),   \
                       long double : Ffloat(X,E), \
@@ -324,6 +363,28 @@ SCOPE  inline void EndStruct(TK *tr) {
                    _Complex float : Ffloat(X,E))
 
  # define F(X)   F2(X,"")
+
+# define FA2(X,E) _Generic((sample_struct.X),   \
+                             char* : FAint(X,E),   \
+                           int8_t* : FAint(X,E),   \
+                          uint8_t* : FAint(X,E),   \
+                          int16_t* : FAint(X,E),   \
+                         uint16_t* : FAint(X,E),   \
+                          int32_t* : FAint(X,E),   \
+                         uint32_t* : FAint(X,E),   \
+                          int64_t* : FAint(X,E),   \
+                         uint64_t* : FAint(X,E),   \
+           long long unsigned int* : FAint(X,E),   \
+                       __int128_t* : FAint(X,E),   \
+                      __uint128_t* : FAint(X,E),   \
+                      long double* : FAfloat(X,E), \
+                           double* : FAfloat(X,E), \
+                            float* : FAfloat(X,E), \
+             _Complex long double* : FAfloat(X,E), \
+                  _Complex double* : FAfloat(X,E), \
+                   _Complex float* : FAfloat(X,E))
+
+ # define FA(X)   FA2(X,"")
 
 //#define field_before(x, y) (offsetof(T,x) < offsetof(T,y))
 
