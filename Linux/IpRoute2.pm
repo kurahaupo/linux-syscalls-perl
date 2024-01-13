@@ -58,6 +58,7 @@ package Linux::IpRoute2::connector {
         my ($group_subs) = @_;
 
         my $protocol = NETLINK_ROUTE;
+        my $port_id = 0;
 
         @_ == 1 or croak 'Wrong number of args; expected 1 (plus "this"), but got '.(0+@_);
 
@@ -73,7 +74,7 @@ package Linux::IpRoute2::connector {
         $self->set_sndbufsz(def_sendbuf_size);
         $self->set_rcvbufsz(def_recvbuf_size);
         $self->set_netlink_opt(NETLINK_EXT_ACK, 1);
-        bind $sock, pack 'Sx[S]Q', AF_NETLINK, $group_subs                  or die "Cannot bind(AF_LENLINK, pid=0, groups=$group_subs for $self";
+        bind $sock, pack 'SSQ', AF_NETLINK, $port_id, $group_subs           or die "Cannot bind(AF_LENLINK, port_id=$port_id, groups=$group_subs for $self";
 
         my $rta = $self->get_sockinfo;
         warn sprintf "Got data=[%s]\n", unpack "H*", $rta;
@@ -84,6 +85,7 @@ package Linux::IpRoute2::connector {
         $self->{sockname} = { type => $rta_type, pid => $rta_pid, groups => $rta_groups };
 
         $self->{seq} = $^T;
+        $self->{port_id} = $port_id;
 
         return $self;
     }
@@ -116,12 +118,6 @@ package Linux::IpRoute2::connector {
         my ($self, $flags, $msg, $ctrl, $name) = @_;
         my $sock = $self->{sock};
         return sendmsg $sock, $flags, $msg, $ctrl, $name;
-      # sendmsg(4,
-      #         { msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
-      #           msg_iov(1)=[{"4\0\0\0\22\0\1\0\23\326\224e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 52}],
-      #           msg_controllen=0,
-      #           msg_flags=0},
-      #         0) = 52
     }
 
     sub mrecv {
@@ -197,16 +193,20 @@ sub _show_msg($$$$$$) {
     printf "\e[m\n";
 }
 
+sub _add_rtattr(\$$$@) {
+    my ($ref, $type, $pack_fmt, @pack_args) = @_;
+  # warn "adding attribute type=$type to message len=".length($$ref)." bytes; packfmt=$pack_fmt, args=[@pack_args]\n";
+    my $body = pack $pack_fmt, @pack_args;
+  # warn "\tattribute [".unpack('H*', $body)."]\n";
+    my $add = pack 'SSa*x![L]', 4+length($body), $type, $body;
+  # warn "\tadding [".unpack('H*', $add)."]\n";
+    $$ref .= $add;
+  # warn "\tafter addition [".unpack('H*', $$ref)."]\n";
+}
+
 sub _set_len(\$) {
     my ($ref) = @_;
     substr($$ref, 0, 4) = pack 'L', length $$ref;
-}
-
-sub _add_rtattr(\$$$@) {
-    my ($ref, $type, $pack_fmt, @pack_args) = @_;
-    my $body = pack $pack_fmt, @pack_args;
-    $$ref .= pack 'SSax![L]', 4+length($body), $type, $body;
-    _set_len $$ref;
 }
 
 sub iprt2_connect_route {
@@ -229,25 +229,32 @@ sub iprt2_connect_route {
     #                         "\0\0\0\0"    "\0\0\0\0"      #  struct ifinfomsg ifi_family ifi_type, ifi_index
     #                         "\0\0\0\0"    "\0\0\0\0"      #                   ifi_flags ifi_change
     #                         "\10\0\35\0"  "\t\0\0\0"      #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS == 9))
-    #                         "\t\0\3\0"    "eth0\0\0\0\0", #  ifla:(len(9), type(3), str("eth0\0"), pad(3))
+    #                         "\t\0\3\0"    "eth0\0\0\0\0", #  ifla:(len(9), type(IFLA_IFNAME=3), str("eth0\0"), pad(3))
     #                         52}],
     #           msg_controllen=0,
     #           msg_flags=0 },
     #         0) = 52
     my $request_flags = 0;
     my $iface_name = 'eth0';
-    my $port_id = 0;
     my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack,
-                       struct_nlmsghdr_len  + struct_ifinfomsg_len, RTM_GETLINK, NLM_F_REQUEST, ++$f4->{seq}, $port_id,
+                       struct_nlmsghdr_len  + struct_ifinfomsg_len, RTM_GETLINK, NLM_F_REQUEST, ++$f4->{seq}, $f4->{port_id},
                        (0) x 5;
+    length($request) == 32 or warn "Partial request should be 32 bytes but is ".length($request);
     _add_rtattr $request, IFLA_EXT_MASK, 'L', RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS;
-    _add_rtattr $request, IFLA_IFNAME, 'Z', $iface_name;
+    length($request) == 40 or warn "Partial request should be 40 bytes but is ".length($request);
+    _add_rtattr $request, IFLA_IFNAME, 'a*x', $iface_name;
+    length($request) == 52 or warn "Partial request should be 52 bytes but is ".length($request);
+    _set_len $request;
+  # warn "Request after correcting length [".unpack('H*', $request)."]\n";
+
+    #$request = "\x34\x00\x00\x00\x12\x00\x01\x00\xc1\x58\xa1\x65\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00";
 
         # HINT: 0x34 appears to be the size of the reply received later
-        # No idea why the current time ($^T) needs to be in the packet, but it matches the observed behaviour.
+        # The current time ($^T) appears to act as a seed for a sequence number.
     my $request_to = netlink_socket_name;
     _show_msg 0, undef, $request_flags, $request, undef, $request_to;
-    $f4->msend($request_flags, $request, undef, $request_to) or die "Could not send";;
+    my $rlen0 = $f4->msend($request_flags, $request, undef, $request_to) or die "Could not send";;
+    $rlen0 == 52 or warn "sendmsg() returned $rlen0 when expecting 52";
 
     # recvmsg(4,
     #         {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
@@ -258,6 +265,9 @@ sub iprt2_connect_route {
     my ($rlen1, $reply_flags, $reply, $reply_ctrl, $reply_from) = $f4->mrecv(MSG_PEEK|MSG_TRUNC, 0, 0, 0x400);
     _show_msg 1, $rlen1, $reply_flags, $reply, $reply_ctrl, $reply_from;
 
+    $rlen1 == 1020 or warn "recvmsg(PEEK) returned len=$rlen1 when expecting 1020";
+    $reply_from eq $request_to or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', $request_to)."]";
+
     $rlen1 > 0 or do { warn "Couldn't peek!"; return };
     # recvmsg(4,
     #         {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
@@ -267,6 +277,9 @@ sub iprt2_connect_route {
     #         0) = 1020
     (my $rlen2, $reply_flags, $reply, $reply_ctrl, $reply_from) = $f4->mrecv(0, 0x8000, 0, 0x400);
     _show_msg 1, $rlen2, $reply_flags, $reply, $reply_ctrl, $reply_from;
+
+    $rlen2 == 1020 or warn "recvmsg() returned len=$rlen2 when expecting 1020";;
+    $reply_from eq $request_to or warn "recvmsg() returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', $request_to)."]";
 
     return bless {
         F3 => $f3,  # not yet clear why there's more than one...
