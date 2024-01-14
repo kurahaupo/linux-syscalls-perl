@@ -42,6 +42,7 @@ inc/
 /Linux/unpacker/show_dirent_struct
 /Linux/unpacker/show_if_link
 /Linux/unpacker/show_ifinfomsg_struct
+/Linux/unpacker/show_ip
 /Linux/unpacker/show_msghdr_struct
 /Linux/unpacker/show_stat_struct
 /Linux/unpacker/show_statvfs_struct
