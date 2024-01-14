@@ -36,6 +36,9 @@ show_ifinfomsg_struct:  show_ifinfomsg_struct.o die.o
 show_ip:  show_ip.o die.o
 	$(CC) $(CFLAGS) show_ip.o die.o $(LDFLAGS) -o $@
 
+show_ipv6:  show_ipv6.o die.o
+	$(CC) $(CFLAGS) show_ipv6.o die.o $(LDFLAGS) -o $@
+
 show_msghdr_struct:     show_msghdr_struct.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_msghdr_struct.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
@@ -78,6 +81,11 @@ show_ip.o: log2ceil.h
 show_ip.o: show_ip.c
 show_ip.o: show_struct.h
 show_ip.o: sxbuf.h
+show_ipv6.o: die.h
+show_ipv6.o: log2ceil.h
+show_ipv6.o: show_ipv6.c
+show_ipv6.o: show_struct.h
+show_ipv6.o: sxbuf.h
 show_msghdr_struct.o: die.h
 show_msghdr_struct.o: log2ceil.h
 show_msghdr_struct.o: show_msghdr_struct.c
