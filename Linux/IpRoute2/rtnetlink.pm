@@ -351,10 +351,10 @@ use constant {
     #struct ifinfomsg {
     #    unsigned char   ifi_family;
     #    unsigned char   __ifi_pad;
-    #    unsigned short  ifi_type;          // ARPHRD_*
-    #    int             ifi_index;         // Link index
-    #    unsigned        ifi_flags;         // IFF_* flags
-    #    unsigned        ifi_change;        // IFF_* change mask
+    #    unsigned short  ifi_type;          // ARPHRD_*             from <linux/if_arp.h> (0 for any)
+    #    int             ifi_index;         // Link index           (as previously determined; 0 for unknown)
+    #    unsigned        ifi_flags;         // IFF_* flags          from <linux/if.h>
+    #    unsigned        ifi_change;        // IFF_* change mask    from <linux/if.h>
     #};
 
 ################################################################
