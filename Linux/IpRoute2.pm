@@ -209,6 +209,29 @@ sub _set_len(\$) {
     substr($$ref, 0, 4) = pack 'L', length $$ref;
 }
 
+sub talk {
+    my $self = shift;
+    my $f4 = $self->{F4};
+    my ($request_flags, $request, $flags,
+        $args,
+    ) = splice @_, 0, 4;
+
+    my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack,
+                       struct_nlmsghdr_len  + struct_ifinfomsg_len, $request, $flags, ++$f4->{seq}, $f4->{port_id},
+                       @$args;
+
+    while (@_) {
+        my ($opt, $pack, $args) = splice @_, 0, 3;
+        _add_rtattr $request, $opt, $pack, @$args;
+    }
+    _set_len $request;
+
+    my $request_to = netlink_socket_name;
+    _show_msg 0, undef, $request_flags, $request, undef, $request_to;
+    my $rlen0 = $f4->msend($request_flags, $request, undef, $request_to) or die "Could not send";;
+    $rlen0 == length($request) or warn "sendmsg() returned $rlen0 when expecting ".length($request);
+}
+
 sub iprt2_connect_route {
     my $self = shift;
     my $class = ref $self || $self;
@@ -235,10 +258,20 @@ sub iprt2_connect_route {
     #           msg_flags=0 },
     #         0) = 52
     my $request_flags = 0;
-    my $iface_name = 'eth0';
+    my $iface_name  = 'eth0';
+    my $ifi_family  = 0;    # any
+    my $ifi_type    = 0;    # ARPHRD_*
+    my $ifi_index   = 0;    # Link index
+    my $ifi_flags   = 0;    # IFF_* flags
+    my $ifi_change  = 0;    # IFF_* change mask
     my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack,
                        struct_nlmsghdr_len  + struct_ifinfomsg_len, RTM_GETLINK, NLM_F_REQUEST, ++$f4->{seq}, $f4->{port_id},
-                       (0) x 5;
+        $ifi_family,    #
+        $ifi_type,      # ARPHRD_*
+        $ifi_index,     # Link index
+        $ifi_flags,     # IFF_* flags
+        $ifi_change,    # IFF_* change mask
+                       ;
     length($request) == 32 or warn "Partial request should be 32 bytes but is ".length($request);
     _add_rtattr $request, IFLA_EXT_MASK, 'L', RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS;
     length($request) == 40 or warn "Partial request should be 40 bytes but is ".length($request);
