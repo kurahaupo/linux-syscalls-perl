@@ -511,13 +511,20 @@ sub steal_argv_debug(;\@) {
 }
 
 sub showguts() {
-    eval 'use Data::Dumper; 1;';
-    warn "Verbose::showguts";
-    warn "    level_for: ".Dumper(\%level_for);
-    warn "    offset_for: ".Dumper(\%offset_for);
-    warn "    global_level: ".($global_level);
-    warn "    seen_nocompat: ".($seen_nocompat);
-    warn "    seen_compat: ".($seen_compat);
+    require Data::Dumper;
+    warn "Verbose::showguts\n". Data::Dumper::->Dump([
+        \%level_for,
+        \%offset_for,
+        $global_level,
+        $seen_nocompat,
+        $seen_compat,
+    ], [
+        "level_for: ",
+        "offset_for: ",
+        "global_level: ",
+        "seen_nocompat: ",
+        "seen_compat: ",
+    ]);
 }
 
 1;
