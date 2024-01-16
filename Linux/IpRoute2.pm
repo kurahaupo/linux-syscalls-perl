@@ -193,15 +193,10 @@ sub _show_msg($$$$$$) {
     printf "\e[m\n";
 }
 
-sub _add_rtattr(\$$$@) {
-    my ($ref, $type, $pack_fmt, @pack_args) = @_;
-  # warn "adding attribute type=$type to message len=".length($$ref)." bytes; packfmt=$pack_fmt, args=[@pack_args]\n";
+sub _make_rtattr($$@) {
+    my ($type, $pack_fmt, @pack_args) = @_;
     my $body = pack $pack_fmt, @pack_args;
-  # warn "\tattribute [".unpack('H*', $body)."]\n";
-    my $add = pack 'SSa*x![L]', 4+length($body), $type, $body;
-  # warn "\tadding [".unpack('H*', $add)."]\n";
-    $$ref .= $add;
-  # warn "\tafter addition [".unpack('H*', $$ref)."]\n";
+    return pack 'SSa*x![L]', 4+length($body), $type, $body;
 }
 
 sub _set_len(\$) {
@@ -212,19 +207,25 @@ sub _set_len(\$) {
 sub talk {
     my $self = shift;
     my $f4 = $self->{F4};
-    my ($request_flags, $request, $flags,
-        $args,
-    ) = splice @_, 0, 4;
+    my ($request_flags, $reqcode, $flags) = splice @_, 0, 3;
 
-    my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack,
-                       struct_nlmsghdr_len  + struct_ifinfomsg_len, $request, $flags, ++$f4->{seq}, $f4->{port_id},
-                       @$args;
+    my ($type_pack, $type_args,) = splice @_, 0, 2;
+
+    my $request = pack struct_nlmsghdr_pack . 'x![L]',
+                        struct_nlmsghdr_len,
+                        $reqcode,
+                        $flags,
+                        ++$f4->{seq},
+                        $f4->{port_id};
+    $request   .= pack $type_pack . 'x![L]', @$type_args;
 
     while (@_) {
         my ($opt, $pack, $args) = splice @_, 0, 3;
-        _add_rtattr $request, $opt, $pack, @$args;
+        $request .= _make_rtattr $opt, $pack, @$args;
     }
-    _set_len $request;
+
+    # overwrite length at beginning of request (4 == length pack 'L', ...)
+    substr($request, 0, 4) = pack 'L', length $request;
 
     my $request_to = netlink_socket_name;
     _show_msg 0, undef, $request_flags, $request, undef, $request_to;
@@ -264,20 +265,22 @@ sub iprt2_connect_route {
     my $ifi_index   = 0;    # Link index
     my $ifi_flags   = 0;    # IFF_* flags
     my $ifi_change  = 0;    # IFF_* change mask
-    my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack,
+    my $request = pack struct_nlmsghdr_pack . struct_ifinfomsg_pack . 'x![L]',
                        struct_nlmsghdr_len  + struct_ifinfomsg_len, RTM_GETLINK, NLM_F_REQUEST, ++$f4->{seq}, $f4->{port_id},
-        $ifi_family,    #
-        $ifi_type,      # ARPHRD_*
-        $ifi_index,     # Link index
-        $ifi_flags,     # IFF_* flags
-        $ifi_change,    # IFF_* change mask
+                       $ifi_family,    #
+                       $ifi_type,      # ARPHRD_*
+                       $ifi_index,     # Link index
+                       $ifi_flags,     # IFF_* flags
+                       $ifi_change,    # IFF_* change mask
                        ;
     length($request) == 32 or warn "Partial request should be 32 bytes but is ".length($request);
-    _add_rtattr $request, IFLA_EXT_MASK, 'L', RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS;
+    $request .= _make_rtattr IFLA_EXT_MASK, 'L', RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS;
     length($request) == 40 or warn "Partial request should be 40 bytes but is ".length($request);
-    _add_rtattr $request, IFLA_IFNAME, 'a*x', $iface_name;
+    $request .= _make_rtattr IFLA_IFNAME, 'a*x', $iface_name;
     length($request) == 52 or warn "Partial request should be 52 bytes but is ".length($request);
-    _set_len $request;
+
+    # overwrite length at beginning of request (4 == length pack 'L', ...)
+    substr($request, 0, 4) = pack 'L', length $request;
   # warn "Request after correcting length [".unpack('H*', $request)."]\n";
 
     #$request = "\x34\x00\x00\x00\x12\x00\x01\x00\xc1\x58\xa1\x65\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00";
