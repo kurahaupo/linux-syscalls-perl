@@ -11,6 +11,7 @@ use Exporter 'import';
 sub _B($) { 1 << pop }
 
 # Copied and adapted from /usr/include/linux/rtnetlink.h
+#       also from [iproute2]include/uapi/linux/netlink.h
 
 use constant {
     RTNL_FAMILY_IPMR    =>   128,
@@ -164,7 +165,6 @@ use constant {
   # RT_TABLE_MAX        =>   0xFFFFFFFF
 };
 
-
 use constant {
     # Routing message attributes rtattr_type_t
 
@@ -194,7 +194,6 @@ use constant {
   # RTA_MAX             =>    22 | 1,
 };
 
-
 use constant {
     RTNH_F_DEAD         =>  _B 0,   #  1    Nexthop is dead (used by multipath)
     RTNH_F_PERVASIVE    =>  _B 1,   #  2    Do recursive gateway lookup
@@ -203,8 +202,6 @@ use constant {
     RTNH_F_LINKDOWN     =>  _B 4,   # 16    carrier-down on nexthop
     RTNH_COMPARE_MASK   =>    25,   # == RTNH_F_DEAD | RTNH_F_LINKDOWN | RTNH_F_OFFLOAD
 };
-
-#qw{
 
 # Macros to handle hexthops
 
@@ -222,10 +219,10 @@ use constant {
 };
 
     # RTA_VIA
-    #struct rtvia {
-    #    uint16_t    rtvia_family;  /* (__kernel_sa_family_t = unsigned short) */
-    #    uint8_t     rtvia_addr[];  /* FAM - flexible array member, extending to end of allocated space beyond the containing struct */
-    #};
+    #   struct rtvia {
+    #       uint16_t    rtvia_family;  /* (__kernel_sa_family_t = unsigned short) */
+    #       uint8_t     rtvia_addr[];  /* FAM - flexible array member, extending to end of allocated space beyond the containing struct */
+    #   };
 
 # RTM_CACHEINFO
 
@@ -234,16 +231,16 @@ use constant {
     struct_rta_cacheinfo_len    =>    32,     # = length pack struct_rta_cacheinfo_pack, (0) x 8;
 };
 
-    #struct rta_cacheinfo {
-    #    uint32_t    rta_clntref;
-    #    uint32_t    rta_lastuse;
-    #    int32_t     rta_expires;
-    #    uint32_t    rta_error;
-    #    uint32_t    rta_used;
-    #    uint32_t    rta_id;
-    #    uint32_t    rta_ts;
-    #    uint32_t    rta_tsage;
-    #};
+    #   struct rta_cacheinfo {
+    #       uint32_t    rta_clntref;
+    #       uint32_t    rta_lastuse;
+    #       int32_t     rta_expires;
+    #       uint32_t    rta_error;
+    #       uint32_t    rta_used;
+    #       uint32_t    rta_id;
+    #       uint32_t    rta_ts;
+    #       uint32_t    rta_tsage;
+    #   };
 
 use constant {
     RTNETLINK_HAVE_PEERINFO =>     1,
@@ -289,37 +286,37 @@ use constant {
     struct_rta_session_len          =>     8,   # == 1+1+2+2+2 == 1+1+2+1+1+2 = 1+1+2+4
 };
 
-    #struct rta_session {
-    #    uint8_t    proto;
-    #    uint8_t    pad1;
-    #    uint16_t   pad2;
+    #   struct rta_session {
+    #       uint8_t    proto;
+    #       uint8_t    pad1;
+    #       uint16_t   pad2;
     #
-    #    union {
-    #        struct {
-    #            uint16_t   sport;
-    #            uint16_t   dport;
-    #        } ports;
+    #       union {
+    #           struct {
+    #               uint16_t   sport;
+    #               uint16_t   dport;
+    #           } ports;
     #
-    #        struct {
-    #            uint8_t    type;
-    #            uint8_t    code;
-    #            uint16_t   ident;
-    #        } icmpt;
+    #           struct {
+    #               uint8_t    type;
+    #               uint8_t    code;
+    #               uint16_t   ident;
+    #           } icmpt;
     #
-    #        uint32_t           spi;
-    #    } u;
-    #};
+    #           uint32_t           spi;
+    #       } u;
+    #   };
 
 use constant {
     struct_rta_mfc_stats_pack   =>  'QQQ',
     struct_rta_mfc_stats_len    =>    24,   # == 8+8+8
 };
 
-    #struct rta_mfc_stats {
-    #    uint64_t    mfcs_packets;
-    #    uint64_t    mfcs_bytes;
-    #    uint64_t    mfcs_wrong_if;
-    #};
+    #   struct rta_mfc_stats {
+    #       uint64_t    mfcs_packets;
+    #       uint64_t    mfcs_bytes;
+    #       uint64_t    mfcs_wrong_if;
+    #   };
 
 ################################################################
 #####           General form of address family dependent message.
@@ -331,9 +328,9 @@ use constant {
     struct_rtgenmsg_pack        =>  'Cx3',
 };
 
-    #struct rtgenmsg {
-    #    uint8_t     rtgen_family; /* (unsigned char) */
-    #};
+    #   struct rtgenmsg {
+    #       uint8_t     rtgen_family; /* (unsigned char) */
+    #   };
 
 ################################################################
 #               Link layer specific messages.
@@ -348,14 +345,14 @@ use constant {
     struct_ifinfomsg_len        =>    16,   # == 1+1+2+4+4+4
 };
 
-    #struct ifinfomsg {
-    #    unsigned char   ifi_family;
-    #    unsigned char   __ifi_pad;
-    #    unsigned short  ifi_type;          // ARPHRD_*             from <linux/if_arp.h> (0 for any)
-    #    int             ifi_index;         // Link index           (as previously determined; 0 for unknown)
-    #    unsigned        ifi_flags;         // IFF_* flags          from <linux/if.h>
-    #    unsigned        ifi_change;        // IFF_* change mask    from <linux/if.h>
-    #};
+    #   struct ifinfomsg {
+    #       unsigned char   ifi_family;
+    #       unsigned char   __ifi_pad;
+    #       unsigned short  ifi_type;          // ARPHRD_*             from <linux/if_arp.h> (0 for any)
+    #       int             ifi_index;         // Link index           (as previously determined; 0 for unknown)
+    #       unsigned        ifi_flags;         // IFF_* flags          from <linux/if.h>
+    #       unsigned        ifi_change;        // IFF_* change mask    from <linux/if.h>
+    #   };
 
 ################################################################
 #               prefix information
@@ -366,16 +363,16 @@ use constant {
     struct_prefixmsg_len        =>     8,   # == 1+1+2+4
 };
 
-    #struct prefixmsg {
-    #    unsigned char  prefix_family;
-    #    unsigned char  prefix_pad1;
-    #    unsigned short prefix_pad2;
-    #    int       prefix_ifindex;
-    #    unsigned char  prefix_type;
-    #    unsigned char  prefix_len;
-    #    unsigned char  prefix_flags;
-    #    unsigned char  prefix_pad3;
-    #};
+    #   struct prefixmsg {
+    #       unsigned char  prefix_family;
+    #       unsigned char  prefix_pad1;
+    #       unsigned short prefix_pad2;
+    #       int       prefix_ifindex;
+    #       unsigned char  prefix_type;
+    #       unsigned char  prefix_len;
+    #       unsigned char  prefix_flags;
+    #       unsigned char  prefix_pad3;
+    #   };
 
 use constant {
     PREFIX_UNSPEC       =>     0,
@@ -385,26 +382,25 @@ use constant {
   # PREFIX_MAX          =>     2 | 0,
 };
 
-
-#struct prefix_cacheinfo {
-#        uint32_t   preferred_time;
-#        uint32_t   valid_time;
-#};
+    #   struct prefix_cacheinfo {
+    #        uint32_t   preferred_time;
+    #        uint32_t   valid_time;
+    #   };
 
 
 ################################################################
 #               Traffic control messages.
 #
 
-#struct tcmsg {
-#        unsigned char   tcm_family;
-#        unsigned char   tcm__pad1;
-#        unsigned short  tcm__pad2;
-#        int             tcm_ifindex;
-#        uint32_t           tcm_handle;
-#        uint32_t           tcm_parent;
-#        uint32_t           tcm_info;
-#};
+    #   struct tcmsg {
+    #       unsigned char      tcm_family;
+    #       unsigned char      tcm__pad1;
+    #       unsigned short     tcm__pad2;
+    #       int                tcm_ifindex;
+    #       uint32_t           tcm_handle;
+    #       uint32_t           tcm_parent;
+    #       uint32_t           tcm_info;
+    #   };
 
 use constant {
     TCA_UNSPEC      =>     0,
@@ -427,7 +423,7 @@ use constant {
 #               Neighbor Discovery userland options
 #
 
-#struct nduseroptmsg {
+#   struct nduseroptmsg {
 #        unsigned char   nduseropt_family;
 #        unsigned char   nduseropt_pad1;
 #        unsigned short  nduseropt_opts_len;     # Total length of options
@@ -437,7 +433,7 @@ use constant {
 #        unsigned short  nduseropt_pad2;
 #        unsigned int    nduseropt_pad3;
 #        # Followed by one or more ND options
-#};
+#   };
 
 use constant {
     NDUSEROPT_UNSPEC    =>     0,
@@ -529,8 +525,6 @@ use constant {
 
 # End of information exported to user level
 
-# Copied & adapted from [iproute2]include/uapi/linux/netlink.h
-
 use constant {
     NETLINK_ROUTE               =>     0,   # Routing/device hook
     NETLINK_UNUSED              =>     1,   # Unused number
@@ -566,24 +560,24 @@ use constant {
     struct_sockaddr_nl_len      =>    12,   # 2+2+4+4 == length pack struct_sockaddr_nl_pack, (0) x 3;
 };
 
-    #struct sockaddr_nl {
-    #    uint16_t    nl_family;     /* set to AF_NETLINK (__kernel_sa_family_t = unsigned short) */
-    #    uint16_t    [[0_pad]];     /* padding to align next field to u32 */
-    #    uint32_t    nl_pid;        /* port ID  */
-    #    uint32_t    nl_groups;     /* multicast groups mask */
-    #};
+    #   struct sockaddr_nl {
+    #       uint16_t    nl_family;     /* set to AF_NETLINK (__kernel_sa_family_t = unsigned short) */
+    #       uint16_t    [[0_pad]];     /* padding to align next field to u32 */
+    #       uint32_t    nl_pid;        /* port ID  */
+    #       uint32_t    nl_groups;     /* multicast groups mask */
+    #   };
 
 use constant {
     struct_nlmsghdr_pack        =>  'LSSLL',
     struct_nlmsghdr_len         =>    16,   # 4+2+2+4+4 == length pack struct_nlmsghdr_pack, (0) x 5;
 };
-    #struct nlmsghdr {
-    #    uint32_t    nlmsg_len;      /* Length of message including header */
-    #    uint16_t    nlmsg_type;     /* Message content */
-    #    uint16_t    nlmsg_flags;    /* Additional flags */
-    #    uint32_t    nlmsg_seq;      /* Sequence number */
-    #    uint32_t    nlmsg_pid;      /* Sending process port ID */
-    #};
+    #   struct nlmsghdr {
+    #       uint32_t    nlmsg_len;      /* Length of message including header */
+    #       uint16_t    nlmsg_type;     /* Message content */
+    #       uint16_t    nlmsg_flags;    /* Additional flags */
+    #       uint32_t    nlmsg_seq;      /* Sequence number */
+    #       uint32_t    nlmsg_pid;      /* Sending process port ID */
+    #   };
 
 # Flags values
 use constant {
@@ -630,40 +624,40 @@ use constant {
 };
 
 use constant {
-    struct_nl_pktinfo_pack      =>  'L',
+    struct_nl_pktinfo_pack      =>   'L',
     struct_nl_pktinfo_len       =>     4,   # == length pack struct_nl_pktinfo_pack, 0;
 };
 
-    #struct nl_pktinfo {
-    #	uint32_t group;
-    #};
+    #   struct nl_pktinfo {
+    #       uint32_t group;
+    #   };
 
 use constant {
     struct_nl_mmap_req_pack     =>  'I4',
     struct_nl_mmap_req_len      =>    16,   # == length pack struct_nl_mmap_req_pack, (0) x 4;
 };
 
-    #struct nl_mmap_req {
-    #    unsigned int nm_block_size;
-    #    unsigned int nm_block_nr;
-    #    unsigned int nm_frame_size;
-    #    unsigned int nm_frame_nr;
-    #};
+    #   struct nl_mmap_req {
+    #       unsigned int nm_block_size;
+    #       unsigned int nm_block_nr;
+    #       unsigned int nm_frame_size;
+    #       unsigned int nm_frame_nr;
+    #   };
 
 use constant {
     struct_nl_mmap_hdr_pack     =>  'IILL3',
     struct_nl_mmap_hdr_len      =>    24,   # == length pack struct_nl_mmap_hdr_pack, (0) x 6;
 };
 
-    #struct nl_mmap_hdr {
-    #    unsigned int nm_status;
-    #    unsigned int nm_len;
-    #    uint32_t nm_group;
-    #    /* credentials */
-    #    uint32_t  nm_pid;
-    #    uint32_t  nm_uid;
-    #    uint32_t  nm_gid;
-    #};
+    #   struct nl_mmap_hdr {
+    #       unsigned int nm_status;
+    #       unsigned int nm_len;
+    #       uint32_t nm_group;
+    #       /* credentials */
+    #       uint32_t  nm_pid;
+    #       uint32_t  nm_uid;
+    #       uint32_t  nm_gid;
+    #   };
 
 # (enum nl_mmap_status)
 use constant {
@@ -674,9 +668,9 @@ use constant {
     NL_MMAP_STATUS_SKIP         =>     4,
 };
 
-# NLMSG_ALIGNTO	        4U      /* == sizeof(uint32_t) */
+# NLMSG_ALIGNTO         4U      /* == sizeof(uint32_t) */
 # NLMSG_ALIGN(len)      ( ((len)+NLMSG_ALIGNTO-1) & ~(NLMSG_ALIGNTO-1) )
-# NLMSG_HDRLEN	        ((int) NLMSG_ALIGN(sizeof(struct nlmsghdr)))
+# NLMSG_HDRLEN          ((int) NLMSG_ALIGN(sizeof(struct nlmsghdr)))
 # NLMSG_LENGTH(len)     ((len) + NLMSG_HDRLEN)
 # NLMSG_SPACE(len)      NLMSG_ALIGN(NLMSG_LENGTH(len))
 # NLMSG_DATA(nlh)       ((void *)(((char *)nlh) + NLMSG_HDRLEN))
@@ -691,7 +685,7 @@ use constant {
     NLMSG_DONE                  =>     3,    # End of a dump
     NLMSG_OVERRUN               =>     4,    # Data lost
 
-  # NLMSG_MIN_TYPE		=>  0x10,   # < 0x10: reserved control messages
+  # NLMSG_MIN_TYPE              =>  0x10,   # < 0x10: reserved control messages
 };
 
 # NL_MMAP_MSG_ALIGNMENT       NLMSG_ALIGNTO
