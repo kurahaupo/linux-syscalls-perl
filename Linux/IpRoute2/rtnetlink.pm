@@ -215,7 +215,7 @@ use constant {
 
 use constant {
     struct_rtvia_pack       =>  'SA*',
-  # struct_rtvia_len        =>  undef,   # use 'length' instead
+  # struct_rtvia_len        =>  undef,   # does not have a fixed value, use 'length' instead
 };
 
     # RTA_VIA
@@ -325,7 +325,8 @@ use constant {
 # common prefix of all msg types
 
 use constant {
-    struct_rtgenmsg_pack        =>  'Cx3',
+    struct_rtgenmsg_pack        => 'Cx3',
+    struct_rtgenmsg_len         =>     1,
 };
 
     #   struct rtgenmsg {
@@ -509,11 +510,16 @@ use constant {
 };
 
 # TC action piece
-#struct tcamsg {
-#        unsigned char   tca_family;
-#        unsigned char   tca__pad1;
-#        unsigned short  tca__pad2;
-#};
+use constant {
+    struct_tcamsg_pack  => 'Cx![L]',
+    struct_tcamsg_len   =>     4,
+};
+    #   struct tcamsg {
+    #        unsigned char   tca_family;
+    #        unsigned char   tca__pad1;
+    #        unsigned short  tca__pad2;
+    #   };
+
 #define TA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct tcamsg))))
 #define TA_PAYLOAD(n) NLMSG_PAYLOAD(n,sizeof(struct tcamsg))
 
@@ -712,41 +718,52 @@ use constant {
 our %EXPORT_TAGS = (
 
     pack => [qw[
-        struct_rtvia_pack
-
-        struct_rta_cacheinfo_pack
-        struct_rta_cacheinfo_len
-
-        struct_nlmsghdr_len
-        struct_nlmsghdr_pack
-
-        struct_sockaddr_nl_len
-        struct_sockaddr_nl_pack
-
-        struct_nl_pktinfo_pack
-        struct_nl_pktinfo_len
-
-        struct_nl_mmap_req_pack
-        struct_nl_mmap_req_len
-
-        struct_nl_mmap_hdr_pack
-        struct_nl_mmap_hdr_len
-
-        struct_rta_session_pack_ports
-        struct_rta_session_pack_icmpt
-        struct_rta_session_pack_spi
-        struct_rta_session_len
-
-        struct_rta_mfc_stats_pack
-        struct_rta_mfc_stats_len
-
-        struct_rtgenmsg_pack
 
         struct_ifinfomsg_pack
         struct_ifinfomsg_len
 
+        struct_nl_mmap_hdr_pack
+        struct_nl_mmap_hdr_len
+
+        struct_nl_mmap_req_pack
+        struct_nl_mmap_req_len
+
+        struct_nl_pktinfo_pack
+        struct_nl_pktinfo_len
+
+        struct_nlmsghdr_pack
+        struct_nlmsghdr_len
+
+        struct_prefix_cacheinfo_pack
+        struct_prefix_cacheinfo_len
+
         struct_prefixmsg_pack
         struct_prefixmsg_len
+
+        struct_rta_cacheinfo_pack
+        struct_rta_cacheinfo_len
+
+        struct_rta_mfc_stats_len
+        struct_rta_mfc_stats_pack
+
+        struct_rta_session_pack_icmpt
+        struct_rta_session_pack_ports
+        struct_rta_session_pack_spi
+        struct_rta_session_len
+
+        struct_rtgenmsg_pack
+        struct_rtgenmsg_len
+
+        struct_rtvia_pack
+
+        struct_sockaddr_nl_pack
+        struct_sockaddr_nl_len
+
+        struct_tcamsg_pack
+        struct_tcamsg_len
+
+        struct_tcmsg_pack
+        struct_tcmsg_len
     ]],
 
     nduseropt => [qw[
