@@ -382,6 +382,10 @@ use constant {
   # PREFIX_MAX          =>     2 | 0,
 };
 
+use constant {
+    struct_prefix_cacheinfo_pack    =>  'LL',
+    struct_prefix_cacheinfo_len     =>     8,
+};
     #   struct prefix_cacheinfo {
     #        uint32_t   preferred_time;
     #        uint32_t   valid_time;
@@ -392,6 +396,10 @@ use constant {
 #               Traffic control messages.
 #
 
+use constant {
+    struct_tcmsg_pack   => 'CCSix![L]LLL',
+    struct_tcmsg_len    =>  20, # TODO: Check
+};
     #   struct tcmsg {
     #       unsigned char      tcm_family;
     #       unsigned char      tcm__pad1;
