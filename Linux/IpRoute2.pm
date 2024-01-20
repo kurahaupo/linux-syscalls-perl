@@ -208,8 +208,8 @@ package Linux::IpRoute2::connector {
     };
 
     my @verify_requests = (
-        "\x34\0\0\0\x12\0\x01\0XXXX\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\0\x1d\0\x09\0\0\0\x09\0\x03\0\x65\x74\x68\x30\0\0\0\0",
-        "(\0\0\0\22\0\1\0XXXX\0\0\0\0\n\0\0\0\2\0\0\0\0\0\0\0\0\0\0\0\10\0\35\0\t\0\0\0",
+        "\x34\0\0\0"  . "\x12\0\x01\0XXXX\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\0\x1d\0\x09\0\0\0\x09\0\x03\0eth0\0\0\0\0",
+        "(\0\0\0"     . "\x12\0\x01\0XXXX\0\0\0\0\n\0\0\0\2\0\0\0\0\0\0\0\0\0\0\0\x08\0\x1d\0\x09\0\0\0",
     );
 
     sub talk {
@@ -224,8 +224,8 @@ package Linux::IpRoute2::connector {
                             ++$self->{seq},
                             $self->{port_id};
 
-        my ($type_pack, $type_args,) = splice @_, 0, 2;
-        $request   .= pack $type_pack . 'x![L]', @$type_args;
+        my ($type_pack, $type_pack_size, $type_args,) = splice @_, 0, 3;
+        $request .= pack $type_pack . 'x![L]', @$type_args;
 
         while (@_) {
             my ($opt, $pack, $args) = splice @_, 0, 3;
@@ -236,17 +236,18 @@ package Linux::IpRoute2::connector {
         _set_len $request;
       # substr($request, 0, 4) = pack 'L', length $request;     # 4 == length pack 'L', ...
 
+        _show_msg 0, undef, $request_flags, $request, undef, FixedSocketName;
+
         if (my $cr = shift @verify_requests) {
             my $trq = $request =~ s/^........\K..../XXXX/r;
             $trq eq $cr or do {
                 $_ = unpack 'H*', $_ for $request, $trq, $cr;
                 s/^.{16}\K.{8}/--------/ for $trq, $cr;
-                die sprintf "Incorrect request\n    got [%s]\n wanted [%s]\n  match [%s]",
+                die sprintf "Incorrect request\n    got [%s]\n  match [%s]\n wanted [%s]",
                             $request, $trq, $cr;
             }
         }
 
-        _show_msg 0, undef, $request_flags, $request, undef, FixedSocketName;
         my $rlen0 = $self->msend($request_flags, $request, undef, FixedSocketName) or die "Could not send";;
         if ($rlen0 != length $request) {
             warn "sendmsg() returned $rlen0 when expecting ".length($request);
@@ -289,10 +290,19 @@ package Linux::IpRoute2::connector {
         }
 
         my ( $xrlen, $xreqcode, $xflags, $xseq, $xport_id, $xreply ) = unpack struct_nlmsghdr_pack . 'x![L] a*', $reply;
-
         $xrlen = length $reply or die "Reply length mismatch got $xrlen, expected ".length($reply)."\n";
 
-        return $reply;
+        my @resp_args = unpack $type_pack, substr $xreply, 0, $type_pack_size, '';
+        my @resp_opts;
+        for (;$xreply ne '';) {
+            my $l = unpack 'S', $xreply or die;
+            $l >= 4 && $l <= length $xreply or die;
+            my $opt = substr $xreply, 0, 1+($l-1|3), '';
+            substr($opt, $l) = '';  # trim padding
+            push @resp_opts, [ unpack 'x[S]Sa*', $opt ];
+        }
+
+        return $xreqcode, $xflags, $xseq, $xport_id, \@resp_args, \@resp_opts;
     }
 }
 
@@ -307,6 +317,7 @@ use Linux::IpRoute2::rtnetlink qw(
     RTEXT_FILTER_VF
     RTM_GETLINK
     struct_ifinfomsg_pack
+    struct_ifinfomsg_len
 );
 use Linux::IpRoute2::if_link qw(
     IFLA_EXT_MASK
@@ -319,7 +330,6 @@ sub iprt2_connect_route {
 
     my ($group_subs) = @_;
 
-    $< == 0 or die "Must be root";
     my $f3 = Linux::IpRoute2::connector::->open_route($group_subs);
 
     my $f4 = Linux::IpRoute2::connector::->open_route($group_subs);
@@ -359,12 +369,26 @@ sub TEST {
 
     # Compose & send an iplink_req
 
-    my $reply1 = $self->{F4}->talk( $request_flags, RTM_GETLINK, NLM_F_REQUEST,
-                            struct_ifinfomsg_pack, [ $ifi_family, $ifi_type, $ifi_index,
-                                                     $ifi_flags, $ifi_change, ],
-                            IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
-                            IFLA_IFNAME,   'a*x', [ $iface_name ],
-                           );
+    my ( $xreqcode, $xflags, $xseq, $xport_id, $resp_args, $resp_opts ) =
+        $self->{F4}->talk( $request_flags, RTM_GETLINK, NLM_F_REQUEST,
+                           struct_ifinfomsg_pack, struct_ifinfomsg_len,
+                                                  [ $ifi_family, $ifi_type, $ifi_index,
+                                                    $ifi_flags, $ifi_change, ],
+                           IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
+                           IFLA_IFNAME,   'a*x', [ $iface_name ],
+                         );
+
+    $#$resp_args == 4 or die;
+    {
+    ( my $ifi_family, my $ifi_type, $ifi_index, my $ifi_flags, my $ifi_change, ) = @$resp_args;
+    printf "ifi: fam=%s type=%s index==%s flags=%#x change=%#x\n",
+            $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
+    for my $opt (@$resp_opts) {
+        my ($type, $val) = @$opt;
+        printf "opt: type=%d val=[%s]\n", $type, unpack 'H*', $val;
+    }
+    }
+
 
     # sendmsg(3,
     #         { msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
@@ -386,11 +410,22 @@ sub TEST {
 
     $self->{F3}->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
-    my $reply2 = $self->{F3}->talk( $request_flags, RTM_GETLINK, NLM_F_REQUEST,
-                              struct_ifinfomsg_pack, [ $ifi_family, $ifi_type, $ifi_index,
-                                                       $ifi_flags, $ifi_change, ],
-                              IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
+    ( $xreqcode, $xflags, $xseq, $xport_id, $resp_args, $resp_opts ) =
+            $self->{F3}->talk( $request_flags, RTM_GETLINK, NLM_F_REQUEST,
+                               struct_ifinfomsg_pack, struct_ifinfomsg_len,
+                                                      [ $ifi_family, $ifi_type, $ifi_index,
+                                                        $ifi_flags, $ifi_change, ],
+                               IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
                              );
+
+    $#$resp_args == 4 or die;
+    ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change, ) = @$resp_args;
+    printf "ifi: fam=%s type=%s index==%s flags=%#x change=%#x\n",
+            $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
+    for my $opt (@$resp_opts) {
+        my ($type, $val) = @$opt;
+        printf "opt: type=%d val=[%s]\n", $type, unpack 'H*', $val;
+    }
 
 }
 
