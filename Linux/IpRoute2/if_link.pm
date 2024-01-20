@@ -174,6 +174,20 @@ use constant {
   # IFLA_MAX                            =>    58 - 1 | 0,
 };
 
+{
+my @ifla_names = qw( unspec address broadcast ifname mtu link qdisc stats cost
+priority master wireless protinfo txqlen map weight operstate linkmode linkinfo
+net_ns_pid ifalias num_vf vfinfo_list stats64 vf_ports port_self af_spec group
+net_ns_fd ext_mask promiscuity num_tx_queues num_rx_queues carrier phys_port_id
+carrier_changes phys_switch_id link_netnsid phys_port_name proto_down
+gso_max_segs gso_max_size pad xdp event new_netnsid target_netnsid
+carrier_up_count carrier_down_count new_ifindex min_mtu max_mtu prop_list
+alt_ifname perm_address proto_down_reason parent_dev_name parent_dev_bus_name );
+sub ifla_to_name($) {
+    return $ifla_names[$_[0]] // "code#$_";
+}
+}
+
 use constant {
     # Deprecated, not exported by :ifla
     IFLA_IF_NETNSID                     =>  IFLA_TARGET_NETNSID,
