@@ -8,7 +8,7 @@ package Linux::IpRoute2::ip v0.0.1;
 
 use Exporter 'import';
 
-sub _B($) { 1 << pop }
+use Utils::EnumTools '_B';
 
 # Copied and adapted from /usr/include/linux/ip.h
 
