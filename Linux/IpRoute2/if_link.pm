@@ -12,6 +12,8 @@ package Linux::IpRoute2::if_link v0.0.1;
 
 use Exporter 'import';
 
+use Utils::EnumTools '_B';
+
 use constant {
     struct_rtnl_link_stats32_pack       => 'L24',
     struct_rtnl_link_stats32_len        =>    96,   # == length pack struct_rtnl_link_stats32_pack, (0) x 24;
@@ -1034,11 +1036,11 @@ use constant {
 # XDP section
 
 use constant {
-    XDP_FLAGS_UPDATE_IF_NOEXIST         => 1 << 0,
-    XDP_FLAGS_SKB_MODE                  => 1 << 1,
-    XDP_FLAGS_DRV_MODE                  => 1 << 2,
-    XDP_FLAGS_HW_MODE                   => 1 << 3,
-    XDP_FLAGS_REPLACE                   => 1 << 4,
+    XDP_FLAGS_UPDATE_IF_NOEXIST         =>  _B 0,
+    XDP_FLAGS_SKB_MODE                  =>  _B 1,
+    XDP_FLAGS_DRV_MODE                  =>  _B 2,
+    XDP_FLAGS_HW_MODE                   =>  _B 3,
+    XDP_FLAGS_REPLACE                   =>  _B 4,
     XDP_FLAGS_MODES                     =>  0x0e,   # XDP_FLAGS_SKB_MODE | XDP_FLAGS_DRV_MODE | XDP_FLAGS_HW_MODE,
     XDP_FLAGS_MASK                      =>  0x1f,   # XDP_FLAGS_UPDATE_IF_NOEXIST | XDP_FLAGS_MODES | XDP_FLAGS_REPLACE,
 };
@@ -1094,12 +1096,12 @@ use constant {
 # rmnet section
 
 use constant {
-    RMNET_FLAGS_INGRESS_DEAGGREGATION   => 1 << 0,
-    RMNET_FLAGS_INGRESS_MAP_COMMANDS    => 1 << 1,
-    RMNET_FLAGS_INGRESS_MAP_CKSUMV4     => 1 << 2,
-    RMNET_FLAGS_EGRESS_MAP_CKSUMV4      => 1 << 3,
-    RMNET_FLAGS_INGRESS_MAP_CKSUMV5     => 1 << 4,
-    RMNET_FLAGS_EGRESS_MAP_CKSUMV5      => 1 << 5,
+    RMNET_FLAGS_INGRESS_DEAGGREGATION   =>  _B 0,
+    RMNET_FLAGS_INGRESS_MAP_COMMANDS    =>  _B 1,
+    RMNET_FLAGS_INGRESS_MAP_CKSUMV4     =>  _B 2,
+    RMNET_FLAGS_EGRESS_MAP_CKSUMV4      =>  _B 3,
+    RMNET_FLAGS_INGRESS_MAP_CKSUMV5     =>  _B 4,
+    RMNET_FLAGS_EGRESS_MAP_CKSUMV5      =>  _B 5,
 };
 
 use constant {
