@@ -322,6 +322,7 @@ use Linux::IpRoute2::rtnetlink qw(
 use Linux::IpRoute2::if_link qw(
     IFLA_EXT_MASK
     IFLA_IFNAME
+    IFLA_to_name
 );
 
 sub iprt2_connect_route {
@@ -385,7 +386,7 @@ sub TEST {
             $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
     for my $opt (@$resp_opts) {
         my ($type, $val) = @$opt;
-        printf "opt: type=%d val=[%s]\n", $type, unpack 'H*', $val;
+        printf "opt: type=%s (%d) val=[%s]\n", IFLA_to_name($type), $type, unpack 'H*', $val;
     }
     }
 
@@ -424,7 +425,7 @@ sub TEST {
             $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
     for my $opt (@$resp_opts) {
         my ($type, $val) = @$opt;
-        printf "opt: type=%d val=[%s]\n", $type, unpack 'H*', $val;
+        printf "opt: type=%s (%d) val=[%s]\n", IFLA_to_name($type), $type, unpack 'H*', $val;
     }
 
 }
@@ -526,3 +527,66 @@ recvmsg(3,
     inet6 fe80::21c:23ff:fe0d:76cc/64 scope link
        valid_lft forever preferred_lft forever
 +++ exited with 0 +++
+
+
+
+ IFLA_UNSPEC                0           ?
+IFLA_ADDRESS                1           a6          val=[001c230d76cc]
+IFLA_BROADCAST              2           a6          val=[ffffffffffff]
+IFLA_IFNAME                 3           Z           val=[6574683000]
+IFLA_MTU                    4           L           val=[dc050000]
+                            5
+IFLA_QDISC                  6           Z           val=[6d7100]
+IFLA_STATS                  7           L24         val=[031c450266d15f013e9c48649c0d36e80000000000000000000000000000000012bd3800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000]
+ IFLA_?                     8
+ IFLA_?                     9
+ IFLA_?                    10
+ IFLA_?                    11
+ IFLA_?                    12
+IFLA_TXQLEN                13                       val=[e8030000]
+IFLA_MAP                   14           (L2)*       val=[0000000000000000000000000000000000000000000000001100000000000000]
+ IFLA_?                    15
+IFLA_OPERSTATE             16           C           val=[06]
+IFLA_LINKMODE              17           C           val=[00]
+ IFLA_?                    18
+ IFLA_?                    19
+ IFLA_?                    20
+IFLA_NUM_VF                21           L           val=[00000000]
+ IFLA_?                    22
+IFLA_STATS64               23           q24         val=[031c45020000000066d15f01000000003e9c4864080000009c0d36e800000000000000000000000000000000000000000000000000000000000000000000000012bd380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000]
+ IFLA_?                    24
+ IFLA_?                    25
+IFLA_AF_SPEC               26           RECURSIVE   val=[8800020084000100010000000000000000000000010000000100000001000000010000000100000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010270000e80300000000000000000000000000000000000004010a00080001003000008014000500ffff0000881c00002c820000e8030000e40002000000000040000000dc05000001000000010000000100000001000000ffffffffa00f0000e803000000000000803a0900805101000300000058020000100000000000000001000000010000000100000060ea000000000000000000000000000000000000000000000000000001000000000000000000000010270000e8030000010000000000000000000000010000000000000000000000010000000000000000000000000000000000000080ee360000000000000000000100000000000000000000000000000000000000000000000004000000000000ffff0000ffffffff]
+IFLA_GROUP                 27           L           val=[00000000]
+ IFLA_?                    28
+ IFLA_?                    29
+IFLA_PROMISCUITY           30           L           val=[01000000]
+IFLA_NUM_TX_QUEUES         31           L           val=[05000000]
+IFLA_NUM_RX_QUEUES         32           L           val=[05000000]
+IFLA_CARRIER               33           V           val=[01]
+ IFLA_?                    34
+IFLA_CARRIER_CHANGES       35           L           val=[01000000]
+ IFLA_?                    36
+ IFLA_?                    37
+ IFLA_?                    38
+IFLA_PROTO_DOWN            39           C           val=[00]
+IFLA_GSO_MAX_SEGS          40           ll          val=[ffff0000]
+IFLA_GSO_MAX_SIZE          41           SS          val=[00000100]
+ IFLA_?                    42
+IFLA_XDP                   43           S4          val=[0500020000000000]
+ IFLA_?                    44
+ IFLA_?                    45
+ IFLA_?                    46
+IFLA_CARRIER_UP_COUNT      47           l           val=[01000000]
+IFLA_CARRIER_DOWN_COUNT    48           l           val=[00000000]
+ IFLA_?                    51
+IFLA_MIN_MTU               50           l           val=[3c000000]
+IFLA_MAX_MTU               51           l           val=[dc050000]
+ IFLA_?                    52
+ IFLA_?                    53
+IFLA_PERM_ADDRESS          54           a6          val=[001c230d76cc]
+ IFLA_?                    55
+IFLA_PARENT_DEV_NAME       56           Z           val=[303030303a30393a30302e3000]
+IFLA_PARENT_DEV_BUS_NAME   57           l           val=[70636900]
+ ...
+IFLA_CODE#32820         32820=0x8034    RECURSIVE   val=[0b003500656e703973300000]
