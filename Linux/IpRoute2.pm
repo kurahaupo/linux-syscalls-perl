@@ -17,10 +17,6 @@ package Linux::IpRoute2::connector {
         SOCK_RAW
     );
 
-    use Linux::IpRoute2::rtnetlink qw(
-        NETLINK_ROUTE
-        NETLINK_EXT_ACK
-    );
     # Socket should have these but doesn't ...
     use constant {
         AF_NETLINK              =>  16,
@@ -35,11 +31,10 @@ package Linux::IpRoute2::connector {
         PF_NETLINK              =>  AF_NETLINK,
     };
 
-    my %af_names = map {
-        ( ( my $x = $_ ) =~ s/^AF_(.*)/\L$1/ => eval $_ )
-    } qw{ AF_NETLINK };
-    my @af_names;
-    $af_names[$af_names{$_}] = $_ for keys %af_names;
+    use Linux::IpRoute2::rtnetlink qw(
+        NETLINK_ROUTE
+        NETLINK_EXT_ACK
+    );
 
     # Built-in functions:
     #   getsockname
@@ -207,11 +202,6 @@ package Linux::IpRoute2::connector {
         name_size   =>  0x40,       # normally 12, but allow space in case it grows
     };
 
-    my @verify_requests = (
-        "\x34\0\0\0"  . "\x12\0\x01\0XXXX\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\0\x1d\0\x09\0\0\0\x09\0\x03\0eth0\0\0\0\0",
-        "(\0\0\0"     . "\x12\0\x01\0XXXX\0\0\0\0\n\0\0\0\2\0\0\0\0\0\0\0\0\0\0\0\x08\0\x1d\0\x09\0\0\0",
-    );
-
     sub talk {
         my $self = shift;
 
@@ -238,13 +228,20 @@ package Linux::IpRoute2::connector {
 
         _show_msg 0, undef, $request_flags, $request, undef, FixedSocketName;
 
+        state @verify_requests; @verify_requests or @verify_requests = (
+            "\x34\x00\x00\x00\x12\x00\x01\x00" . 'XXXX' . "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00",
+            "\x28\x00\x00\x00\x12\x00\x01\x00" . 'XXXX' . "\x00\x00\x00\x00\x0a\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00"
+        );
+
         if (my $cr = shift @verify_requests) {
             my $trq = $request =~ s/^........\K..../XXXX/r;
             $trq eq $cr or do {
                 $_ = unpack 'H*', $_ for $request, $trq, $cr;
                 s/^.{16}\K.{8}/--------/ for $trq, $cr;
                 die sprintf "Incorrect request\n    got [%s]\n  match [%s]\n wanted [%s]",
-                            $request, $trq, $cr;
+                            map {
+                                s/........(?=.)/$&./gr
+                            } $request, $trq, $cr;
             }
         }
 
@@ -308,6 +305,8 @@ package Linux::IpRoute2::connector {
 
 BEGIN { *AF_NETLINK = \&Linux::IpRoute2::connector::AF_NETLINK }
 
+use Socket qw( AF_INET6 );
+
 #use Linux::Syscalls qw( :msg );
 
 use Linux::IpRoute2::rtnetlink qw(
@@ -319,11 +318,28 @@ use Linux::IpRoute2::rtnetlink qw(
     struct_ifinfomsg_pack
     struct_ifinfomsg_len
 );
-use Linux::IpRoute2::if_link qw(
-    IFLA_EXT_MASK
-    IFLA_IFNAME
-    IFLA_to_name
+use Linux::IpRoute2::if_link qw( :ifla ); # IFLA_EXT_MASK, IFLA_IFNAME, IFLA_to_name
+
+use Linux::IpRoute2::if_arp qw( ARPHRD_to_name );
+
+{
+    # Most of the AF_* names are actually provided by «use Socket;» (which gets
+    # them from <linux/bits/socket.h>) so we only need to add this reverse
+    # mapping and the exceptions that Socket doesn't know about.
+    # These may move to their own file, but it can stay here while I'm testing.
+    use constant {
+        AF_NETLINK              =>  16,
+        PF_NETLINK              =>  16,
+    };
+my @af_names = qw(
+    unspec local inet ax25 ipx appletalk netrom bridge atmpvc x25 inet6 rose
+    decnet netbeui security key netlink packet ash econet atmsvc rds sna irda
+    pppox wanpipe llc ib mpls can tipc bluetooth iucv rxrpc isdn phonet
+    ieee802154 caif alg nfc vsock max
 );
+sub AF_to_name($) { my ($c) = @_; my $n = $af_names[$c] if $c >= 0; return $n // "code#$c"; }
+BEGIN { *PF_to_name = \&AF_to_name }
+}
 
 sub iprt2_connect_route {
     my $self = shift;
@@ -342,6 +358,94 @@ sub iprt2_connect_route {
     return $self;
 }
 
+{
+sub show_ifla(@);
+
+sub show_ifla_af_spec(@) {
+    my ($type, $val, $depth) = @_;
+
+    for (;$val ne '';) {
+        my $l = unpack 'S', $val or die;
+        $l >= 4 && $l <= length $val or die;
+        my $opt = substr $val, 0, 1+($l-1|3), '';
+        substr($opt, $l) = '';  # trim padding
+        show_ifla( unpack( 'x[S]Sa*', $opt ), $depth+1 );
+    }
+}
+#*show_0x8034 = \&show_ifla_af_spec;
+
+my @unpackrecurse;
+my @unpackmap;
+$unpackmap[IFLA_UNSPEC]                 = '';                   # 0 (empty data)
+$unpackmap[IFLA_ADDRESS]                = 'H12'; #'a6';                 # 1
+$unpackmap[IFLA_BROADCAST]              = 'H12'; #'a6';                 # 2
+$unpackmap[IFLA_IFNAME]                 = 'Z';                  # 3
+$unpackmap[IFLA_MTU]                    = 'L';                  # 4
+$unpackmap[IFLA_QDISC]                  = 'Z';                  # 6
+$unpackmap[IFLA_STATS]                  = 'L24';                # 7
+$unpackmap[IFLA_TXQLEN]                 = 'L';                  # 1
+$unpackmap[IFLA_MAP]                    = '(L2)*';              # 14
+$unpackmap[IFLA_OPERSTATE]              = 'C';                  # 16
+$unpackmap[IFLA_LINKMODE]               = 'C';                  # 17
+$unpackmap[IFLA_NUM_VF]                 = 'L';                  # 21
+$unpackmap[IFLA_STATS64]                = 'q24';                # 23
+$unpackrecurse[IFLA_AF_SPEC]            = \&show_ifla_af_spec;  # 26
+$unpackmap[IFLA_GROUP]                  = 'L';                  # 27
+$unpackmap[IFLA_PROMISCUITY]            = 'L';                  # 30
+$unpackmap[IFLA_NUM_TX_QUEUES]          = 'L';                  # 31
+$unpackmap[IFLA_NUM_RX_QUEUES]          = 'L';                  # 32
+$unpackmap[IFLA_CARRIER]                = 'V';                  # 33
+$unpackmap[IFLA_CARRIER_CHANGES]        = 'L';                  # 35
+$unpackmap[IFLA_PROTO_DOWN]             = 'C';                  # 39
+$unpackmap[IFLA_GSO_MAX_SEGS]           = 'll';                 # 40
+$unpackmap[IFLA_GSO_MAX_SIZE]           = 'SS';                 # 41
+$unpackmap[IFLA_XDP]                    = 'S4';                 # 43
+$unpackmap[IFLA_CARRIER_UP_COUNT]       = 'l';                  # 47
+$unpackmap[IFLA_CARRIER_DOWN_COUNT]     = 'l';                  # 48
+$unpackmap[IFLA_MIN_MTU]                = 'l';                  # 50
+$unpackmap[IFLA_MAX_MTU]                = 'l';                  # 51
+$unpackmap[IFLA_PERM_ADDRESS]           = 'H12'; #'a6';                 # 54
+$unpackmap[IFLA_PARENT_DEV_NAME]        = 'Z';                  # 56
+$unpackmap[IFLA_PARENT_DEV_BUS_NAME]    = 'l';                  # 57
+#$unpackrecursive[32820]                = \&show_0x8034;        # 32820
+
+sub show_ifla(@) {
+    my ($type, $val, $depth) = @_;
+    my $lpref = "\t" x $depth;
+    if ( my $rp = $unpackrecurse[$type] ) {
+        for (;$val ne '';) {
+            my $l = unpack 'S', $val or die;
+            $l >= 4 && $l <= length $val or die;
+            my $opt = substr $val, 0, 1+($l-1|3), '';
+            substr($opt, $l) = '';  # trim padding
+            $rp->( unpack('x[S]Sa*', $opt), $depth+1 );
+        }
+    } else {
+        my $um = $unpackmap[$type] || 'H*';
+        printf "%sopt: type=%s (%d) val=[%s]\n", $lpref, IFLA_to_name($type), $type, join ',', unpack $um, $val;
+    }
+}
+
+sub show_ifi(@) {
+    my ($args, $opts, $depth) = @_;
+    my ( $family, $type, $index, $flags, $change ) = @$args;
+    $depth //= 0;
+    my $lpref = "\t" x $depth;
+    printf "%sIFI:\nfamily\t%s (%d)\n"
+             . "%s\ttype  \t%s (%d)\n"
+             . "%s\tindex \t%d\n"
+             . "%s\tflags \t%08x/%08x\n",
+            $lpref, AF_to_name $family, $family,
+            $lpref, ARPHRD_to_name $type, $type,
+            $lpref, $index,
+            $lpref, $flags, $change;
+
+    for my $opt (@$opts) {
+        show_ifla(@$opt, $depth+1);
+    }
+}
+}
+
 sub TEST {
     use Data::Dumper;
 
@@ -349,19 +453,32 @@ sub TEST {
     say Dumper($self);
 
     # sendmsg(4,
-    #         { msg_name(12)={ sa_family=AF_NETLINK, pid=0, groups=00000000 },
-    #           msg_iov(1)=[{ "4\0\0\0"     "\22\0\1\0"     #  nlmsghdr:(msglen(0x34), type(RTM_GETLINK=18), flags(NLM_F_REQUEST=1),
-    #                         "i\362\230e"  "\0\0\0\0"      #            seq(time), port_id(0))
-    #                         "\0\0\0\0"    "\0\0\0\0"      #  ifinfomsg:(ifi_family(ANY=0), ifi_type(ANY=0), ifi_index(ANY=0),
-    #                         "\0\0\0\0"    "\0\0\0\0"      #             ifi_flags(0), ifi_change(0))
-    #                         "\10\0\35\0"  "\t\0\0\0"      #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF|RTEXT_FILTER_SKIP_STATS=9))
-    #                         "\t\0\3\0"    "eth0\0\0\0\0", #  ifla:(len(9), type(IFLA_IFNAME=3), str("eth0\0"), pad:3)
-    #                         52 }],
+    #         {
+    #           msg_name(12)={
+    #             sa_family=AF_NETLINK,
+    #             pid=0,
+    #             groups=00000000
+    #           },
+    #           msg_iov(1)=[
+    #             {
+    #               "\x34\x00\x00\x00\x12\x00\x01\x00"      #  nlmsghdr:(msglen(0x34), type(RTM_GETLINK=18), flags(NLM_F_REQUEST=1),
+    #               "\x96\xcc\xb0\x65\x00\x00\x00\x00"      #            seq(time), port_id(0))
+    #               "\x00\x00\x00\x00\x00\x00\x00\x00"      #  ifinfomsg:(ifi_family(ANY=0), ifi_type(ANY=0), ifi_index(ANY=0),
+    #               "\x00\x00\x00\x00\x00\x00\x00\x00"      #             ifi_flags(0), ifi_change(0))
+    #               "\x08\x00\x1d\x00\x09\x00\x00\x00"      #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF|RTEXT_FILTER_SKIP_STATS=9))
+    #               "\x09\x00\x03\x00\x65\x74\x68\x30"      #  ifla:(len(9), type(IFLA_IFNAME=3), str("eth0\0"), pad:3)
+    #               "\x00\x00\x00\x00",
+    #               52
+    #             }
+    #           ],
     #           msg_controllen=0,
-    #           msg_flags=0 },
-    #         0) = 52
+    #           msg_flags=0
+    #         },
+    #         0
+    #        ) = 52
     my $request_flags = 0;
     my $iface_name  = 'eth0';
+
     my $ifi_family  = 0;    # AF_UNSPEC
     my $ifi_type    = 0;    # ARPHRD_*
     my $ifi_index   = 0;    # Link index; 0 == all/unrestricted
@@ -380,34 +497,43 @@ sub TEST {
                          );
 
     $#$resp_args == 4 or die;
-    {
-    ( my $ifi_family, my $ifi_type, $ifi_index, my $ifi_flags, my $ifi_change, ) = @$resp_args;
-    printf "ifi: fam=%s type=%s index==%s flags=%#x change=%#x\n",
-            $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
-    for my $opt (@$resp_opts) {
-        my ($type, $val) = @$opt;
-        printf "opt: type=%s (%d) val=[%s]\n", IFLA_to_name($type), $type, unpack 'H*', $val;
-    }
-    }
 
+    show_ifi $resp_args, $resp_opts;
 
     # sendmsg(3,
-    #         { msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000},
-    #           msg_iov(1)=[{ "(\0\0\0"     "\22\0\1\0"     #  nlmsghdr:(msglen (0x28), type (RTM_GETLINK=18), flags (NLM_F_REQUEST=1),
-    #                         "\3273\246e"  "\0\0\0\0"      #            seq (time), port_id(0)
-    #                         "\n\0\0\0"    "\2\0\0\0"      #  ifinfomsg:(ifi_family(10), ifi_type(0), ifi_index(2),
-    #                         "\0\0\0\0"    "\0\0\0\0"      #             ifi_flags(0), ifi_change(0)
-    #                         "\10\0\35\0"  "\t\0\0\0",     #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF|RTEXT_FILTER_SKIP_STATS=9))
-    #                         40 }],
+    #         {
+    #           msg_name(12)={
+    #             sa_family=AF_NETLINK,
+    #             pid=0,
+    #             groups=00000000
+    #           },
+    #           msg_iov(1)=[
+    #             {
+    #               "\x28\x00\x00\x00\x12\x00\x01\x00"      #  nlmsghdr:(msglen(0x28), type(RTM_GETLINK=18), flags(NLM_F_REQUEST=1),
+    #               "\x96\xcc\xb0\x65\x00\x00\x00\x00"      #            seq(time), port_id(0))
+    #               "\x0a\x00\x00\x00\x02\x00\x00\x00"      #  ifinfomsg:(ifi_family(INET6=10), ifi_type(ANY=0), ifi_index(2),
+    #               "\x00\x00\x00\x00\x00\x00\x00\x00"      #             ifi_flags(0), ifi_change(0))
+    #               "\x08\x00\x1d\x00\x09\x00\x00\x00",     #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF|RTEXT_FILTER_SKIP_STATS=9))
+    #               40
+    #             }
+    #           ],
     #           msg_controllen=0,
-    #           msg_flags=0 },
-    #         0) = 40
-    # 00000000  28 00 00 00 12 00 01 00  d7 33 a6 65 00 00 00 00  |(........3.e....|
-    # 00000010  0a 00 00 00 02 00 00 00  00 00 00 00 00 00 00 00  |................|
-    # 00000020  08 00 1d 00 09 00 00 00                           |........|
+    #           msg_flags=0
+    #         },
+    #         0
+    #        ) = 40
 
-    $ifi_family = 10;   # AF_INET6
-    $ifi_index = 2;     # somehow extracted from previous reply?
+  # my ( $rfi_family, $rfi_type, $rfi_index, $rfi_flags, $rfi_change ) = @$resp_args;
+  # $ifi_index = $rfi_index;    # use answer from previous request, since that's why we asked it.
+
+    $ifi_family = AF_INET6;     # 10
+    $ifi_type    = 0;    # ARPHRD_*
+
+    ( undef, undef, $ifi_index, undef, undef ) = @$resp_args;
+    $ifi_index == 2 or die;     # check previous reply, "eth0" is second interface, after "lo"
+
+    $ifi_flags   = 0;    # IFF_* flags
+    $ifi_change  = 0;    # IFF_* change mask
 
     $self->{F3}->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
@@ -420,13 +546,9 @@ sub TEST {
                              );
 
     $#$resp_args == 4 or die;
-    ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change, ) = @$resp_args;
-    printf "ifi: fam=%s type=%s index==%s flags=%#x change=%#x\n",
-            $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
-    for my $opt (@$resp_opts) {
-        my ($type, $val) = @$opt;
-        printf "opt: type=%s (%d) val=[%s]\n", IFLA_to_name($type), $type, unpack 'H*', $val;
-    }
+    show_ifi $resp_args, $resp_opts;
+
+    ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change ) = @$resp_args;
 
 }
 
@@ -442,6 +564,34 @@ Note: "pid" in this context is "port ID".
 + strace -s 4096 -e socket,bind,connect,setsockopt,getsockopt,getsockname,sendmsg,recvmsg,shutdown,close ip -6 addr show eth0
 ...
 
+------
+socket(PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 3
+setsockopt(3, SOL_SOCKET, SO_SNDBUF, [32768], 4) = 0
+setsockopt(3, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
+setsockopt(3, SOL_NETLINK, 11, [1], 4)  = 0
+bind(3, {sa_family=AF_NETLINK, pid=0, groups=00000000}, 12) = 0
+getsockname(3, {sa_family=AF_NETLINK, pid=9821, groups=00000000}, [12]) = 0
+setsockopt(3, SOL_NETLINK, 12, [1], 4)  = 0
+socket(PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 4
+setsockopt(4, SOL_SOCKET, SO_SNDBUF, [32768], 4) = 0
+setsockopt(4, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
+setsockopt(4, SOL_NETLINK, 11, [1], 4)  = 0
+bind(4, {sa_family=AF_NETLINK, pid=0, groups=00000000}, 12) = 0
+getsockname(4, {sa_family=AF_NETLINK, pid=-1047251919, groups=00000000}, [12]) = 0
+sendmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\x34\x00\x00\x00\x12\x00\x01\x00\x96\xcc\xb0\x65\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00", 52}], msg_controllen=0, msg_flags=0}, 0) = 52
+recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
+recvmsg(4, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\xfc\x03\x00\x00\x10\x00\x00\x00\x96\xcc\xb0\x65\x31\x34\x94\xc1\x00\x00\x01\x00\x02\x00\x00\x00\x43\x10\x01\x00\x00\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00\x08\x00\x0d\x00\xe8\x03\x00\x00\x05\x00\x10\x00\x06\x00\x00\x00\x05\x00\x11\x00\x00\x00\x00\x00\x08\x00\x04\x00\xdc\x05\x00\x00\x08\x00\x32\x00\x3c\x00\x00\x00\x08\x00\x33\x00\xdc\x05\x00\x00\x08\x00\x1b\x00\x00\x00\x00\x00\x08\x00\x1e\x00\x01\x00\x00\x00\x08\x00\x1f\x00\x05\x00\x00\x00\x08\x00\x28\x00\xff\xff\x00\x00\x08\x00\x29\x00\x00\x00\x01\x00\x08\x00\x20\x00\x05\x00\x00\x00\x05\x00\x21\x00\x01\x00\x00\x00\x07\x00\x06\x00\x6d\x71\x00\x00\x08\x00\x23\x00\x01\x00\x00\x00\x08\x00\x2f\x00\x01\x00\x00\x00\x08\x00\x30\x00\x00\x00\x00\x00\x05\x00\x27\x00\x00\x00\x00\x00\x24\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x01\x00\x00\x1c\x23\x0d\x76\xcc\x00\x00\x0a\x00\x02\x00\xff\xff\xff\xff\xff\xff\x00\x00\xc4\x00\x17\x00\x7c\x6b\x46\x02\x00\x00\x00\x00\x1d\xb0\x60\x01\x00\x00\x00\x00\xa5\x4f\x19\x65\x08\x00\x00\x00\x65\x54\x8a\xe8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x48\x87\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x64\x00\x07\x00\x7c\x6b\x46\x02\x1d\xb0\x60\x01\xa5\x4f\x19\x65\x65\x54\x8a\xe8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x48\x87\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x15\x00\x00\x00\x00\x00\x0c\x00\x2b\x00\x05\x00\x02\x00\x00\x00\x00\x00\x0a\x00\x36\x00\x00\x1c\x23\x0d\x76\xcc\x00\x00\x90\x01\x1a\x00\x88\x00\x02\x00\x84\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x27\x00\x00\xe8\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x01\x0a\x00\x08\x00\x01\x00\x30\x00\x00\x80\x14\x00\x05\x00\xff\xff\x00\x00\x88\x1c\x00\x00\x1c\x6a\x00\x00\xe8\x03\x00\x00\xe4\x00\x02\x00\x00\x00\x00\x00\x40\x00\x00\x00\xdc\x05\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\xff\xff\xff\xff\xa0\x0f\x00\x00\xe8\x03\x00\x00\x00\x00\x00\x00\x80\x3a\x09\x00\x80\x51\x01\x00\x03\x00\x00\x00\x58\x02\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x60\xea\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x27\x00\x00\xe8\x03\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\xee\x36\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\xff\xff\x00\x00\xff\xff\xff\xff\x10\x00\x34\x80\x0b\x00\x35\x00\x65\x6e\x70\x39\x73\x30\x00\x00\x11\x00\x38\x00\x30\x30\x30\x30\x3a\x30\x39\x3a\x30\x30\x2e\x30\x00\x00\x00\x00\x08\x00\x39\x00\x70\x63\x69\x00", 32768}], msg_controllen=0, msg_flags=0}, 0) = 1020
+close(4)                                = 0
+sendmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\x28\x00\x00\x00\x12\x00\x01\x00\x96\xcc\xb0\x65\x00\x00\x00\x00\x0a\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00", 40}], msg_controllen=0, msg_flags=0}, 0) = 40
+recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 1020
+recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\xfc\x03\x00\x00\x10\x00\x00\x00\x96\xcc\xb0\x65\x5d\x26\x00\x00\x00\x00\x01\x00\x02\x00\x00\x00\x43\x10\x01\x00\x00\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00\x08\x00\x0d\x00\xe8\x03\x00\x00\x05\x00\x10\x00\x06\x00\x00\x00\x05\x00\x11\x00\x00\x00\x00\x00\x08\x00\x04\x00\xdc\x05\x00\x00\x08\x00\x32\x00\x3c\x00\x00\x00\x08\x00\x33\x00\xdc\x05\x00\x00\x08\x00\x1b\x00\x00\x00\x00\x00\x08\x00\x1e\x00\x01\x00\x00\x00\x08\x00\x1f\x00\x05\x00\x00\x00\x08\x00\x28\x00\xff\xff\x00\x00\x08\x00\x29\x00\x00\x00\x01\x00\x08\x00\x20\x00\x05\x00\x00\x00\x05\x00\x21\x00\x01\x00\x00\x00\x07\x00\x06\x00\x6d\x71\x00\x00\x08\x00\x23\x00\x01\x00\x00\x00\x08\x00\x2f\x00\x01\x00\x00\x00\x08\x00\x30\x00\x00\x00\x00\x00\x05\x00\x27\x00\x00\x00\x00\x00\x24\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x01\x00\x00\x1c\x23\x0d\x76\xcc\x00\x00\x0a\x00\x02\x00\xff\xff\xff\xff\xff\xff\x00\x00\xc4\x00\x17\x00\x7c\x6b\x46\x02\x00\x00\x00\x00\x1d\xb0\x60\x01\x00\x00\x00\x00\xa5\x4f\x19\x65\x08\x00\x00\x00\x65\x54\x8a\xe8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x48\x87\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x64\x00\x07\x00\x7c\x6b\x46\x02\x1d\xb0\x60\x01\xa5\x4f\x19\x65\x65\x54\x8a\xe8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x48\x87\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x15\x00\x00\x00\x00\x00\x0c\x00\x2b\x00\x05\x00\x02\x00\x00\x00\x00\x00\x0a\x00\x36\x00\x00\x1c\x23\x0d\x76\xcc\x00\x00\x90\x01\x1a\x00\x88\x00\x02\x00\x84\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x27\x00\x00\xe8\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x01\x0a\x00\x08\x00\x01\x00\x30\x00\x00\x80\x14\x00\x05\x00\xff\xff\x00\x00\x88\x1c\x00\x00\x1c\x6a\x00\x00\xe8\x03\x00\x00\xe4\x00\x02\x00\x00\x00\x00\x00\x40\x00\x00\x00\xdc\x05\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\xff\xff\xff\xff\xa0\x0f\x00\x00\xe8\x03\x00\x00\x00\x00\x00\x00\x80\x3a\x09\x00\x80\x51\x01\x00\x03\x00\x00\x00\x58\x02\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x60\xea\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x27\x00\x00\xe8\x03\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\xee\x36\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\xff\xff\x00\x00\xff\xff\xff\xff\x10\x00\x34\x80\x0b\x00\x35\x00\x65\x6e\x70\x39\x73\x30\x00\x00\x11\x00\x38\x00\x30\x30\x30\x30\x3a\x30\x39\x3a\x30\x30\x2e\x30\x00\x00\x00\x00\x08\x00\x39\x00\x70\x63\x69\x00", 32768}], msg_controllen=0, msg_flags=0}, 0) = 1020
+recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 216
+recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\x48\x00\x00\x00\x14\x00\x22\x00\x97\xcc\xb0\x65\x5d\x26\x00\x00\x0a\x40\x80\x00\x02\x00\x00\x00\x14\x00\x01\x00\x20\x01\x04\x70\x1f\x2c\x00\x7a\x00\x00\x00\x00\x00\x35\x00\x01\x14\x00\x06\x00\xff\xff\xff\xff\xff\xff\xff\xff\x08\x16\x22\x04\x1a\x8d\xb2\x08\x08\x00\x08\x00\x80\x00\x00\x00\x48\x00\x00\x00\x14\x00\x22\x00\x97\xcc\xb0\x65\x5d\x26\x00\x00\x0a\x40\x80\x00\x02\x00\x00\x00\x14\x00\x01\x00\x20\x01\x04\x70\x1f\x2c\x00\x7a\x00\x00\x00\x00\x00\x00\x00\x06\x14\x00\x06\x00\xff\xff\xff\xff\xff\xff\xff\xff\x07\x16\x22\x04\x1a\x8d\xb2\x08\x08\x00\x08\x00\x80\x00\x00\x00\x48\x00\x00\x00\x14\x00\x22\x00\x97\xcc\xb0\x65\x5d\x26\x00\x00\x0a\x40\x00\x00\x02\x00\x00\x00\x14\x00\x01\x00\x24\x03\x58\x0a\xc2\x5d\x00\x01\x02\x1c\x23\xff\xfe\x0d\x76\xcc\x14\x00\x06\x00\xcc\x36\x00\x00\x0c\x50\x01\x00\x64\xcb\x21\x04\x4e\x3a\xb2\x08\x08\x00\x08\x00\x00\x01\x00\x00", 32768}], msg_controllen=0, msg_flags=0}, 0) = 216
+recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{NULL, 0}], msg_controllen=0, msg_flags=MSG_TRUNC}, MSG_PEEK|MSG_TRUNC) = 20
+recvmsg(3, {msg_name(12)={sa_family=AF_NETLINK, pid=0, groups=00000000}, msg_iov(1)=[{"\x14\x00\x00\x00\x03\x00\x22\x00\x97\xcc\xb0\x65\x5d\x26\x00\x00\x00\x00\x00\x00", 32768}], msg_controllen=0, msg_flags=0}, 0) = 20
+close(4)                                = 0
+
+------
 socket(PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 3
 setsockopt(3, SOL_SOCKET, SO_SNDBUF, [32768], 4) = 0
 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
