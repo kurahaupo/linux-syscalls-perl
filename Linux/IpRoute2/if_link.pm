@@ -175,14 +175,17 @@ use constant {
 };
 
 {
-my @ifla_names = qw( unspec address broadcast ifname mtu link qdisc stats cost
-priority master wireless protinfo txqlen map weight operstate linkmode linkinfo
-net_ns_pid ifalias num_vf vfinfo_list stats64 vf_ports port_self af_spec group
-net_ns_fd ext_mask promiscuity num_tx_queues num_rx_queues carrier phys_port_id
-carrier_changes phys_switch_id link_netnsid phys_port_name proto_down
-gso_max_segs gso_max_size pad xdp event new_netnsid target_netnsid
-carrier_up_count carrier_down_count new_ifindex min_mtu max_mtu prop_list
-alt_ifname perm_address proto_down_reason parent_dev_name parent_dev_bus_name );
+my @ifla_names = qw(
+    unspec address broadcast ifname mtu link qdisc stats cost priority master
+    wireless protinfo txqlen map weight operstate linkmode linkinfo net_ns_pid
+    ifalias num_vf vfinfo_list stats64 vf_ports port_self af_spec group
+    net_ns_fd ext_mask promiscuity num_tx_queues num_rx_queues carrier
+    phys_port_id carrier_changes phys_switch_id link_netnsid phys_port_name
+    proto_down gso_max_segs gso_max_size pad xdp event new_netnsid
+    target_netnsid carrier_up_count carrier_down_count new_ifindex min_mtu
+    max_mtu prop_list alt_ifname perm_address proto_down_reason parent_dev_name
+    parent_dev_bus_name
+);
 sub IFLA_to_name($) { my $c = $_[0]; my $n = $ifla_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
@@ -1032,17 +1035,17 @@ sub IFLA_STATS_FILTER_BIT($) { my ($attr) = @_; 1 << $attr - 1 }
 #    -> [rtnl link type specific attributes]
 
 use constant {
-    LINK_XSTATS_TYPE_UNSPEC	        =>     0,
-    LINK_XSTATS_TYPE_BRIDGE	        =>     1,
-    LINK_XSTATS_TYPE_BOND	        =>     2,
-  # LINK_XSTATS_TYPE_MAX	        =>     3 - 1 | 0,
+    LINK_XSTATS_TYPE_UNSPEC             =>     0,
+    LINK_XSTATS_TYPE_BRIDGE             =>     1,
+    LINK_XSTATS_TYPE_BOND               =>     2,
+  # LINK_XSTATS_TYPE_MAX                =>     3 - 1 | 0,
 };
 
 # These are stats embedded into IFLA_STATS_LINK_OFFLOAD_XSTATS
 use constant {
-    IFLA_OFFLOAD_XSTATS_UNSPEC	        =>     0,
-    IFLA_OFFLOAD_XSTATS_CPU_HIT	        =>     1,   # struct rtnl_link_stats64
-  # IFLA_OFFLOAD_XSTATS_MAX	        =>     2 - 1 | 0,
+    IFLA_OFFLOAD_XSTATS_UNSPEC          =>     0,
+    IFLA_OFFLOAD_XSTATS_CPU_HIT         =>     1,   # struct rtnl_link_stats64
+  # IFLA_OFFLOAD_XSTATS_MAX             =>     2 - 1 | 0,
 };
 
 # XDP section
@@ -1059,50 +1062,50 @@ use constant {
 
 # These are stored into IFLA_XDP_ATTACHED on dump.
 use constant {
-    XDP_ATTACHED_NONE	        =>     0,
-    XDP_ATTACHED_DRV	        =>     1,
-    XDP_ATTACHED_SKB	        =>     2,
-    XDP_ATTACHED_HW	        =>     3,
-    XDP_ATTACHED_MULTI	        =>     4,
+    XDP_ATTACHED_NONE                   =>     0,
+    XDP_ATTACHED_DRV                    =>     1,
+    XDP_ATTACHED_SKB                    =>     2,
+    XDP_ATTACHED_HW                     =>     3,
+    XDP_ATTACHED_MULTI                  =>     4,
 };
 
 use constant {
-    IFLA_XDP_UNSPEC	        =>     0,
-    IFLA_XDP_FD	        =>     1,
-    IFLA_XDP_ATTACHED	        =>     2,
-    IFLA_XDP_FLAGS	        =>     3,
-    IFLA_XDP_PROG_ID	        =>     4,
-    IFLA_XDP_DRV_PROG_ID	        =>     5,
-    IFLA_XDP_SKB_PROG_ID	        =>     6,
-    IFLA_XDP_HW_PROG_ID	        =>     7,
-    IFLA_XDP_EXPECTED_FD	        =>     8,
-  # IFLA_XDP_MAX	        =>     9 - 1 | 0,
+    IFLA_XDP_UNSPEC                     =>     0,
+    IFLA_XDP_FD                         =>     1,
+    IFLA_XDP_ATTACHED                   =>     2,
+    IFLA_XDP_FLAGS                      =>     3,
+    IFLA_XDP_PROG_ID                    =>     4,
+    IFLA_XDP_DRV_PROG_ID                =>     5,
+    IFLA_XDP_SKB_PROG_ID                =>     6,
+    IFLA_XDP_HW_PROG_ID                 =>     7,
+    IFLA_XDP_EXPECTED_FD                =>     8,
+  # IFLA_XDP_MAX                        =>     9 - 1 | 0,
 };
 
 use constant {
-    IFLA_EVENT_NONE	        =>     0,
-    IFLA_EVENT_REBOOT	        =>     1,   # internal reset / reboot
-    IFLA_EVENT_FEATURES	        =>     2,   # change in offload features
-    IFLA_EVENT_BONDING_FAILOVER	        =>     3,   # change in active slave
-    IFLA_EVENT_NOTIFY_PEERS	        =>     4,   # re-sent grat. arp/ndisc
-    IFLA_EVENT_IGMP_RESEND	        =>     5,   # re-sent IGMP JOIN
-    IFLA_EVENT_BONDING_OPTIONS	        =>     6,   # change in bonding options
+    IFLA_EVENT_NONE                     =>     0,
+    IFLA_EVENT_REBOOT                   =>     1,   # internal reset / reboot
+    IFLA_EVENT_FEATURES                 =>     2,   # change in offload features
+    IFLA_EVENT_BONDING_FAILOVER         =>     3,   # change in active slave
+    IFLA_EVENT_NOTIFY_PEERS             =>     4,   # re-sent grat. arp/ndisc
+    IFLA_EVENT_IGMP_RESEND              =>     5,   # re-sent IGMP JOIN
+    IFLA_EVENT_BONDING_OPTIONS          =>     6,   # change in bonding options
 };
 
 # tun section
 
 use constant {
-    IFLA_TUN_UNSPEC	        =>     0,
-    IFLA_TUN_OWNER	        =>     1,
-    IFLA_TUN_GROUP	        =>     2,
-    IFLA_TUN_TYPE	        =>     3,
-    IFLA_TUN_PI	        =>     4,
-    IFLA_TUN_VNET_HDR	        =>     5,
-    IFLA_TUN_PERSIST	        =>     6,
-    IFLA_TUN_MULTI_QUEUE	        =>     7,
-    IFLA_TUN_NUM_QUEUES	        =>     8,
+    IFLA_TUN_UNSPEC                     =>     0,
+    IFLA_TUN_OWNER                      =>     1,
+    IFLA_TUN_GROUP                      =>     2,
+    IFLA_TUN_TYPE                       =>     3,
+    IFLA_TUN_PI                         =>     4,
+    IFLA_TUN_VNET_HDR                   =>     5,
+    IFLA_TUN_PERSIST                    =>     6,
+    IFLA_TUN_MULTI_QUEUE                =>     7,
+    IFLA_TUN_NUM_QUEUES                 =>     8,
     IFLA_TUN_NUM_DISABLED_QUEUES        =>     9,
-  # IFLA_TUN_MAX	        =>    10 - 1 | 0,
+  # IFLA_TUN_MAX                        =>    10 - 1 | 0,
 };
 
 # rmnet section
@@ -1117,10 +1120,10 @@ use constant {
 };
 
 use constant {
-    IFLA_RMNET_UNSPEC	        =>     0,
-    IFLA_RMNET_MUX_ID	        =>     1,
-    IFLA_RMNET_FLAGS	        =>     2,
-  # IFLA_RMNET_MAX	        =>     3 - 1 | 0,
+    IFLA_RMNET_UNSPEC                   =>     0,
+    IFLA_RMNET_MUX_ID                   =>     1,
+    IFLA_RMNET_FLAGS                    =>     2,
+  # IFLA_RMNET_MAX                      =>     3 - 1 | 0,
 };
 
 use constant {
@@ -1135,9 +1138,9 @@ use constant {
 # MCTP section
 
 use constant {
-    IFLA_MCTP_UNSPEC	        =>     0,
-    IFLA_MCTP_NET	        =>     1,
-  # IFLA_MCTP_MAX	        =>     2 - 1 | 0,
+    IFLA_MCTP_UNSPEC                    =>     0,
+    IFLA_MCTP_NET                       =>     1,
+  # IFLA_MCTP_MAX                       =>     2 - 1 | 0,
 };
 
 our %EXPORT_TAGS = (
@@ -1219,6 +1222,5 @@ our @EXPORT_OK = (qw(
                     IFLA_IF_NETNSID
                 ),
                 map { @$_ } values %EXPORT_TAGS);
-
 
 1;
