@@ -183,9 +183,7 @@ carrier_changes phys_switch_id link_netnsid phys_port_name proto_down
 gso_max_segs gso_max_size pad xdp event new_netnsid target_netnsid
 carrier_up_count carrier_down_count new_ifindex min_mtu max_mtu prop_list
 alt_ifname perm_address proto_down_reason parent_dev_name parent_dev_bus_name );
-sub ifla_to_name($) {
-    return $ifla_names[$_[0]] // "code#$_";
-}
+sub IFLA_to_name($) { my $c = $_[0]; my $n = $ifla_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -1203,7 +1201,7 @@ our %EXPORT_TAGS = (
         IFLA_WEIGHT
         IFLA_WIRELESS
         IFLA_XDP
-
+        IFLA_to_name
     ]],
 
     pack => [qw[
