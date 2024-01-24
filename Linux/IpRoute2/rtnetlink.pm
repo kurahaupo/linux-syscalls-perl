@@ -20,9 +20,8 @@ use constant {
 };
 
 {
-my @rtnl_family_names;
-$rtnl_family_names[eval 'RTNL_FAMILY_'.uc $_] = $_ for qw( ipmr ip6mr );
-sub rtnl_family_to_name($) { return $rtnl_family_names[$_[0]] // "code#$_"; }
+my @rtnl_family_names = ((undef) x 128, qw( ipmr ip6mr ));
+sub RTNL_FAMILY_to_name($) { my $c = $_[0]; my $n = $rtnl_family_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -91,9 +90,7 @@ $rtm_names[eval 'RTM_'.uc $_ or die] = $_ for qw(
     getaddrlabel getdcb setdcb newnetconf getnetconf newmdb delmdb getmdb
     newnsid delnsid getnsid
 );
-sub rtm_to_name($) {
-    return $rtm_names[$_[0]] // "code#$_";
-}
+sub RTM_to_name($) { my $c = $_[0]; my $n = $rtm_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -118,7 +115,7 @@ my @rtn_names;
 $rtn_names[eval 'RTN_'.uc $_] = $_ for qw(
     unspec unicast local broadcast anycast multicast blackhole unreachable
     prohibit throw nat xresolve );
-sub rtn_to_name($) { return $rtn_names[$_[0]] // "code#$_"; }
+sub RTN_to_name($) { my $c = $_[0]; my $n = $rtn_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 ## rtm_protocol
@@ -154,7 +151,7 @@ my @rtprot_names;
 $rtprot_names[eval 'RTPROT_'.uc $_] = $_ for qw(
     unspec redirect kernel boot static gated ra mrt zebra bird dnrouted xorp
     ntk dhcp mrouted babel );
-sub rtprot_to_name($) { return $rtprot_names[$_[0]] // "code#$_"; }
+sub RTPROT_to_name($) { my $c = $_[0]; my $n = $rtprot_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 ## rtm_scope
@@ -186,7 +183,7 @@ use constant {
 my @rt_scope_names;
 $rt_scope_names[eval 'RT_SCOPE_'.uc $_] = $_ for qw(
     universe global site link host nowhere );
-sub rt_scope_to_name($) { return $rt_scope_names[$_[0]] // "code#$_"; }
+sub RT_SCOPE_to_name($) { my $c = $_[0]; my $n = $rt_scope_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 # rtm_flags
@@ -200,9 +197,7 @@ use constant {
 
 {
 my @rtmf_names = ((undef) x 8, qw( notify cloned equalize prefix lookup ));
-sub rtmf_to_desc($) {
-    return bits_to_desc($_[0], \@rtmf_names)
-}
+sub RTMF_to_desc($) { return bits_to_desc($_[0], \@rtmf_names) }
 }
 
 use constant {
@@ -222,7 +217,7 @@ my @rt_table_names;
 $rt_table_names[eval 'RT_TABLE_'.uc $_] = $_ for qw(
     unspec compat default main local
 );
-sub rt_table_to_name($) { return $rt_table_names[$_[0]] // "code#$_"; }
+sub RT_TABLE_to_name($) { my $c = $_[0]; my $n = $rt_table_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -258,7 +253,7 @@ use constant {
 my @rta_names = qw( unspec dst src iif oif gateway priority prefsrc metrics
     multipath protoinfo flow cacheinfo session mp_algo table mark mfc_stats via
     newdst pref encap_type encap );
-sub rta_to_name($) { return $rta_names[$_[0]] // "code#$_"; }
+sub RTA_to_name($) { my $c = $_[0]; my $n = $rta_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -272,7 +267,7 @@ use constant {
 
 {
 my @rtnhf_names = qw( dead pervasive onlink offload linkdown );
-sub rtnhf_to_desc($) { return bits_to_desc($_[0], \@rtnhf_names) }
+sub RTNHF_to_desc($) { return bits_to_desc($_[0], \@rtnhf_names) }
 }
 
 # Macros to handle hexthops
@@ -320,9 +315,7 @@ use constant {
 
 {
 my @rtnetlinkf_names = qw( have_peerinfo );
-sub rtnetlinkf_to_desc($) {
-    return bits_to_desc($_[0], \@rtnetlinkf_names)
-}
+sub RTNETLINKF_to_desc($) { return bits_to_desc($_[0], \@rtnetlinkf_names) }
 }
 
 # RTM_METRICS --- array of struct rtattr with types of RTAX_*
@@ -353,7 +346,7 @@ use constant {
 {
 my @rtax_names = qw( unspec lock mtu window rtt rttvar ssthresh cwnd advmss
     reordering hoplimit initcwnd features rto_min initrwnd quickack cc_algo );
-sub rtax_to_name($) { return $rtax_names[$_[0]] // "code#$_"; }
+sub RTAX_to_name($) { my $c = $_[0]; my $n = $rtax_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -367,9 +360,7 @@ use constant {
 
 {
 my @rtaxf_names = qw( ecn sack timestamp allfrag );
-sub rtaxf_to_desc($) {
-    return bits_to_desc($_[0], \@rtaxf_names)
-}
+sub RTAXF_to_desc($) { return bits_to_desc($_[0], \@rtaxf_names) }
 }
 
 use constant {
@@ -479,7 +470,7 @@ use constant {
 
 {
 my @prefix_family_names = qw( unspec address cacheinfo );
-sub prefix_family_to_name($) { return $prefix_family_names[$_[0]] // "code#$_"; }
+sub PREFIX_FAMILY_to_name($) { my $c = $_[0]; my $n = $prefix_family_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 use constant {
     struct_prefix_cacheinfo_pack    =>  'LL',
@@ -525,7 +516,7 @@ use constant {
 
 {
 my @tca_names = qw( unspec kind options stats xstats rate fcnt stats2 stab );
-sub tca_to_name($) { return $tca_names[$_[0]] // "code#$_"; }
+sub TCA_to_name($) { my $c = $_[0]; my $n = $tca_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 #define TCA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct tcmsg))))
@@ -556,7 +547,7 @@ use constant {
 
 {
 my @nd_user_opt_names = qw( unspec srcaddr );
-sub nd_user_opt_to_name($) { return $nd_user_opt_names[$_[0]] // "code#$_"; }
+sub NDUSEROPT_to_name($) { my $c = $_[0]; my $n = $nd_user_opt_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 # RTnetlink multicast groups - backwards compatibility for userspace
@@ -647,9 +638,7 @@ use constant {
 
 {
 my @rtext_filter_names = qw( vf brvlan brvlan_comp skip_stats );
-sub rtext_filter_to_desc($) {
-    return bits_to_desc($_[0], \@rtext_filter_names)
-}
+sub RTEXT_FILTER_to_desc($) { return bits_to_desc($_[0], \@rtext_filter_names) }
 }
 
 # End of information exported to user level
@@ -690,9 +679,7 @@ my @netlink_names = qw(
     FIB_LOOKUP CONNECTOR NETFILTER IP6_FW DNRTMSG KOBJECT_UEVENT GENERIC DM
     SCSITRANSPORT ECRYPTFS RDMA CRYPTO SMC
 );
-sub netlink_to_name($) {
-    return $netlink_names[$_[0]] // "code#$_";
-}
+sub NETLINK_to_name($) { my $c = $_[0]; my $n = $netlink_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
 use constant {
@@ -895,7 +882,7 @@ our %EXPORT_TAGS = (
     nduseropt => [qw[
         NDUSEROPT_SRCADDR
         NDUSEROPT_UNSPEC
-        nd_user_opt_to_name
+        NDUSEROPT_to_name
     ]],
 
     netlink => [qw[
@@ -923,7 +910,7 @@ our %EXPORT_TAGS = (
         NETLINK_UNUSED
         NETLINK_USERSOCK
         NETLINK_XFRM
-        netlink_to_name
+        NETLINK_to_name
     ]],
 
     netlink_options => [qw[
@@ -1034,7 +1021,7 @@ our %EXPORT_TAGS = (
         RTM_SETDCB
         RTM_SETLINK
         RTM_SETNEIGHTBL
-        rtm_to_name
+        RTM_to_name
     ]],
 
     rtm_flags => [qw[
@@ -1058,13 +1045,13 @@ our %EXPORT_TAGS = (
         RTN_UNREACHABLE
         RTN_UNSPEC
         RTN_XRESOLVE
-        rtn_to_name
+        RTN_to_name
     ]],
 
     rtnl_family => [qw[
         RTNL_FAMILY_IPMR
         RTNL_FAMILY_IP6MR
-        rtnl_family_to_name
+        RTNL_FAMILY_to_name
     ]],
 
     rt_prot => [qw[
@@ -1084,7 +1071,7 @@ our %EXPORT_TAGS = (
         RTPROT_UNSPEC
         RTPROT_XORP
         RTPROT_ZEBRA
-        rtprot_to_name
+        RTPROT_to_name
     ]],
 
     rt_scope => [qw[
@@ -1137,7 +1124,7 @@ our %EXPORT_TAGS = (
         RTNH_F_OFFLOAD
         RTNH_F_ONLINK
         RTNH_F_PERVASIVE
-        rtnhf_to_desc
+        RTNHF_to_desc
     ]],
 
     rtax => [qw[
@@ -1158,7 +1145,7 @@ our %EXPORT_TAGS = (
         RTAX_SSTHRESH
         RTAX_UNSPEC
         RTAX_WINDOW
-        rtax_to_name
+        RTAX_to_name
     ]],
 
     rtax_features => [qw[
@@ -1167,7 +1154,7 @@ our %EXPORT_TAGS = (
         RTAX_FEATURE_MASK
         RTAX_FEATURE_SACK
         RTAX_FEATURE_TIMESTAMP
-        rtaxf_to_desc
+        RTAXF_to_desc
     ]],
 
     prefix => [qw[
@@ -1187,7 +1174,7 @@ our %EXPORT_TAGS = (
         TCA_STATS2
         TCA_UNSPEC
         TCA_XSTATS
-        tca_to_name
+        TCA_to_name
     ]],
 
     rtmgrp => [qw[
@@ -1252,7 +1239,7 @@ our %EXPORT_TAGS = (
         RTEXT_FILTER_BRVLAN_COMPRESSED
         RTEXT_FILTER_SKIP_STATS
         RTEXT_FILTER_VF
-        rtext_filter_to_desc
+        RTEXT_FILTER_to_desc
     ]],
 );
 
