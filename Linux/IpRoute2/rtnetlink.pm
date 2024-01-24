@@ -674,11 +674,11 @@ use constant {
 };
 
 {
-my @netlink_names = qw(
-    ROUTE code#1 USERSOCK FIREWALL SOCK_DIAG NFLOG XFRM SELINUX ISCSI AUDIT
+my @netlink_names = ( 'ROUTE', undef, qw(
+    USERSOCK FIREWALL SOCK_DIAG NFLOG XFRM SELINUX ISCSI AUDIT
     FIB_LOOKUP CONNECTOR NETFILTER IP6_FW DNRTMSG KOBJECT_UEVENT GENERIC DM
     SCSITRANSPORT ECRYPTFS RDMA CRYPTO SMC
-);
+));
 sub NETLINK_to_name($) { my $c = $_[0]; my $n = $netlink_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
@@ -907,7 +907,6 @@ our %EXPORT_TAGS = (
         NETLINK_SELINUX
         NETLINK_SMC
         NETLINK_SOCK_DIAG
-        NETLINK_UNUSED
         NETLINK_USERSOCK
         NETLINK_XFRM
         NETLINK_to_name
@@ -1245,6 +1244,7 @@ our %EXPORT_TAGS = (
 
 our @EXPORT_OK = (
         qw(
+            NETLINK_UNUSED
             NET_MAJOR
             RTNETLINK_HAVE_PEERINFO
             TCA_ACT_TAB
