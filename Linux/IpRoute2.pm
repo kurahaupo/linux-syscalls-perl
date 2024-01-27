@@ -6,6 +6,157 @@ use warnings;
 
 package Linux::IpRoute2 v0.0.1;
 
+package Linux::IpRoute2::message {
+    use Carp 'confess';
+
+    use constant {
+        DirnNone => 0,
+        DirnSend => 1,
+        DirnRecv => 2,
+        DirnPeek => 3,
+    };
+
+    my @dirn = ( "\e[1;33mAbstract", "\e[1;35mRequest", "\e[1;36mReply", "\e[1;34mPeek", );
+    sub _show_msg(%) {
+        my ($self) = shift if not $#_ % 2;
+        ! defined $self || $self->isa(__PACKAGE__) || confess 'Bad invocant';
+        my %args = @_;
+        my $errno = $!;
+        my $dirn      = delete $args{dirn} // DirnNone;
+        my $status    = delete $args{status};
+        my $data      = delete $args{data};
+        my $ctrl      = delete $args{ctrl};
+        my $name      = delete $args{name};
+        my $rflags    = delete $args{rflags};
+        printf "%s:\n", $dirn[$dirn] || "\e[1;31mMessage";
+        printf " status %d (maybe length of data)\n", $status if defined $status;
+        printf " rflags %#x (%s)\n", $rflags, MSG_to_desc $rflags if defined $rflags;
+        printf "   data [%s]\n",                          defined $data ? unpack("H*", $data) : "(none)";
+        printf "   ctrl [%s]\n",                          defined $ctrl ? unpack("H*", $ctrl) : "(none)";
+        printf " %6s [%s]\n", $dirn ? "from" : "to", defined $name ? unpack("H*", $name) : "(unspecified)";
+        printf "  EXTRA ARG: %s = %s\n", $_, $args{$_} // '(undef)' for sort keys %args;
+        printf "\e[m\n";
+    }
+    sub show {
+        my ($self) = shift;
+        my ($msg, $ctrl, $name, $dirn,) = @_;
+        $msg //= $self->{data};
+        $ctrl //= $self->{ctrl};
+        _show_msg dirn => $dirn, msg => $msg, ctrl => $ctrl;
+    }
+}
+
+package Linux::IpRoute2::message::get_link {
+    our @ISA = Linux::IpRoute2::message::;
+    # The parts of an RTLINK message common to both sending and receiving
+}
+
+package Linux::IpRoute2::response {
+    use Carp 'confess';
+
+    our @ISA = Linux::IpRoute2::message::;
+    sub _unpack {
+        my $self = shift;
+    }
+    sub recv {
+        my $self = shift;
+        my $class = ref $self || $self;
+
+        $#_%2 or confess "Odd args";
+        my %opts = @_;
+
+        $self = bless {
+            header => [@_],
+            options => [],
+        }, $class;
+        my ($sock, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
+        # Do whatever is necessary to receive the response
+    }
+}
+
+package Linux::IpRoute2::request {
+    our @ISA = Linux::IpRoute2::message::;
+    use Carp 'confess';
+    use POSIX 'EMSGSIZE';
+
+    use Linux::IpRoute2::rtnetlink qw( struct_nlmsghdr_pack );
+
+    sub start {
+        my $self = shift;
+        my $class = ref $self || $self;
+        $#_ == 1 or confess "Wrong args";
+        $self = bless {
+            header => [@_],
+            options => [],
+        }, $class;
+        return $self;
+    }
+
+    sub _set_len(\$) {
+        my ($self) = shift;
+        substr($self->{data}, 0, 4) = pack 'L', length $self->{data};
+        $self;
+    }
+    sub _pack($;$$) {
+        my ($self, $seq, $pid) = @_;
+        my ($reqcode, $flags) = @{ $self->{header} };
+        my $request = pack struct_nlmsghdr_pack,
+                            0,              # length, to be filled in...
+                            $reqcode,
+                            $flags,
+                            $seq // 0,      # sequence (dummy)
+                            $pid // 0;      # port-id
+
+        # Concatenate the packed base request and all the packed options,
+        # inserting padding so that each has 4-byte alignment.
+        $request = pack '(a*x![L])*', $request, @{ $self->{options} };
+
+        # ... now fill in length;  4 == sizeof(uint32_t), where uint32_t is the result of pack 'L'
+        substr $request, 0, 4, pack L => length $request;
+        return $self->{data} = $request;
+    }
+    sub show {
+        my ($self) = shift;
+        $self->_pack;
+        $self->SUPER::show;
+    }
+    sub send {
+        my ($self, $conx, $sendmsg_flags) = @_;
+        $sendmsg_flags //= 0;   # optional
+
+        my $msg = $self->_pack(++$conx->{seq}, $conx->{port_id});
+
+        my $rlen0 = $conx->msend($sendmsg_flags, $msg, undef, $conx->FixedSocketName) or die "Could not send";;
+
+        my $msglen = length $msg;
+        if ($rlen0 != $msglen) {
+            warn "sendmsg() returned $rlen0 when expecting $msglen";
+            $! = EMSGSIZE; # 90 - message too long
+            return;
+        }
+        return $rlen0;
+    }
+}
+
+package Linux::IpRoute2::request::get_link {
+    our @ISA = ( Linux::IpRoute2::request::,
+                 Linux::IpRoute2::message::get_link:: );
+    use Carp 'confess';
+    use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST );
+    sub compose {
+        my $self = shift;
+        $#_ <= 0 or confess "Wrong args";
+        return $self->SUPER::start(RTM_GETLINK, NLM_F_REQUEST);
+    }
+    sub add_attr {
+        my $self = shift;
+        my ($opt_type, $pack_fmt, @args) = @_;
+        my $body = pack $pack_fmt, @args;
+        $body ne '' or confess "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@args)."[@args]\n";
+        push @{ $self->{options} }, pack 'SSa*x![L]', 4+length($body), $opt_type, $body;
+    }
+}
+
 package Linux::IpRoute2::connector {
 
     use Carp 'croak';
@@ -44,6 +195,15 @@ package Linux::IpRoute2::connector {
     use constant {
         def_sendbuf_size    =>    0x8000,   #   32768
         def_recvbuf_size    =>  0x100000,   # 1048576
+    };
+
+    #
+    # In principle there can be multiple interleaved conversations going on the
+    # same socket, in which case the port_id and subscription_groups might be
+    # useful, but for this simple linear program just set them both to 0.
+    #
+    use constant {
+        FixedSocketName => pack('S@12', AF_NETLINK),    # port_ID=0, groups=0x0000000000000000
     };
 
     sub open_route {
@@ -112,13 +272,73 @@ package Linux::IpRoute2::connector {
     sub msend {
         my ($self, $flags, $msg, $ctrl, $name) = @_;
         my $sock = $self->{sock};
+        if ( defined $flags ) {
+            my $rf = $flags;
+            my $sf = join ',',
+                        map { s/.*_//r }
+                        grep  {
+                            my $bb = 0;
+                            eval('$bb = '.$_);
+                            0+$rf != ($rf &=~ $bb);
+                        } qw( MSG_OOB MSG_PEEK MSG_DONTROUTE MSG_CTRUNC MSG_PROXY
+                              MSG_TRUNC MSG_DONTWAIT MSG_EOR MSG_WAITALL MSG_FIN
+                              MSG_SYN MSG_CONFIRM MSG_RST MSG_ERRQUEUE MSG_NOSIGNAL
+                              MSG_MORE MSG_WAITFORONE MSG_FASTOPEN MSG_CMSG_CLOEXEC );
+            $sf = join '+', $sf || (), $rf || ();
+            $sf ||= 'none';
+            printf "  flags %#x (%s)\n", $flags, $sf;
+        }
+        Linux::IpRoute2::message::_show_msg
+            dirn => Linux::IpRoute2::message::DirnSend,
+            msg => $msg,
+            name => $name;
+
+        state @verify_requests; @verify_requests or @verify_requests = (
+
+            "\x34\x00\x00\x00\x12\x00\x01\x00" . 'XXXX' . "\x00\x00\x00\x00" .
+                    "\x00\x00\x00\x00\x00\x00\x00\x00" .
+                    "\x00\x00\x00\x00\x00\x00\x00\x00" .
+                    "\x08\x00\x1d\x00\x09\x00\x00\x00" .
+                    "\x09\x00\x03\x00\x65\x74\x68\x30" . "\x00\x00\x00\x00",
+
+            "\x28\x00\x00\x00\x12\x00\x01\x00" . 'XXXX' . "\x00\x00\x00\x00" .
+                    "\x0a\x00\x00\x00\x02\x00\x00\x00" .
+                    "\x00\x00\x00\x00\x00\x00\x00\x00" .
+                    "\x08\x00\x1d\x00\x09\x00\x00\x00"
+
+        );
+
+        if (my $cr = shift @verify_requests) {
+            my $trq = $msg =~ s/^........\K..../XXXX/r;
+            $trq eq $cr or do {
+                $_ = unpack 'H*', $_ for $msg, $trq, $cr;
+                s/^.{16}\K.{8}/--------/ for $trq, $cr;
+                die sprintf "Incorrect request\n    got [%s]\n  match [%s]\n wanted [%s]",
+                            map {
+                                s/........(?=.)/$&./gr
+                            } $msg, $trq, $cr;
+            }
+        }
+
         return sendmsg $sock, $flags, $msg, $ctrl, $name;
     }
 
     sub mrecv {
         my ($self, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
         my $sock = $self->{sock};
-        return recvmsg $sock, $flags, $maxmsglen, $maxctrllen, $maxnamelen;
+        my @r = recvmsg $sock, $flags, $maxmsglen, $maxctrllen, $maxnamelen;
+
+        my ($ret, $rflags, $msg, $ctrl, $name) = @r;
+
+        Linux::IpRoute2::message::_show_msg
+            dirn => $flags & MSG_PEEK ? Linux::IpRoute2::message::DirnPeek
+                                      : Linux::IpRoute2::message::DirnRecv,
+            status => $ret,
+            msg  => $msg,
+            ctrl => $ctrl,
+            name => $name;
+
+        return @r;
     }
 
     sub close {
@@ -145,50 +365,10 @@ package Linux::IpRoute2::connector {
         :pack
     );
 
-    #
-    # In principle there can be multiple interleaved conversations going on the
-    # same socket, in which case the port_id and subscription_groups might be
-    # useful, but for this simple linear program just set them both to 0.
-    #
-    use constant {
-        FixedSocketName => pack('S@12', AF_NETLINK),    # port_ID=0, groups=0x0000000000000000
-    };
-
-    {
-    my @dirn = ( "\e[1;35mRequest", "\e[1;36mReply", "\e[1;34mPeek" );
-
-    sub _show_msg($$$$$$) {
-        my ($direction, $status, $flags, $data, $ctrl, $name) = @_;
-
-        printf "%s:\n", $dirn[$direction] || "\e[1;31mMessage";
-        printf " status %d (maybe length of packet)\n", $status if defined $status;
-        if ( defined $flags ) {
-            my $rf = $flags;
-            my $sf = join ',',
-                        map { s/.*_//r }
-                        grep  {
-                            my $bb = 0;
-                            eval('$bb = '.$_);
-                            0+$rf != ($rf &=~ $bb);
-                        } qw( MSG_OOB MSG_PEEK MSG_DONTROUTE MSG_CTRUNC MSG_PROXY
-                              MSG_TRUNC MSG_DONTWAIT MSG_EOR MSG_WAITALL MSG_FIN
-                              MSG_SYN MSG_CONFIRM MSG_RST MSG_ERRQUEUE MSG_NOSIGNAL
-                              MSG_MORE MSG_WAITFORONE MSG_FASTOPEN MSG_CMSG_CLOEXEC );
-            $sf = join '+', $sf || (), $rf || ();
-            $sf ||= 'none';
-            printf "  flags %#x (%s)\n", $flags, $sf;
-        }
-        printf "   data [%s]\n",                          defined $data ? unpack("H*", $data) : "(none)";
-        printf "   ctrl [%s]\n",                          defined $ctrl ? unpack("H*", $ctrl) : "(none)";
-        printf " %6s [%s]\n", $direction ? "from" : "to", defined $name ? unpack("H*", $name) : "(unspecified)";
-        printf "\e[m\n";
-    }
-    }
-
     sub _make_rtattr($$@) {
-        my ($type, $pack_fmt, @pack_args) = @_;
-        my $body = pack $pack_fmt, @pack_args;
-        $body ne '' or die "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@pack_args)."[@pack_args]\n";
+        my ($type, $pack_fmt, @args) = @_;
+        my $body = pack $pack_fmt, @args;
+        $body ne '' or die "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@args)."[@args]\n";
         return pack 'SSa*x![L]', 4+length($body), $type, $body;
     }
 
@@ -205,7 +385,7 @@ package Linux::IpRoute2::connector {
     sub talk {
         my $self = shift;
 
-        my ($request_flags, $reqcode, $flags) = splice @_, 0, 3;
+        my ($sendmsg_flags, $reqcode, $flags) = splice @_, 0, 3;
 
         my $request = pack struct_nlmsghdr_pack . 'x![L]',
                             0,              # length, to be filled in later
@@ -226,26 +406,7 @@ package Linux::IpRoute2::connector {
         _set_len $request;
       # substr($request, 0, 4) = pack 'L', length $request;     # 4 == length pack 'L', ...
 
-        _show_msg 0, undef, $request_flags, $request, undef, FixedSocketName;
-
-        state @verify_requests; @verify_requests or @verify_requests = (
-            "\x34\x00\x00\x00\x12\x00\x01\x00" . 'XXXX' . "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00\x09\x00\x03\x00\x65\x74\x68\x30\x00\x00\x00\x00",
-            "\x28\x00\x00\x00\x12\x00\x01\x00" . 'XXXX' . "\x00\x00\x00\x00\x0a\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x1d\x00\x09\x00\x00\x00"
-        );
-
-        if (my $cr = shift @verify_requests) {
-            my $trq = $request =~ s/^........\K..../XXXX/r;
-            $trq eq $cr or do {
-                $_ = unpack 'H*', $_ for $request, $trq, $cr;
-                s/^.{16}\K.{8}/--------/ for $trq, $cr;
-                die sprintf "Incorrect request\n    got [%s]\n  match [%s]\n wanted [%s]",
-                            map {
-                                s/........(?=.)/$&./gr
-                            } $request, $trq, $cr;
-            }
-        }
-
-        my $rlen0 = $self->msend($request_flags, $request, undef, FixedSocketName) or die "Could not send";;
+        my $rlen0 = $self->msend($sendmsg_flags, $request, undef, $self->FixedSocketName) or die "Could not send";;
         if ($rlen0 != length $request) {
             warn "sendmsg() returned $rlen0 when expecting ".length($request);
             return;
@@ -257,24 +418,20 @@ package Linux::IpRoute2::connector {
         my ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from);
         for (;;) {
             ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from) = $self->mrecv(MSG_PEEK|MSG_TRUNC, $accept_reply_size, ctrl_size, name_size);
-            _show_msg 2, $rlen, $reply_flags, $reply, $reply_ctrl, $reply_from;
             last if $rlen > 0;
             sleep 0.5;
         }
 
         $rlen == 1020 or warn "recvmsg(PEEK) returned len=$rlen when expecting 1020";
-        $reply_from eq FixedSocketName or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', FixedSocketName)."]";
+        $reply_from eq $self->FixedSocketName or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', FixedSocketName)."]";
 
         if ($reply_flags & MSG_TRUNC) {
             # still need to get reply
             ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from) = $self->mrecv(0, $rlen, ctrl_size, name_size);
         } else {
             # already got reply, just need to pop it from the queue
-            my @r = $self->mrecv(MSG_TRUNC, 0, 0, 0x400);
-            &_show_msg( 3, @r);
+            () = $self->mrecv(MSG_TRUNC, 0, 0, 0x400); # discard answer
         }
-
-        _show_msg 1, $rlen, $reply_flags, $reply, $reply_ctrl, $reply_from;
 
         $rlen == 1020 or warn "recvmsg() returned len=$rlen when expecting 1020";
         $reply_from eq FixedSocketName or warn "recvmsg() returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', FixedSocketName)."]";
@@ -282,7 +439,6 @@ package Linux::IpRoute2::connector {
         my @r = $self->mrecv(MSG_TRUNC|MSG_DONTWAIT, 0, 0, 0x400);
         unless (!@r && $!{EAGAIN}) {
             warn "unexpected response after message; $!";
-            &_show_msg( 3, @r);
             die;
         }
 
@@ -364,6 +520,9 @@ sub show_ifla(@);
 sub show_ifla_af_spec(@) {
     my ($type, $val, $depth) = @_;
 
+    my $lpref = "\t" x $depth;
+    printf "%sifla/spec: type=%s (%d)\n", $lpref, AF_to_name($type), $type;
+
     for (;$val ne '';) {
         my $l = unpack 'S', $val or die;
         $l >= 4 && $l <= length $val or die;
@@ -377,9 +536,9 @@ sub show_ifla_af_spec(@) {
 my @unpackrecurse;
 my @unpackmap;
 $unpackmap[IFLA_UNSPEC]                 = '';                   # 0 (empty data)
-$unpackmap[IFLA_ADDRESS]                = 'H12'; #'a6';                 # 1
-$unpackmap[IFLA_BROADCAST]              = 'H12'; #'a6';                 # 2
-$unpackmap[IFLA_IFNAME]                 = 'Z';                  # 3
+$unpackmap[IFLA_ADDRESS]                = 'H12'; #'a6';         # 1
+$unpackmap[IFLA_BROADCAST]              = 'H12'; #'a6';         # 2
+$unpackmap[IFLA_IFNAME]                 = 'Z*';                 # 3
 $unpackmap[IFLA_MTU]                    = 'L';                  # 4
 $unpackmap[IFLA_QDISC]                  = 'Z';                  # 6
 $unpackmap[IFLA_STATS]                  = 'L24';                # 7
@@ -413,6 +572,7 @@ sub show_ifla(@) {
     my ($type, $val, $depth) = @_;
     my $lpref = "\t" x $depth;
     if ( my $rp = $unpackrecurse[$type] ) {
+        printf "%sifla: type=%s (%d)\n", $lpref, IFLA_to_name($type), $type;
         for (;$val ne '';) {
             my $l = unpack 'S', $val or die;
             $l >= 4 && $l <= length $val or die;
@@ -429,12 +589,13 @@ sub show_ifla(@) {
 sub show_ifi(@) {
     my ($args, $opts, $depth) = @_;
     my ( $family, $type, $index, $flags, $change ) = @$args;
-    $depth //= 0;
+    $depth //= 1;
     my $lpref = "\t" x $depth;
-    printf "%sIFI:\nfamily\t%s (%d)\n"
-             . "%s\ttype  \t%s (%d)\n"
-             . "%s\tindex \t%d\n"
-             . "%s\tflags \t%08x/%08x\n",
+    printf "IFI:\n"
+             . "%sfamily  %s (%d)\n"
+             . "%stype    %s (%d)\n"
+             . "%sindex   %d\n"
+             . "%sflags   %08x/%08x\n",
             $lpref, AF_to_name $family, $family,
             $lpref, ARPHRD_to_name $type, $type,
             $lpref, $index,
@@ -476,7 +637,7 @@ sub TEST {
     #         },
     #         0
     #        ) = 52
-    my $request_flags = 0;
+    my $sendmsg_flags = 0;
     my $iface_name  = 'eth0';
 
     my $ifi_family  = 0;    # AF_UNSPEC
@@ -488,7 +649,7 @@ sub TEST {
     # Compose & send an iplink_req
 
     my ( $xreqcode, $xflags, $xseq, $xport_id, $resp_args, $resp_opts ) =
-        $self->{F4}->talk( $request_flags, RTM_GETLINK, NLM_F_REQUEST,
+        $self->{F4}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
                            struct_ifinfomsg_pack, struct_ifinfomsg_len,
                                                   [ $ifi_family, $ifi_type, $ifi_index,
                                                     $ifi_flags, $ifi_change, ],
@@ -538,7 +699,7 @@ sub TEST {
     $self->{F3}->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
     ( $xreqcode, $xflags, $xseq, $xport_id, $resp_args, $resp_opts ) =
-            $self->{F3}->talk( $request_flags, RTM_GETLINK, NLM_F_REQUEST,
+            $self->{F3}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
                                struct_ifinfomsg_pack, struct_ifinfomsg_len,
                                                       [ $ifi_family, $ifi_type, $ifi_index,
                                                         $ifi_flags, $ifi_change, ],
