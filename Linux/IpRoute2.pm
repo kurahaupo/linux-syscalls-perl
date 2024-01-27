@@ -9,6 +9,8 @@ package Linux::IpRoute2 v0.0.1;
 package Linux::IpRoute2::message {
     use Carp 'confess';
 
+    use Linux::Syscalls qw( MSG_to_desc );
+
     use constant {
         DirnNone => 0,
         DirnSend => 1,
@@ -23,13 +25,15 @@ package Linux::IpRoute2::message {
         my %args = @_;
         my $errno = $!;
         my $dirn      = delete $args{dirn} // DirnNone;
-        my $status    = delete $args{status};
+        my $op_res    = delete $args{op_res};
         my $data      = delete $args{data};
         my $ctrl      = delete $args{ctrl};
         my $name      = delete $args{name};
+        my $sflags    = delete $args{sflags};
         my $rflags    = delete $args{rflags};
         printf "%s:\n", $dirn[$dirn] || "\e[1;31mMessage";
-        printf " status %d (maybe length of data)\n", $status if defined $status;
+        printf " result %d (maybe length of data)\n", $op_res if defined $op_res;
+        printf " sflags %#x (%s)\n", $sflags, MSG_to_desc $sflags if defined $rflags;
         printf " rflags %#x (%s)\n", $rflags, MSG_to_desc $rflags if defined $rflags;
         printf "   data [%s]\n",                          defined $data ? unpack("H*", $data) : "(none)";
         printf "   ctrl [%s]\n",                          defined $ctrl ? unpack("H*", $ctrl) : "(none)";
@@ -39,10 +43,7 @@ package Linux::IpRoute2::message {
     }
     sub show {
         my ($self) = shift;
-        my ($msg, $ctrl, $name, $dirn,) = @_;
-        $msg //= $self->{data};
-        $ctrl //= $self->{ctrl};
-        _show_msg dirn => $dirn, msg => $msg, ctrl => $ctrl;
+        _show_msg data => $self->{data} ;
     }
 }
 
@@ -288,10 +289,6 @@ package Linux::IpRoute2::connector {
             $sf ||= 'none';
             printf "  flags %#x (%s)\n", $flags, $sf;
         }
-        Linux::IpRoute2::message::_show_msg
-            dirn => Linux::IpRoute2::message::DirnSend,
-            msg => $msg,
-            name => $name;
 
         state @verify_requests; @verify_requests or @verify_requests = (
 
@@ -320,24 +317,36 @@ package Linux::IpRoute2::connector {
             }
         }
 
-        return sendmsg $sock, $flags, $msg, $ctrl, $name;
+        my $r = sendmsg $sock, $flags, $msg, $ctrl, $name;
+
+        Linux::IpRoute2::message::_show_msg
+            dirn => Linux::IpRoute2::message::DirnSend,
+            sflags => $flags,
+            op_res => $r,
+            data => $msg,
+            name => $name;
+
+        return $r // ();
     }
 
     sub mrecv {
         my ($self, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
         my $sock = $self->{sock};
+
         my @r = recvmsg $sock, $flags, $maxmsglen, $maxctrllen, $maxnamelen;
 
-        my ($ret, $rflags, $msg, $ctrl, $name) = @r;
-
+        my ($op_res, $rflags, $msg, $ctrl, $name) = @r;
         Linux::IpRoute2::message::_show_msg
-            dirn => $flags & MSG_PEEK ? Linux::IpRoute2::message::DirnPeek
-                                      : Linux::IpRoute2::message::DirnRecv,
-            status => $ret,
-            msg  => $msg,
-            ctrl => $ctrl,
-            name => $name;
+            dirn    => $flags & MSG_PEEK ? Linux::IpRoute2::message::DirnPeek
+                                         : Linux::IpRoute2::message::DirnRecv,
+            op_res  => $op_res,
+            data    => $msg,
+            sflags  => $flags,
+            rflags  => $rflags,
+            ctrl    => $ctrl,
+            name    => $name;
 
+        return $r[0] if ! wantarray;    # just the status
         return @r;
     }
 
