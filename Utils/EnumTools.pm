@@ -6,6 +6,8 @@ use warnings;
 
 package Utils::EnumTools v0.1.0;
 
+use Scalar::Util qw( looks_like_number );
+
 # bits_to_desc is intended as a base for your own 'custom_bits_to_desc'; you
 # provide the bit-set to be described and an array with the symbolic name for
 # each bit, and we do the rest.
@@ -15,15 +17,13 @@ package Utils::EnumTools v0.1.0;
 # show the highest known bit.) If the value is zero, 'none' is returned.
 sub bits_to_desc($$) {
     my ($flags, $names) = @_;
-    $flags || return 'none';
-    my @knowns =
-                 grep  {
+    $flags // (return 'undef') || return 'none';
+    looks_like_number $flags or return "invalid[$flags]";
+    my @knowns = map {
                     my $n = $names->[$_];
-                    my $bb = 1 << $_;
-                    $n and 0+$flags != ($flags &=~ $bb)
+                    $n && 0+$flags != ($flags &=~ (1 << $_)) ? $n : ()
                 } 0 .. $#$names;
-    my $res = join ',',map { $names->[$_] } @knowns;
-    return join '+', $res || (),
+    return join '+', @knowns,
                      $flags ? printf '%#.*x', ($#$names|3>>2)+1, $flags : ()
 }
 
