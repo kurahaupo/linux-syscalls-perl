@@ -1661,6 +1661,48 @@ use constant {
     MSG_TRYHARD         => MSG_DONTROUTE, # for DECnet
 };
 
+#
+# _bits_to_desc should only be used by custom SOMETYPE_to_desc functions, which
+# should each supply the list of names describing the bits in a SOMETYPE value.
+#
+sub _bits_to_desc($\@;$) {
+    my ($flags, $names, $sep) = @_;
+    $flags or return 'none';
+    my $max_bit = 0;
+    my @knowns;
+    if ($names && @$names) {
+        $max_bit = $#$names;
+        push @knowns,
+            map {
+                    my $n = $names->[$_];
+                    my $bb = 1 << $_;
+                    $n && 0+$flags != ($flags &=~ $bb)
+                        ? $n
+                        : ()
+                } 0 .. $max_bit;
+    }
+    push @knowns, sprintf '%#.*x', ($max_bit>>2)+1, $flags
+        if $flags;
+    return join $sep // '+', @knowns;
+}
+
+#
+# MSG_to_desc - Convert the flags parameter from recvmsg & sendmsg to a
+#               readable string enumeration of the individual flags.
+#
+{
+my @msg_bit_names = ( qw(
+    OOB PEEK DONTROUTE CTRUNC PROXY TRUNC DONTWAIT EOR WAITALL FIN SYN CONFIRM
+    RST ERRQUEUE NOSIGNAL MORE WAITFORONE ), (undef) x 12, qw( FASTOPEN
+    CMSG_CLOEXEC
+) );
+
+sub MSG_to_desc($) {
+    splice @_, 1, 0, \@msg_bit_names;
+    goto &_bits_to_desc;
+}
+}
+
 use constant {
     iovec_pack      => 'C0(PIx![P])*',
     msghdr_pack     => 'C0(PIx![P])3L',
@@ -1703,7 +1745,7 @@ sub sendmsg($$$;$$) {
     return $ret || zero_but_true;
 }
 
-_export_tag qw{ msg => recvmsg sendmsg
+_export_tag qw{ msg => recvmsg sendmsg MSG_to_desc
                 MSG_OOB         MSG_PEEK        MSG_DONTROUTE   MSG_TRYHARD
                 MSG_CTRUNC      MSG_PROXY       MSG_TRUNC       MSG_DONTWAIT
                 MSG_EOR         MSG_WAITALL     MSG_FIN         MSG_SYN
