@@ -120,9 +120,9 @@ use constant {
 };
 
 {
-my @arpop_names;
-$arpop_names[eval 'ARPOP_'.uc $_] = $_ for qw(
-    request reply rrequest rreply inrequest inreply nak
+my @arpop_names = (
+    undef, qw( request reply rrequest rreply ),
+    undef, undef, undef, qw( inrequest inreply nak )
 );
 sub ARPOP_to_name($) { my $c = $_[0]; my $n = $arpop_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
