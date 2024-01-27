@@ -1583,14 +1583,12 @@ sub rmdirat($$) {
 #   size_t iov_len;               /* Number of bytes to transfer */
 
 use constant {
-
     MSG_OOB             =>       0x01,  # Process out-of-band data.  ¶ Sends out-of-band data on sockets that support this notion (e.g., of type SOCK_STREAM); the underlying protocol must also support out-of-band data.
     MSG_PEEK            =>       0x02,  # Peek at incoming messages.
     MSG_DONTROUTE       =>       0x04,  # Don't use local routing.  ¶ Don't use a gateway to send out the packet, send to hosts only on directly connected networks. This is usually used only by diagnostic or routing programs. This is defined only for protocol families that route; packet sockets don't.
-    MSG_TRYHARD         =>       0x04,  # == MSG_DONTROUTE, for DECnet
     MSG_CTRUNC          =>       0x08,  # Control data lost before delivery.
     MSG_PROXY           =>       0x10,  # Supply or ask second address.
-    MSG_TRUNC           =>       0x20,
+    MSG_TRUNC           =>       0x20,  # ¶ Request that actual received message size be reported, even if it exceeds the buffer; if still set after recvmsg() indicates that message was in fact truncated
     MSG_DONTWAIT        =>       0x40,  # Nonblocking IO. (since Linux 2.2) ¶ Enables  nonblocking  operation;  if the operation would block, EAGAIN or EWOULDBLOCK is returned.  This provides similar behavior to setting the O_NONBLOCK flag (via the fcntl(2) F_SETFL operation), but differs in that MSG_DONTWAIT is a per-call option, whereas O_NONBLOCK is a setting on the open filedescriptor (see  open(2)), which will affect all threads in the calling process and as well as other processes that hold filedescriptors referring to the same open filedescriptor.
     MSG_EOR             =>       0x80,  # End of record. (since Linux 2.2) ¶ Terminates a record (when this notion is supported, as for sockets of type SOCK_SEQPACKET).
     MSG_WAITALL         =>      0x100,  # Wait for a full request.
@@ -1598,13 +1596,28 @@ use constant {
     MSG_SYN             =>      0x400,
     MSG_CONFIRM         =>      0x800,  # Confirm path validity.  (since Linux 2.3.15) ¶ Tell the link layer that forward progress happened: you got a successful reply from the other side.  If the link layer doesn't get this  it  will  regularly  reprobe  the neighbor (e.g., via a unicast ARP).  Only valid on SOCK_DGRAM and SOCK_RAW sockets and currently implemented only for IPv4 and IPv6. See arp(7) for details.
     MSG_RST             =>     0x1000,
-    MSG_ERRQUEUE        =>     0x2000,  #  Fetch message from error queue.
+    MSG_ERRQUEUE        =>     0x2000,  # Fetch message from error queue.
     MSG_NOSIGNAL        =>     0x4000,  # Do not generate SIGPIPE. (since Linux 2.2) ¶ Don't generate a SIGPIPE signal if the peer on a stream-oriented socket has closed the connection. The EPIPE error is still returned. This provides similar behavior to using sigaction(2) to ignore SIGPIPE, but, whereas MSG_NOSIGNAL is a per-call feature, ignoring SIGPIPE sets a process attribute that affects all threads in the process.
     MSG_MORE            =>     0x8000,  # Sender will send more. (since Linux 2.4.4) ¶ The caller has more data to send. This flag is used with TCP sockets to obtain the same effect as the TCP_CORK socket option (see tcp(7)), with the difference that this flag can be set on a per-call basis. // Since Linux 2.6, this flag is also supported for UDP sockets, and informs the kernel to package all of the data sent in calls with this flag set into a single datagram which is transmitted only when a call is performed that does not specify this flag. (See also the UDP_CORK socket option described in udp(7).)
-    MSG_WAITFORONE      =>    0x10000,  #  Wait for at least one packet to return.
+    MSG_WAITFORONE      =>    0x10000,  # Wait for at least one packet to return.
+                        #     0x20000, ⎫
+                        #     0x40000, ⎮
+                        #     0x80000, ⎮
+                        #    0x100000, ⎮
+                        #    0x200000, ⎮
+                        #    0x400000, ⎬┈┈┈ unused
+                        #    0x800000, ⎮
+                        #   0x1000000, ⎮
+                        #   0x2000000, ⎮
+                        #   0x4000000, ⎮
+                        #   0x8000000, ⎮
+                        #  0x10000000, ⎭
     MSG_FASTOPEN        => 0x20000000,  #  Send data in TCP SYN.
     MSG_CMSG_CLOEXEC    => 0x40000000,  # Set close_on_exit for filedescriptor received through SCM_RIGHTS.
-
+                        #  0x80000000, ┈┈┈┈ unused
+};
+use constant {
+    MSG_TRYHARD         => MSG_DONTROUTE, # for DECnet
 };
 
 use constant {
