@@ -93,6 +93,43 @@ $rtm_names[eval 'RTM_'.uc $_ or die] = $_ for qw(
 sub RTM_to_name($) { my $c = $_[0]; my $n = $rtm_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
+# Generic structure for encapsulation of optional route information.
+# It is reminiscent of sockaddr, but with sa_family replaced
+# with attribute type.
+
+use constant {
+    struct_rtattr_pack  =>  'SS',
+    struct_rtattr_len   =>     4,
+};
+
+    #   struct rtattr {
+    #       unsigned short  rta_len;
+    #       unsigned short  rta_type;
+    #   };
+
+##
+## Definitions used in routing table administration.
+##
+
+use constant {
+    struct_rtmsg_pack   => 'C9x3',
+    struct_rtmsg_len    =>     9,
+};
+
+    #   struct rtmsg {
+    #       unsigned char           rtm_family;
+    #       unsigned char           rtm_dst_len;
+    #       unsigned char           rtm_src_len;
+    #       unsigned char           rtm_tos;
+    #
+    #       unsigned char           rtm_table;
+    #       unsigned char           rtm_protocol;
+    #       unsigned char           rtm_scope;
+    #       unsigned char           rtm_type;
+    #
+    #       unsigned                rtm_flags;
+    #   };
+
 use constant {
     RTN_UNSPEC          =>     0,
     RTN_UNICAST         =>     1,   # Gateway or direct route
@@ -256,6 +293,25 @@ my @rta_names = qw( unspec dst src iif oif gateway priority prefsrc metrics
 sub RTA_to_name($) { my $c = $_[0]; my $n = $rta_names[$c] if $c >= 0; return $n // "code#$c"; }
 }
 
+# RTM_MULTIPATH --- array of struct rtnexthop.
+#
+# "struct rtnexthop" describes all necessary nexthop information,
+# i.e. parameters of path to a destination via this nexthop.
+#
+# At the moment it is impossible to set different prefsrc, mtu, window
+# and rtt for different paths from multipath.
+
+use constant {
+    struct_rtnexthop_pack   => 'SCCi',
+    struct_rtnexthop_len    =>     8,
+};
+    #   struct rtnexthop {
+    #       unsigned short		rtnh_len;
+    #       unsigned char		rtnh_flags;
+    #       unsigned char		rtnh_hops;
+    #       int			rtnh_ifindex;
+    #   };
+
 use constant {
     RTNH_F_DEAD         =>  _B 0,   #  1    Nexthop is dead (used by multipath)
     RTNH_F_PERVASIVE    =>  _B 1,   #  2    Do recursive gateway lookup
@@ -274,7 +330,7 @@ sub RTNHF_to_desc($) { return bits_to_desc($_[0], \@rtnhf_names) }
 
 ## use constant RTNH_ALIGNTO =>  4;
 ## sub RTNH_ALIGN($)  { my ($len) = @_; (($len)+RTNH_ALIGNTO-1) & ~(RTNH_ALIGNTO-1) }
-## sub RTNH_OK($$)    { my ($rtnh,$len) = @_; (($rtnh)->rtnh_len >= sizeof(struct rtnexthop) && ((int)($rtnh)->rtnh_len) <= ($len)) }
+## sub RTNH_OK($$)    { my ($rtnh,$len) = @_; (($rtnh)->rtnh_len >= struct_rtnexthop_len && ((int)($rtnh)->rtnh_len) <= ($len)) }
 ## sub RTNH_NEXT($)   { my ($rtnh) = @_; ((struct rtnexthop*)(((char*)($rtnh)) + RTNH_ALIGN(($rtnh)->rtnh_len))) }
 ## sub RTNH_LENGTH($) { my ($len) = @_; (RTNH_ALIGN(sizeof(struct rtnexthop)) + ($len)) }
 ## sub RTNH_SPACE($)  { my ($len) = @_; RTNH_ALIGN(RTNH_LENGTH($len)) }
@@ -364,9 +420,10 @@ sub RTAXF_to_desc($) { return bits_to_desc($_[0], \@rtaxf_names) }
 }
 
 use constant {
-    struct_rta_session_pack_ports   =>  'CCSSS',
-    struct_rta_session_pack_icmpt   =>  'CCSCCS',
-    struct_rta_session_pack_spi     =>  'CCSL',
+    struct_rta_session_pack         =>  'Cx7',
+    struct_rta_session_pack_ports   =>  'Cx3SS',
+    struct_rta_session_pack_icmpt   =>  'Cx3CCS',
+    struct_rta_session_pack_spi     =>  'Cx3L',
     struct_rta_session_len          =>     8,   # == 1+1+2+2+2 == 1+1+2+1+1+2 = 1+1+2+4
 };
 
@@ -526,17 +583,22 @@ sub TCA_to_name($) { my $c = $_[0]; my $n = $tca_names[$c] if $c >= 0; return $n
 #               Neighbor Discovery userland options
 #
 
-#   struct nduseroptmsg {
-#        unsigned char   nduseropt_family;
-#        unsigned char   nduseropt_pad1;
-#        unsigned short  nduseropt_opts_len;     # Total length of options
-#        int             nduseropt_ifindex;
-#        uint8_t            nduseropt_icmp_type;
-#        uint8_t            nduseropt_icmp_code;
-#        unsigned short  nduseropt_pad2;
-#        unsigned int    nduseropt_pad3;
-#        # Followed by one or more ND options
-#   };
+use constant {
+    struct_nduseroptmsg_pack    => 'CxSiCCSI',
+    struct_nduseroptmsg_len     =>    16,
+};
+
+    #   struct nduseroptmsg {
+    #        unsigned char   nduseropt_family;
+    #        unsigned char   nduseropt_pad1;
+    #        unsigned short  nduseropt_opts_len;     # Total length of options
+    #        int             nduseropt_ifindex;
+    #        uint8_t            nduseropt_icmp_type;
+    #        uint8_t            nduseropt_icmp_code;
+    #        unsigned short  nduseropt_pad2;
+    #        unsigned int    nduseropt_pad3;
+    #        # Followed by one or more ND options
+    #   };
 
 use constant {
     NDUSEROPT_UNSPEC    =>     0,
@@ -835,6 +897,9 @@ our %EXPORT_TAGS = (
         struct_ifinfomsg_pack
         struct_ifinfomsg_len
 
+        struct_nduseroptmsg_pack
+        struct_nduseroptmsg_len
+
         struct_nl_mmap_hdr_pack
         struct_nl_mmap_hdr_len
 
@@ -866,6 +931,15 @@ our %EXPORT_TAGS = (
 
         struct_rtgenmsg_pack
         struct_rtgenmsg_len
+
+        struct_rtattr_pack
+        struct_rtattr_len
+
+        struct_rtmsg_pack
+        struct_rtmsg_len
+
+        struct_rtnexthop_pack
+        struct_rtnexthop_len
 
         struct_rtvia_pack
 
