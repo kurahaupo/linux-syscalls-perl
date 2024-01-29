@@ -1,6 +1,9 @@
 #!/bin/bash
 
-for s in u/show-*.c ; do
+D=${0%"${0##*/}"}
+D=${D#"$PWD/"}
+
+for s in ${D}show-*.c ; do
   b=${s%.c}
   t=${b##*-}
   for cm in -m32 -mx32 -m64 ; do
