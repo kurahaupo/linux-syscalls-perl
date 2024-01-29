@@ -6,7 +6,11 @@
 #include <stddef.h> /* offsetof */
 #include <stdio.h>
 
+#if __USE_LARGEFILE64
 #define SS statfs64
+#else
+#define SS statfs
+#endif
 
 #define STRX(X) #X
 #define STR(X) STRX(X)

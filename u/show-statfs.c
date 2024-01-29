@@ -1,10 +1,16 @@
+#undef _LARGEFILE64_SOURCE /* disables __USE_LARGEFILE64, which in turn disables struct statfs64; see <features.h> */
+
 #include <sys/statfs.h>
 #include <sys/types.h>
 
 #include <stddef.h> /* offsetof */
 #include <stdio.h>
 
+#if __USE_LARGEFILE64
+#define SS statfs64
+#else
 #define SS statfs
+#endif
 
 #define STRX(X) #X
 #define STR(X) STRX(X)
