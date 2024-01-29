@@ -44,3 +44,12 @@ inc/
 /Linux/unpacker/show_statvfs_struct
 /Linux/unpacker/show_timex_struct
 /Linux/unpacker/show_waitid
+/u/show-statfs-m32
+/u/show-statfs-m64
+/u/show-statfs-mx32
+/u/show-statfs64-m32
+/u/show-statfs64-m64
+/u/show-statfs64-mx32
+/u/show-statvfs-m32
+/u/show-statvfs-m64
+/u/show-statvfs-mx32
