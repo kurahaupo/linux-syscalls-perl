@@ -28,6 +28,7 @@ int main(int c,char**v){
   pr_info(f_fsid);     /* Filesystem ID */
   pr_info(f_flag);     /* Mount flags */
   pr_info(f_namemax);  /* Maximum filename length */
+  pr_info(__f_spare);  /* padding */
 
 
   return 0;
