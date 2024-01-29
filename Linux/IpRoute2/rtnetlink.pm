@@ -99,6 +99,7 @@ sub RTM_to_name($) { my $c = $_[0]; my $n = $rtm_names[$c] if $c >= 0; return $n
 
 use constant {
     struct_rtattr_pack  =>  'SS',
+    struct_rtattr_narg  =>     2,
     struct_rtattr_len   =>     4,
 };
 
@@ -113,6 +114,7 @@ use constant {
 
 use constant {
     struct_rtmsg_pack   => 'C9x3',
+    struct_rtmsg_narg   =>     9,
     struct_rtmsg_len    =>     9,
 };
 
@@ -303,6 +305,7 @@ sub RTA_to_name($) { my $c = $_[0]; my $n = $rta_names[$c] if $c >= 0; return $n
 
 use constant {
     struct_rtnexthop_pack   => 'SCCi',
+    struct_rtnexthop_narg   =>     3,
     struct_rtnexthop_len    =>     8,
 };
     #   struct rtnexthop {
@@ -338,7 +341,8 @@ sub RTNHF_to_desc($) { return bits_to_desc($_[0], \@rtnhf_names) }
 
 use constant {
     struct_rtvia_pack       =>  'SA*',
-  # struct_rtvia_len        =>  undef,   # does not have a fixed value, use 'length' instead
+    struct_rtvia_narg       =>      2,
+    struct_rtvia_len        =>  undef,   # does not have a fixed value, use 'length' instead
 };
 
     # RTA_VIA
@@ -351,6 +355,7 @@ use constant {
 
 use constant {
     struct_rta_cacheinfo_pack   =>  'LLlLLLLL',
+    struct_rta_cacheinfo_narg   =>     8,
     struct_rta_cacheinfo_len    =>    32,     # = length pack struct_rta_cacheinfo_pack, (0) x 8;
 };
 
@@ -421,9 +426,13 @@ sub RTAXF_to_desc($) { return bits_to_desc($_[0], \@rtaxf_names) }
 
 use constant {
     struct_rta_session_pack         =>  'Cx7',
+    struct_rta_session_narg         =>     1,
     struct_rta_session_pack_ports   =>  'Cx3SS',
+    struct_rta_session_narg_ports   =>     3,
     struct_rta_session_pack_icmpt   =>  'Cx3CCS',
+    struct_rta_session_narg_icmpt   =>     4,
     struct_rta_session_pack_spi     =>  'Cx3L',
+    struct_rta_session_narg_spi     =>     2,
     struct_rta_session_len          =>     8,   # == 1+1+2+2+2 == 1+1+2+1+1+2 = 1+1+2+4
 };
 
@@ -450,6 +459,7 @@ use constant {
 
 use constant {
     struct_rta_mfc_stats_pack   =>  'QQQ',
+    struct_rta_mfc_stats_narg   =>     length 'QQQ',  # @@@FIXUP
     struct_rta_mfc_stats_len    =>    24,   # == 8+8+8
 };
 
@@ -467,6 +477,7 @@ use constant {
 
 use constant {
     struct_rtgenmsg_pack        => 'Cx3',
+    struct_rtgenmsg_narg        =>     length 'Cx3',  # @@@FIXUP
     struct_rtgenmsg_len         =>     1,
 };
 
@@ -484,6 +495,7 @@ use constant {
 
 use constant {
     struct_ifinfomsg_pack       =>  'CxSiII',
+    struct_ifinfomsg_narg       =>     length 'CxSiII',  # @@@FIXUP
     struct_ifinfomsg_len        =>    16,   # == 1+1+2+4+4+4
 };
 
@@ -502,6 +514,7 @@ use constant {
 
 use constant {
     struct_prefixmsg_pack       =>  'CxSiC4',
+    struct_prefixmsg_narg       =>     length 'CxSiC4',  # @@@FIXUP
     struct_prefixmsg_len        =>     8,   # == 1+1+2+4
 };
 
@@ -531,6 +544,7 @@ sub PREFIX_FAMILY_to_name($) { my $c = $_[0]; my $n = $prefix_family_names[$c] i
 }
 use constant {
     struct_prefix_cacheinfo_pack    =>  'LL',
+    struct_prefix_cacheinfo_narg    =>     length 'LL',  # @@@FIXUP
     struct_prefix_cacheinfo_len     =>     8,
 };
     #   struct prefix_cacheinfo {
@@ -544,8 +558,9 @@ use constant {
 #
 
 use constant {
-    struct_tcmsg_pack   => 'CCSix![L]LLL',
-    struct_tcmsg_len    =>  20, # TODO: Check
+    struct_tcmsg_pack           => 'CCSix![L]LLL',
+    struct_tcmsg_narg           =>     length 'CCSix![L]LLL',  # @@@FIXUP
+    struct_tcmsg_len            =>    20, # TODO: Check
 };
     #   struct tcmsg {
     #       unsigned char      tcm_family;
@@ -585,6 +600,7 @@ sub TCA_to_name($) { my $c = $_[0]; my $n = $tca_names[$c] if $c >= 0; return $n
 
 use constant {
     struct_nduseroptmsg_pack    => 'CxSiCCSI',
+    struct_nduseroptmsg_narg    =>     length 'CxSiCCSI',  # @@@FIXUP
     struct_nduseroptmsg_len     =>    16,
 };
 
@@ -673,6 +689,7 @@ use constant {
 # TC action piece
 use constant {
     struct_tcamsg_pack  => 'Cx![L]',
+    struct_tcamsg_narg  =>     length 'Cx![L]',  # @@@FIXUP
     struct_tcamsg_len   =>     4,
 };
     #   struct tcamsg {
@@ -746,6 +763,7 @@ sub NETLINK_to_name($) { my $c = $_[0]; my $n = $netlink_names[$c] if $c >= 0; r
 
 use constant {
     struct_sockaddr_nl_pack     =>  'Sx[S]LL',
+    struct_sockaddr_nl_narg     =>     length 'Sx[S]LL',  # @@@FIXUP
     struct_sockaddr_nl_len      =>    12,   # 2+2+4+4 == length pack struct_sockaddr_nl_pack, (0) x 3;
 };
 
@@ -758,6 +776,7 @@ use constant {
 
 use constant {
     struct_nlmsghdr_pack        =>  'LSSLL',
+    struct_nlmsghdr_narg        =>  length 'LSSLL',  # @@@FIXUP
     struct_nlmsghdr_len         =>    16,   # 4+2+2+4+4 == length pack struct_nlmsghdr_pack, (0) x 5;
 };
     #   struct nlmsghdr {
@@ -814,6 +833,7 @@ use constant {
 
 use constant {
     struct_nl_pktinfo_pack      =>   'L',
+    struct_nl_pktinfo_narg      =>   length 'L',  # @@@FIXUP
     struct_nl_pktinfo_len       =>     4,   # == length pack struct_nl_pktinfo_pack, 0;
 };
 
@@ -823,6 +843,7 @@ use constant {
 
 use constant {
     struct_nl_mmap_req_pack     =>  'I4',
+    struct_nl_mmap_req_narg     =>  length 'I4',  # @@@FIXUP
     struct_nl_mmap_req_len      =>    16,   # == length pack struct_nl_mmap_req_pack, (0) x 4;
 };
 
@@ -835,6 +856,7 @@ use constant {
 
 use constant {
     struct_nl_mmap_hdr_pack     =>  'IILL3',
+    struct_nl_mmap_hdr_narg     =>     6,
     struct_nl_mmap_hdr_len      =>    24,   # == length pack struct_nl_mmap_hdr_pack, (0) x 6;
 };
 
