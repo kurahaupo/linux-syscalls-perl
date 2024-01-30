@@ -6,10 +6,55 @@ use warnings;
 
 package Linux::IpRoute2 v0.0.1;
 
+package importable {
+    # C<use parent I<packagename>;> implicitly does C<use I<packagename> ();>
+    # to make sure the parent package is actually loaded.
+    #
+    # Normally when you “use” a package, it first checks to see if it's already
+    # loaded, and if not, looks for a filename that's related to its package
+    # name. If it can't find that file, it simply fails.
+    #
+    # Unfornately the “is already loaded” check only works if it was previously
+    # loaded by “use” or “require”. If you simply created the package directly
+    # but in a different file, that doesn't count, which means when you try to
+    # use it (or use parent it) you get a fatal error that the filename does
+    # not exists.
+    #
+    # This mini package makes it easy to work around this obstacle, by simply
+    # writing
+    #   use importable;
+    # at the top of your package.
+    use Carp 'carp', 'croak';
+
+    sub import {
+        (shift)->isa(__PACKAGE__) or croak "Invalid invocation" if @_;
+        @_ == 0 or croak "Extra args";
+        my ($pkg, $filename) = caller;
+        $pkg =~ s#::#/#g;   # convert package path to POSIX file path
+        $pkg .= '.pm';
+        ! $INC{$pkg} || $INC{$pkg} eq $filename
+            or croak "Package ".($pkg =~ s/\.pm$//r =~ s#/#::#gr)
+                    . " is already importable from $INC{$pkg};"
+                    . " can't make importable from $filename";
+        $INC{$pkg} = $filename;
+      # carp "making $pkg usable in $filename" if $^C && $^W;
+    }
+    # This package faces the same obstacle as those it's intending to help;
+    # invoking our own "import" resolves this.
+    BEGIN { __PACKAGE__->import }
+    # Auto-destruct this package once this file has been compiled
+    UNITCHECK { undef *importable::; }
+}
+
 package Linux::IpRoute2::message {
+    # Base class for all NETLINK messages
+
+    use importable;
+
     use Carp 'confess';
 
     use Linux::Syscalls qw( MSG_to_desc );
+    use Linux::IpRoute2::rtnetlink qw( struct_nlmsghdr_len );
 
     use constant {
         DirnNone => 0,
@@ -17,8 +62,8 @@ package Linux::IpRoute2::message {
         DirnRecv => 2,
         DirnPeek => 3,
     };
-
     my @dirn = ( "\e[1;33mAbstract", "\e[1;35mRequest", "\e[1;36mReply", "\e[1;34mPeek", );
+
     sub _show_msg(%) {
         my ($self) = shift if not $#_ % 2;
         ! defined $self || $self->isa(__PACKAGE__) || confess 'Bad invocant';
@@ -43,40 +88,145 @@ package Linux::IpRoute2::message {
     }
     sub show {
         my ($self) = shift;
-        _show_msg data => $self->{data} ;
+        _show_msg data => $self->{data}, @_;
     }
-}
 
-package Linux::IpRoute2::message::get_link {
-    our @ISA = Linux::IpRoute2::message::;
-    # The parts of an RTLINK message common to both sending and receiving
-}
-
-package Linux::IpRoute2::response {
-    use Carp 'confess';
-
-    our @ISA = Linux::IpRoute2::message::;
     sub _unpack {
         my $self = shift;
+        $self->{body} //= shift // do {
+                my $data = $self->{data} // return;
+                substr $data, struct_nlmsghdr_len;
+            };
+        return $self;
     }
-    sub recv {
+    package Linux::IpRoute2::message::link {
+        use importable; use parent Linux::IpRoute2::message::;
+
+        use Carp 'confess';
+
+        use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
+
+        sub _unpack {
+            my $self = shift;
+            $self->SUPER::_unpack(@_);
+            my $body = $self->{body} // return;
+
+            # splice the IFINFO header off
+            my (
+                $ifi_family,
+                $ifi_type,
+                $ifi_index,
+                $ifi_flags,
+                $ifi_change,
+                $reply3,
+            ) = my @resp_args = unpack struct_ifinfomsg_pack . 'x![L]a*', $body; # substr $body, 0, struct_ifinfomsg_len, '';
+            @resp_args  == 6 or confess 'Unpack response failed!';
+
+            $self->{ifi_family} = $ifi_family;
+            $self->{ifi_type}   = $ifi_type;
+            $self->{ifi_index}  = $ifi_index;
+            $self->{ifi_flags}  = $ifi_flags;
+            $self->{ifi_change} = $ifi_change;
+
+            my @resp_opts;
+
+            for (;$reply3 ne '';) {
+                my $l = unpack 'S', $reply3 or die;
+                $l >= 4 && $l <= length $reply3 or die;
+                my $opt = substr $reply3, 0, 1+($l-1|3), '';
+                substr($opt, $l) = '';  # trim padding
+                push @resp_opts, [ unpack 'x[S]Sa*', $opt ];
+            }
+
+            $self->{opts}       = \@resp_opts;
+
+            $self->_unpack_refine if $self->can('_unpack_refine');
+
+            return $self;
+        }
+    }
+    package Linux::IpRoute2::message::addr      { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::route     { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::neigh     { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::rule      { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::qdisc     { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::tclass    { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::tfilter   { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::action    { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::prefix    { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::multicast { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::anycast   { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::neightbl  { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::nduseropt { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::addrlabel { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::dcb       { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::netconf   { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::mdb       { use importable; use parent Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::nsid      { use importable; use parent Linux::IpRoute2::message::; }
+
+    use Linux::IpRoute2::rtnetlink qw( :rtm );
+
+    my @unpack_director;
+    $unpack_director[RTM_NEWLINK]       = Linux::IpRoute2::message::link::;
+    $unpack_director[RTM_DELLINK]       = Linux::IpRoute2::message::link::;
+    $unpack_director[RTM_GETLINK]       = Linux::IpRoute2::message::link::;
+    $unpack_director[RTM_SETLINK]       = Linux::IpRoute2::message::link::;
+    $unpack_director[RTM_NEWADDR]       = Linux::IpRoute2::message::addr::;
+    $unpack_director[RTM_DELADDR]       = Linux::IpRoute2::message::addr::;
+    $unpack_director[RTM_GETADDR]       = Linux::IpRoute2::message::addr::;
+    $unpack_director[RTM_NEWROUTE]      = Linux::IpRoute2::message::route::;
+    $unpack_director[RTM_DELROUTE]      = Linux::IpRoute2::message::route::;
+    $unpack_director[RTM_GETROUTE]      = Linux::IpRoute2::message::route::;
+    $unpack_director[RTM_NEWNEIGH]      = Linux::IpRoute2::message::neigh::;
+    $unpack_director[RTM_DELNEIGH]      = Linux::IpRoute2::message::neigh::;
+    $unpack_director[RTM_GETNEIGH]      = Linux::IpRoute2::message::neigh::;
+    $unpack_director[RTM_NEWRULE]       = Linux::IpRoute2::message::rule::;
+    $unpack_director[RTM_DELRULE]       = Linux::IpRoute2::message::rule::;
+    $unpack_director[RTM_GETRULE]       = Linux::IpRoute2::message::rule::;
+    $unpack_director[RTM_NEWQDISC]      = Linux::IpRoute2::message::qdisc::;
+    $unpack_director[RTM_DELQDISC]      = Linux::IpRoute2::message::qdisc::;
+    $unpack_director[RTM_GETQDISC]      = Linux::IpRoute2::message::qdisc::;
+    $unpack_director[RTM_NEWTCLASS]     = Linux::IpRoute2::message::tclass::;
+    $unpack_director[RTM_DELTCLASS]     = Linux::IpRoute2::message::tclass::;
+    $unpack_director[RTM_GETTCLASS]     = Linux::IpRoute2::message::tclass::;
+    $unpack_director[RTM_NEWTFILTER]    = Linux::IpRoute2::message::tfilter::;
+    $unpack_director[RTM_DELTFILTER]    = Linux::IpRoute2::message::tfilter::;
+    $unpack_director[RTM_GETTFILTER]    = Linux::IpRoute2::message::tfilter::;
+    $unpack_director[RTM_NEWACTION]     = Linux::IpRoute2::message::action::;
+    $unpack_director[RTM_DELACTION]     = Linux::IpRoute2::message::action::;
+    $unpack_director[RTM_GETACTION]     = Linux::IpRoute2::message::action::;
+    $unpack_director[RTM_NEWPREFIX]     = Linux::IpRoute2::message::prefix::;
+    $unpack_director[RTM_GETMULTICAST]  = Linux::IpRoute2::message::multicast::;
+    $unpack_director[RTM_GETANYCAST]    = Linux::IpRoute2::message::anycast::;
+    $unpack_director[RTM_NEWNEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
+    $unpack_director[RTM_GETNEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
+    $unpack_director[RTM_SETNEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
+    $unpack_director[RTM_NEWNDUSEROPT]  = Linux::IpRoute2::message::nduseropt::;
+    $unpack_director[RTM_NEWADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
+    $unpack_director[RTM_DELADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
+    $unpack_director[RTM_GETADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
+    $unpack_director[RTM_GETDCB]        = Linux::IpRoute2::message::dcb::;
+    $unpack_director[RTM_SETDCB]        = Linux::IpRoute2::message::dcb::;
+    $unpack_director[RTM_NEWNETCONF]    = Linux::IpRoute2::message::netconf::;
+    $unpack_director[RTM_GETNETCONF]    = Linux::IpRoute2::message::netconf::;
+    $unpack_director[RTM_NEWMDB]        = Linux::IpRoute2::message::mdb::;
+    $unpack_director[RTM_DELMDB]        = Linux::IpRoute2::message::mdb::;
+    $unpack_director[RTM_GETMDB]        = Linux::IpRoute2::message::mdb::;
+    $unpack_director[RTM_NEWNSID]       = Linux::IpRoute2::message::nsid::;
+    $unpack_director[RTM_DELNSID]       = Linux::IpRoute2::message::nsid::;
+    $unpack_director[RTM_GETNSID]       = Linux::IpRoute2::message::nsid::;
+
+    sub _rebless {
         my $self = shift;
-        my $class = ref $self || $self;
-
-        $#_%2 or confess "Odd args";
-        my %opts = @_;
-
-        $self = bless {
-            header => [@_],
-            options => [],
-        }, $class;
-        my ($sock, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
-        # Do whatever is necessary to receive the response
+        my $code = shift // $self->{code} // return;
+        my $class = $unpack_director[$code] || return;
+        bless $self, $class;
     }
 }
 
 package Linux::IpRoute2::request {
-    our @ISA = Linux::IpRoute2::message::;
+    use importable;
+    use parent Linux::IpRoute2::message::;
     use Carp 'confess';
     use POSIX 'EMSGSIZE';
 
@@ -100,10 +250,10 @@ package Linux::IpRoute2::request {
     }
     sub _pack($;$$) {
         my ($self, $seq, $pid) = @_;
-        my ($reqcode, $flags) = @{ $self->{header} };
+        my ($code, $flags) = @{ $self->{header} };
         my $request = pack struct_nlmsghdr_pack,
                             0,              # length, to be filled in...
-                            $reqcode,
+                            $code,
                             $flags,
                             $seq // 0,      # sequence (dummy)
                             $pid // 0;      # port-id
@@ -119,7 +269,7 @@ package Linux::IpRoute2::request {
     sub show {
         my ($self) = shift;
         $self->_pack;
-        $self->SUPER::show;
+        $self->SUPER::show(@_);
     }
     sub send {
         my ($self, $conx, $sendmsg_flags) = @_;
@@ -127,27 +277,36 @@ package Linux::IpRoute2::request {
 
         my $msg = $self->_pack(++$conx->{seq}, $conx->{port_id});
 
-        my $rlen0 = $conx->msend($sendmsg_flags, $msg, undef, $conx->FixedSocketName) or die "Could not send";;
+        my $rlen = $conx->msend($sendmsg_flags, $msg, undef, $conx->FixedSocketName) or die "Could not send";;
 
-        my $msglen = length $msg;
-        if ($rlen0 != $msglen) {
-            warn "sendmsg() returned $rlen0 when expecting $msglen";
-            $! = EMSGSIZE; # 90 - message too long
+        my $mlen = length $msg;
+        if ($rlen != $mlen) {
+            warn "sendmsg() returned $rlen when expecting $mlen";
+            $self->{_LAST_ERROR} = {
+                errno   => ($! = EMSGSIZE), # 90 - message too long
+                mlen    => $mlen,
+                rlen    => $rlen,
+                reason  => 'returned value does not match requested messages size',
+            };
             return;
         }
-        return $rlen0;
+        return $rlen;
     }
 }
 
 package Linux::IpRoute2::request::get_link {
-    our @ISA = ( Linux::IpRoute2::request::,
-                 Linux::IpRoute2::message::get_link:: );
+    use parent Linux::IpRoute2::request::,
+               Linux::IpRoute2::message::link::;
     use Carp 'confess';
-    use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST );
+    use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST struct_ifinfomsg_pack );
+    # From first half of "talk"
     sub compose {
         my $self = shift;
-        $#_ <= 0 or confess "Wrong args";
-        return $self->SUPER::start(RTM_GETLINK, NLM_F_REQUEST);
+        $#_ == 4 or confess "Wrong args";
+        my ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change ) = @_;
+        $self = $self->SUPER::start(RTM_GETLINK, NLM_F_REQUEST);
+        push @{ $self->{options} }, pack struct_ifinfomsg_pack, $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
+        return $self;
     }
     sub add_attr {
         my $self = shift;
@@ -155,12 +314,214 @@ package Linux::IpRoute2::request::get_link {
         my $body = pack $pack_fmt, @args;
         $body ne '' or confess "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@args)."[@args]\n";
         push @{ $self->{options} }, pack 'SSa*x![L]', 4+length($body), $opt_type, $body;
+        return $self;
+    }
+}
+
+package Linux::IpRoute2::response {
+    use importable;
+    use parent Linux::IpRoute2::message::;
+
+    package Linux::IpRoute2::response::link {
+        use importable;
+        use parent Linux::IpRoute2::response::,
+                   Linux::IpRoute2::message::link::;
+    }
+
+    package Linux::IpRoute2::response::addr      { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::addr::; }
+    package Linux::IpRoute2::response::route     { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::route::; }
+    package Linux::IpRoute2::response::neigh     { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::neigh::; }
+    package Linux::IpRoute2::response::rule      { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::rule::; }
+    package Linux::IpRoute2::response::qdisc     { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::qdisc::; }
+    package Linux::IpRoute2::response::tclass    { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::tclass::; }
+    package Linux::IpRoute2::response::tfilter   { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::tfilter::; }
+    package Linux::IpRoute2::response::action    { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::action::; }
+    package Linux::IpRoute2::response::prefix    { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::prefix::; }
+    package Linux::IpRoute2::response::multicast { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::multicast::; }
+    package Linux::IpRoute2::response::anycast   { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::anycast::; }
+    package Linux::IpRoute2::response::neightbl  { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::neightbl::; }
+    package Linux::IpRoute2::response::nduseropt { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::nduseropt::; }
+    package Linux::IpRoute2::response::addrlabel { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::addrlabel::; }
+    package Linux::IpRoute2::response::dcb       { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::dcb::; }
+    package Linux::IpRoute2::response::netconf   { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::netconf::; }
+    package Linux::IpRoute2::response::mdb       { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::mdb::; }
+    package Linux::IpRoute2::response::nsid      { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::nsid::; }
+
+    use Carp 'confess';
+
+    # Process an in-coming NLM message
+
+    use Linux::Syscalls qw( MSG_PEEK MSG_TRUNC MSG_DONTWAIT );   # :msg
+    use Linux::IpRoute2::rtnetlink qw( :rtm );
+
+    my @unpack_director;
+    $unpack_director[RTM_NEWLINK]       = Linux::IpRoute2::response::link::;
+    $unpack_director[RTM_DELLINK]       = Linux::IpRoute2::response::link::;
+    $unpack_director[RTM_GETLINK]       = Linux::IpRoute2::response::link::;
+    $unpack_director[RTM_SETLINK]       = Linux::IpRoute2::response::link::;
+    $unpack_director[RTM_NEWADDR]       = Linux::IpRoute2::response::addr::;
+    $unpack_director[RTM_DELADDR]       = Linux::IpRoute2::response::addr::;
+    $unpack_director[RTM_GETADDR]       = Linux::IpRoute2::response::addr::;
+    $unpack_director[RTM_NEWROUTE]      = Linux::IpRoute2::response::route::;
+    $unpack_director[RTM_DELROUTE]      = Linux::IpRoute2::response::route::;
+    $unpack_director[RTM_GETROUTE]      = Linux::IpRoute2::response::route::;
+    $unpack_director[RTM_NEWNEIGH]      = Linux::IpRoute2::response::neigh::;
+    $unpack_director[RTM_DELNEIGH]      = Linux::IpRoute2::response::neigh::;
+    $unpack_director[RTM_GETNEIGH]      = Linux::IpRoute2::response::neigh::;
+    $unpack_director[RTM_NEWRULE]       = Linux::IpRoute2::response::rule::;
+    $unpack_director[RTM_DELRULE]       = Linux::IpRoute2::response::rule::;
+    $unpack_director[RTM_GETRULE]       = Linux::IpRoute2::response::rule::;
+    $unpack_director[RTM_NEWQDISC]      = Linux::IpRoute2::response::qdisc::;
+    $unpack_director[RTM_DELQDISC]      = Linux::IpRoute2::response::qdisc::;
+    $unpack_director[RTM_GETQDISC]      = Linux::IpRoute2::response::qdisc::;
+    $unpack_director[RTM_NEWTCLASS]     = Linux::IpRoute2::response::tclass::;
+    $unpack_director[RTM_DELTCLASS]     = Linux::IpRoute2::response::tclass::;
+    $unpack_director[RTM_GETTCLASS]     = Linux::IpRoute2::response::tclass::;
+    $unpack_director[RTM_NEWTFILTER]    = Linux::IpRoute2::response::tfilter::;
+    $unpack_director[RTM_DELTFILTER]    = Linux::IpRoute2::response::tfilter::;
+    $unpack_director[RTM_GETTFILTER]    = Linux::IpRoute2::response::tfilter::;
+    $unpack_director[RTM_NEWACTION]     = Linux::IpRoute2::response::action::;
+    $unpack_director[RTM_DELACTION]     = Linux::IpRoute2::response::action::;
+    $unpack_director[RTM_GETACTION]     = Linux::IpRoute2::response::action::;
+    $unpack_director[RTM_NEWPREFIX]     = Linux::IpRoute2::response::prefix::;
+    $unpack_director[RTM_GETMULTICAST]  = Linux::IpRoute2::response::multicast::;
+    $unpack_director[RTM_GETANYCAST]    = Linux::IpRoute2::response::anycast::;
+    $unpack_director[RTM_NEWNEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
+    $unpack_director[RTM_GETNEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
+    $unpack_director[RTM_SETNEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
+    $unpack_director[RTM_NEWNDUSEROPT]  = Linux::IpRoute2::response::nduseropt::;
+    $unpack_director[RTM_NEWADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
+    $unpack_director[RTM_DELADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
+    $unpack_director[RTM_GETADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
+    $unpack_director[RTM_GETDCB]        = Linux::IpRoute2::response::dcb::;
+    $unpack_director[RTM_SETDCB]        = Linux::IpRoute2::response::dcb::;
+    $unpack_director[RTM_NEWNETCONF]    = Linux::IpRoute2::response::netconf::;
+    $unpack_director[RTM_GETNETCONF]    = Linux::IpRoute2::response::netconf::;
+    $unpack_director[RTM_NEWMDB]        = Linux::IpRoute2::response::mdb::;
+    $unpack_director[RTM_DELMDB]        = Linux::IpRoute2::response::mdb::;
+    $unpack_director[RTM_GETMDB]        = Linux::IpRoute2::response::mdb::;
+    $unpack_director[RTM_NEWNSID]       = Linux::IpRoute2::response::nsid::;
+    $unpack_director[RTM_DELNSID]       = Linux::IpRoute2::response::nsid::;
+    $unpack_director[RTM_GETNSID]       = Linux::IpRoute2::response::nsid::;
+
+    sub _rebless {
+        my $self = shift;
+        my $code = shift // $self->{code} // return;
+        my $class = $unpack_director[$code] || return;
+        bless $self, $class;
+    }
+
+    use Linux::IpRoute2::rtnetlink qw(
+                                       struct_ifinfomsg_pack
+                                       struct_nlmsghdr_pack
+                                       struct_sockaddr_nl_pack
+                                     );
+
+    use constant {
+        ctrl_size   =>     0,       # always discard
+        name_size   =>  0x40,       # normally 12, but allow space in case it grows
+    };
+
+    # From second half of "talk"
+    sub recv_new {
+        my $self = shift;
+        my $class = ref $self || $self;
+
+        my $sock = shift or confess "Missing 'sock' arg";
+
+        $#_%2 or confess "Odd args";
+        my %opts = @_;
+
+        my $accept_reply_size = $opts{size} // 0x400;   # actually only need 0x3fc == 1020
+
+        my ($rlen, $recv_flags, $reply, $recv_ctrl, $recv_from);
+        for (;;) {
+            ($rlen, $recv_flags, $reply, $recv_ctrl, $recv_from) = $sock->mrecv(MSG_PEEK|MSG_TRUNC, $accept_reply_size, ctrl_size, name_size);
+            last if $rlen > 0;
+            sleep 0.05;
+            warn "Retrying recvmsg...";
+        }
+
+        $rlen == 1020 or warn "recvmsg(PEEK) returned len=$rlen when expecting 1020";
+        if (my $expect_reply_from = $opts{sent_to}) {
+            $recv_from eq $expect_reply_from
+                or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $recv_from)."]"
+                    . " when expecting [".(unpack 'H*', $expect_reply_from)."]";
+        }
+
+        if ($recv_flags & MSG_TRUNC) {
+            # still need to get reply
+            ($rlen, $recv_flags, $reply, $recv_ctrl, $recv_from) = $sock->mrecv(0, $rlen, ctrl_size, name_size);
+        } else {
+            # already got reply, just need to pop it from the queue
+            () = $sock->mrecv(MSG_TRUNC, 0, 0, 0x400); # discard answer
+        }
+
+        $rlen == 1020 or warn "recvmsg() returned len=$rlen when expecting 1020";
+
+        $recv_from eq $opts{expect_reply_from}
+                or warn "recvmsg() returned from=[".(unpack 'H*', $recv_from)."]"
+                     . " when expecting [".(unpack 'H*', $opts{expect_reply_from})."]"
+            if $opts{expect_reply_from};
+
+        my @r = $sock->mrecv(MSG_TRUNC|MSG_DONTWAIT, 0, 0, 0x400);
+        unless (!@r && $!{EAGAIN}) {
+            warn "unexpected response after message; $!";
+            die;
+        }
+
+        $self = bless {
+            data => $reply,
+        }, $class;
+
+        $self->{ctrl} = $recv_ctrl if $recv_ctrl;
+
+        if ( $recv_from and my @nl = unpack struct_sockaddr_nl_pack, $recv_from ) {
+            my (
+                $nl_family,  # set to AF_NETLINK (__kernel_sa_family_t = unsigned short)
+                $nl_pid,     # port ID
+                $nl_groups,  # multicast groups mask
+            ) = @nl;
+
+            $recv_from = {
+                    data    => $recv_from,
+                    family  => $nl_family,
+                    pid     => $nl_pid,
+                    groups  => $nl_groups,
+                };
+
+            $self->{from} = $recv_from;
+        }
+
+        my ( $reply_len2, $code, $flags, $seq, $port_id, $body ) = unpack struct_nlmsghdr_pack . 'x![L] a*', $reply;
+
+        $reply_len2 = length $reply or die "Reply length mismatch got $reply_len2, expected ".length($reply)."\n";
+
+        if ($seq != $sock->{seq}) {
+            confess "Out-of-order response; got reply to #$seq but expected #$sock->{seq}";
+            # This code should eventually change, since out-of-order responses
+            # are technically permitted if there's more than one outstanding
+            # query.
+        }
+
+        $self->{code}       = $code;
+        $self->{flags}      = $flags;
+        $self->{seq}        = $seq;
+        $self->{port_id}    = $port_id;
+
+        $self->_rebless($code);
+        $self->_unpack($body);
+
+        $self->show( dirn => Linux::IpRoute2::message::DirnRecv );
+
+        return $self if not wantarray;
+        return $self, $recv_flags, $recv_ctrl, $recv_from;
     }
 }
 
 package Linux::IpRoute2::connector {
 
-    use Carp 'croak';
+    use Carp qw( croak );
 
     use Linux::Syscalls qw( :msg );
 
@@ -273,22 +634,6 @@ package Linux::IpRoute2::connector {
     sub msend {
         my ($self, $flags, $msg, $ctrl, $name) = @_;
         my $sock = $self->{sock};
-        if ( defined $flags ) {
-            my $rf = $flags;
-            my $sf = join ',',
-                        map { s/.*_//r }
-                        grep  {
-                            my $bb = 0;
-                            eval('$bb = '.$_);
-                            0+$rf != ($rf &=~ $bb);
-                        } qw( MSG_OOB MSG_PEEK MSG_DONTROUTE MSG_CTRUNC MSG_PROXY
-                              MSG_TRUNC MSG_DONTWAIT MSG_EOR MSG_WAITALL MSG_FIN
-                              MSG_SYN MSG_CONFIRM MSG_RST MSG_ERRQUEUE MSG_NOSIGNAL
-                              MSG_MORE MSG_WAITFORONE MSG_FASTOPEN MSG_CMSG_CLOEXEC );
-            $sf = join '+', $sf || (), $rf || ();
-            $sf ||= 'none';
-            printf "  flags %#x (%s)\n", $flags, $sf;
-        }
 
         state @verify_requests; @verify_requests or @verify_requests = (
 
@@ -366,6 +711,7 @@ package Linux::IpRoute2::connector {
             }
             return $r;
         },
+        '0+' => sub { return shift },
     );
 
     BEGIN { *DESTROY = \&close };
@@ -394,13 +740,15 @@ package Linux::IpRoute2::connector {
     sub talk {
         my $self = shift;
 
-        my ($sendmsg_flags, $reqcode, $flags) = splice @_, 0, 3;
+        my ($sendmsg_flags, $request_code, $request_flags) = splice @_, 0, 3;
+
+        my $request_seq = ++$self->{seq};
 
         my $request = pack struct_nlmsghdr_pack . 'x![L]',
                             0,              # length, to be filled in later
-                            $reqcode,
-                            $flags,
-                            ++$self->{seq},
+                            $request_code,
+                            $request_flags,
+                            $request_seq,
                             $self->{port_id};
 
         my ($type_pack, $type_pack_size, $type_args,) = splice @_, 0, 3;
@@ -424,9 +772,9 @@ package Linux::IpRoute2::connector {
 
         my $accept_reply_size = 0x3fc;
 
-        my ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from);
+        my ($rlen, $recv_flags, $reply, $recv_ctrl, $reply_from);
         for (;;) {
-            ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from) = $self->mrecv(MSG_PEEK|MSG_TRUNC, $accept_reply_size, ctrl_size, name_size);
+            ($rlen, $recv_flags, $reply, $recv_ctrl, $reply_from) = $self->mrecv(MSG_PEEK|MSG_TRUNC, $accept_reply_size, ctrl_size, name_size);
             last if $rlen > 0;
             sleep 0.5;
         }
@@ -434,11 +782,11 @@ package Linux::IpRoute2::connector {
         $rlen == 1020 or warn "recvmsg(PEEK) returned len=$rlen when expecting 1020";
         $reply_from eq $self->FixedSocketName or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', FixedSocketName)."]";
 
-        if ($reply_flags & MSG_TRUNC) {
+        if ($recv_flags & MSG_TRUNC) {
             # still need to get reply
-            ($rlen, $reply_flags, $reply, $reply_ctrl, $reply_from) = $self->mrecv(0, $rlen, ctrl_size, name_size);
+            ($rlen, $recv_flags, $reply, $recv_ctrl, $reply_from) = $self->mrecv(0, $rlen, ctrl_size, name_size);
         } else {
-            # already got reply, just need to pop it from the queue
+            # already peeked at full reply, just need to pop it from the queue
             () = $self->mrecv(MSG_TRUNC, 0, 0, 0x400); # discard answer
         }
 
@@ -451,20 +799,21 @@ package Linux::IpRoute2::connector {
             die;
         }
 
-        my ( $xrlen, $xreqcode, $xflags, $xseq, $xport_id, $xreply ) = unpack struct_nlmsghdr_pack . 'x![L] a*', $reply;
-        $xrlen = length $reply or die "Reply length mismatch got $xrlen, expected ".length($reply)."\n";
+        my ( $reply_len2, $reply_code, $reply_flags, $reply_seq, $reply_port_id, $reply2 ) = unpack struct_nlmsghdr_pack . 'x![L] a*', $reply;
+        $reply_len2 = length $reply or die "Reply length mismatch got $reply_len2, expected ".length($reply)."\n";
 
-        my @resp_args = unpack $type_pack, substr $xreply, 0, $type_pack_size, '';
+        my @resp_args = unpack $type_pack, substr $reply2, 0, $type_pack_size, '';
         my @resp_opts;
-        for (;$xreply ne '';) {
-            my $l = unpack 'S', $xreply or die;
-            $l >= 4 && $l <= length $xreply or die;
-            my $opt = substr $xreply, 0, 1+($l-1|3), '';
+
+        for (;$reply2 ne '';) {
+            my $l = unpack 'S', $reply2 or die;
+            $l >= 4 && $l <= length $reply2 or die;
+            my $opt = substr $reply2, 0, 1+($l-1|3), '';
             substr($opt, $l) = '';  # trim padding
             push @resp_opts, [ unpack 'x[S]Sa*', $opt ];
         }
 
-        return $xreqcode, $xflags, $xseq, $xport_id, \@resp_args, \@resp_opts;
+        return $reply_code, $reply_flags, $reply_seq, $reply_port_id, \@resp_args, \@resp_opts;
     }
 }
 
@@ -616,6 +965,8 @@ sub show_ifi(@) {
 }
 }
 
+use Carp qw( confess );
+
 sub TEST {
     use Data::Dumper;
 
@@ -657,18 +1008,29 @@ sub TEST {
 
     # Compose & send an iplink_req
 
-    my ( $xreqcode, $xflags, $xseq, $xport_id, $resp_args, $resp_opts ) =
-        $self->{F4}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
-                           struct_ifinfomsg_pack, struct_ifinfomsg_len,
-                                                  [ $ifi_family, $ifi_type, $ifi_index,
-                                                    $ifi_flags, $ifi_change, ],
-                           IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
-                           IFLA_IFNAME,   'a*x', [ $iface_name ],
-                         );
+    Linux::IpRoute2::request::get_link::
+            ->compose( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change )
+            ->add_attr( IFLA_EXT_MASK, 'L',   RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
+            ->add_attr( IFLA_IFNAME,   'a*x', $iface_name )
+            ->send( $self->{F4}, $sendmsg_flags ) or die "Bad send; $!";
 
-    $#$resp_args == 4 or die;
+    my ( $response, $recv_flags, $recv_ctrl, $recv_from ) =
+        Linux::IpRoute2::response::->recv_new($self->{F4});
+#       $self->{F4}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
+#                          struct_ifinfomsg_pack, struct_ifinfomsg_len,
+#                                                 [ $ifi_family, $ifi_type, $ifi_index,
+#                                                   $ifi_flags, $ifi_change, ],
+#                          IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
+#                          IFLA_IFNAME,   'a*x', [ $iface_name ],
+#                        );
 
-    show_ifi $resp_args, $resp_opts;
+    $response->show;
+
+#   $#$resp_args == 4 or die;
+
+#   show_ifi $resp_args, $resp_opts;
+
+    #my ( $reply_code, $reply_flags, $reply_seq, $reply_port_id, $resp_args, $resp_opts ) ;
 
     # sendmsg(3,
     #         {
@@ -696,18 +1058,19 @@ sub TEST {
   # my ( $rfi_family, $rfi_type, $rfi_index, $rfi_flags, $rfi_change ) = @$resp_args;
   # $ifi_index = $rfi_index;    # use answer from previous request, since that's why we asked it.
 
-    $ifi_family = AF_INET6;     # 10
-    $ifi_type    = 0;    # ARPHRD_*
+    ## Use previous answers as parameters to the next question
 
-    ( undef, undef, $ifi_index, undef, undef ) = @$resp_args;
-    $ifi_index == 2 or die;     # check previous reply, "eth0" is second interface, after "lo"
+    $ifi_family  = AF_INET6;    # 10
+    $ifi_type    = 0;           # ARPHRD_*
+    $ifi_index   = $response->{ifi_index} || confess "Did not get an interface index from first query";
+    $ifi_flags   = 0;           # IFF_* flags
+    $ifi_change  = 0;           # IFF_* change mask
 
-    $ifi_flags   = 0;    # IFF_* flags
-    $ifi_change  = 0;    # IFF_* change mask
+    ## Tweak socket settings
 
     $self->{F3}->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
-    ( $xreqcode, $xflags, $xseq, $xport_id, $resp_args, $resp_opts ) =
+    my ( $reply_code, $reply_flags, $reply_seq, $reply_port_id, $resp_args, $resp_opts ) =
             $self->{F3}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
                                struct_ifinfomsg_pack, struct_ifinfomsg_len,
                                                       [ $ifi_family, $ifi_type, $ifi_index,
