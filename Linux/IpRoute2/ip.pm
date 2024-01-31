@@ -8,7 +8,7 @@ package Linux::IpRoute2::ip v0.0.1;
 
 use Exporter 'import';
 
-use Utils::EnumTools '_B';
+sub _B($) { 1 << pop }
 
 # Copied and adapted from /usr/include/linux/ip.h
 
@@ -38,10 +38,10 @@ use Utils::EnumTools '_B';
 # Manage TOS & PREC bits ...
 
 use constant {
-    IPTOS_MINCOST               =>  _B 1,   # 0x02
-    IPTOS_RELIABILITY           =>  _B 2,   # 0x04
-    IPTOS_THROUGHPUT            =>  _B 3,   # 0x08
-    IPTOS_LOWDELAY              =>  _B 4,   # 0x10
+    IPTOS_MINCOST               =>     1 << 1,  # 0x02
+    IPTOS_RELIABILITY           =>     1 << 2,  # 0x04
+    IPTOS_THROUGHPUT            =>     1 << 3,  # 0x08
+    IPTOS_LOWDELAY              =>     1 << 4,  # 0x10
 
     IPTOS_TOS_MASK              =>  0x1e,   # all of the above
 };

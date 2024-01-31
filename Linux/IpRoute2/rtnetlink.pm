@@ -8,7 +8,9 @@ package Linux::IpRoute2::rtnetlink v0.0.1;
 
 use Exporter 'import';
 
-use Utils::EnumTools '_B';
+use Linux::Syscalls ();
+
+sub _B($) { 1 << pop }
 
 # Copied and adapted from /usr/include/linux/rtnetlink.h
 #       also from [iproute2]include/uapi/linux/netlink.h
@@ -236,7 +238,10 @@ use constant {
 
 {
 my @rtmf_names = ((undef) x 8, qw( notify cloned equalize prefix lookup ));
-sub RTMF_to_desc($) { return bits_to_desc($_[0], \@rtmf_names) }
+sub RTMF_to_desc($) {
+    splice @_, 1, 0, \@rtmf_names;
+    goto &Linux::Syscalls::_bits_to_desc
+}
 }
 
 use constant {
@@ -326,7 +331,10 @@ use constant {
 
 {
 my @rtnhf_names = qw( dead pervasive onlink offload linkdown );
-sub RTNHF_to_desc($) { return bits_to_desc($_[0], \@rtnhf_names) }
+sub RTNHF_to_desc($) {
+    splice @_, 1, 0, \@rtnhf_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
 }
 
 # Macros to handle hexthops
@@ -376,7 +384,10 @@ use constant {
 
 {
 my @rtnetlinkf_names = qw( have_peerinfo );
-sub RTNETLINKF_to_desc($) { return bits_to_desc($_[0], \@rtnetlinkf_names) }
+sub RTNETLINKF_to_desc($) {
+    splice @_, 1, 0, \@rtnetlinkf_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
 }
 
 # RTM_METRICS --- array of struct rtattr with types of RTAX_*
@@ -421,7 +432,10 @@ use constant {
 
 {
 my @rtaxf_names = qw( ecn sack timestamp allfrag );
-sub RTAXF_to_desc($) { return bits_to_desc($_[0], \@rtaxf_names) }
+sub RTAXF_to_desc($) {
+    splice @_, 1, 0, \@rtaxf_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
 }
 
 use constant {
@@ -717,7 +731,10 @@ use constant {
 
 {
 my @rtext_filter_names = qw( vf brvlan brvlan_comp skip_stats );
-sub RTEXT_FILTER_to_desc($) { return bits_to_desc($_[0], \@rtext_filter_names) }
+sub RTEXT_FILTER_to_desc($) {
+    splice @_, 1, 0, \@rtext_filter_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
 }
 
 # End of information exported to user level

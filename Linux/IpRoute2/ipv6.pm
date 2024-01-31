@@ -8,7 +8,7 @@ package Linux::IpRoute2::ip v0.0.1;
 
 use Exporter 'import';
 
-use Utils::EnumTools '_B';
+sub _B($) { 1 << pop }
 
 # The latest drafts declared increase in minimal mtu up to 1280.
 
