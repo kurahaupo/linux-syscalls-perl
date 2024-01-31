@@ -2,7 +2,12 @@
 
 CFLAGS += -g
 
-all: linux-exit-status-test-c show_dirent_struct show_stat_struct show_statvfs_struct show_timex_struct show_waitid
+all::	linux-exit-status-test-c
+all::	show_dirent_struct
+all::	show_stat_struct
+all::	show_statvfs_struct
+all::	show_timex_struct
+all::	show_waitid
 
 test_one::
 	$$PWD/show_stat_struct.bash -1 show_timex_struct show_stat_struct
