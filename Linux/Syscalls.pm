@@ -1564,7 +1564,7 @@ sub rmdirat($$) {
 ################################################################################
 #
 # According to "man perlfunc", we have send and recv but not sendmsg or
-# recvmsg. This oversight makes it difficult-to-impossible to implement then
+# recvmsg. This oversight makes it difficult-to-impossible to implement the
 # rtnetlink socket protocol.
 #
 
