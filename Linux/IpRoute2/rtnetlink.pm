@@ -1355,14 +1355,14 @@ our %EXPORT_TAGS = (
     ]],
 );
 
-our @EXPORT_OK = (
+my %seen;
+our @EXPORT_OK = grep { ! $seen{$_} }
         qw(
             NETLINK_UNUSED
             NET_MAJOR
             RTNETLINK_HAVE_PEERINFO
             TCA_ACT_TAB
         ),
-        map { @$_ } values %EXPORT_TAGS
-    );
+        map { @$_ } values %EXPORT_TAGS;
 
 1;
