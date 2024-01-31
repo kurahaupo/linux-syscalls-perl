@@ -505,11 +505,12 @@ UNITCHECK {
     my @e;
     for my $mm ( do { my %seen; grep { defined && ! $seen{$_}++ } @try } ) {
         my $m = "${built_for_os}::Syscalls::$mm";
-        warn "Trying to load $m" if $^C || $^W;
         eval q{
             use }.$m.q{;
          ## warn sprintf "syscall_map=%s\n", scalar %syscall_map;
          ## warn sprintf "pack_map=%s\n", scalar %pack_map;
+        } . qq{
+            warn "\e[2m  Loaded $m\e[22m\n" if $^C || $^W;
             1;
         } and last;
         push @e, $@;
