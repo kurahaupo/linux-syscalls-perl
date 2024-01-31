@@ -52,6 +52,7 @@ package Linux::IpRoute2::message {
     use importable;
 
     use Carp 'confess';
+    use Data::Dumper;
 
     use Linux::Syscalls qw( MSG_to_desc );
     use Linux::IpRoute2::rtnetlink qw( struct_nlmsghdr_len );
@@ -83,6 +84,7 @@ package Linux::IpRoute2::message {
         printf "   data [%s]\n",                          defined $data ? unpack("H*", $data) : "(none)";
         printf "   ctrl [%s]\n",                          defined $ctrl ? unpack("H*", $ctrl) : "(none)";
         printf " %6s [%s]\n", $dirn ? "from" : "to", defined $name ? unpack("H*", $name) : "(unspecified)";
+        printf "%s\n", Dumper($self);
         printf "  EXTRA ARG: %s = %s\n", $_, $args{$_} // '(undef)' for sort keys %args;
         printf "\e[m\n";
     }
