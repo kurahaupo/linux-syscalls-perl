@@ -123,6 +123,7 @@ package Linux::IpRoute2::message {
         use Carp qw( confess cluck );
 
         use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
+        use Linux::IpRoute2::if_link qw( :ifla );
 
         sub _unpack {
             my $self = shift;
@@ -158,12 +159,204 @@ package Linux::IpRoute2::message {
                 push @resp_opts, [ unpack 'x[S]Sa*', $opt ];
             }
 
-            $self->{opts}       = \@resp_opts;
+            $self->{opts}       = [ sort { $a->[0] <=> $b->[0] } @resp_opts ];
 
             $self->_unpack_refine if $self->can('_unpack_refine');
 
             return $self;
         }
+
+        my @option_packmap;
+
+        $option_packmap[$_] = 'Z*'      # C-string
+            for
+                IFLA_IFNAME,                        #  3
+                IFLA_QDISC,                         #  6
+                IFLA_IFALIAS,                       # 20
+                IFLA_PHYS_PORT_NAME,                # 38
+                IFLA_ALT_IFNAME,                    # 53        # Alternative ifname
+                IFLA_PARENT_DEV_NAME,               # 56
+                IFLA_PARENT_DEV_BUS_NAME,           # 57
+            ;
+        $option_packmap[$_] = 'l'       # int32_t
+            for
+                IFLA_MTU,                           #  4
+                IFLA_TXQLEN,                        # 13
+                IFLA_NUM_VF,                        # 21        # Number of VFs if device is SR-IOV PF
+                IFLA_GROUP,                         # 27        # Group the device belongs to
+                IFLA_EXT_MASK,                      # 29        # Extended info mask, VFs, etc
+                IFLA_PROMISCUITY,                   # 30        # Promiscuity count: > 0 means acts PROMISC
+                IFLA_NUM_TX_QUEUES,                 # 31
+                IFLA_NUM_RX_QUEUES,                 # 32
+                IFLA_CARRIER_CHANGES,               # 35
+                IFLA_GSO_MAX_SEGS,                  # 40
+                IFLA_GSO_MAX_SIZE,                  # 41
+                IFLA_CARRIER_DOWN_COUNT,            # 48
+                IFLA_NEW_IFINDEX,                   # 49
+                IFLA_MAX_MTU,                       # 51
+            ;
+        $option_packmap[$_] = 'q'       # int64_t
+            for
+                IFLA_XDP,                           # 43
+            ;
+        $option_packmap[$_] = 'C'       # uint8_t
+            for
+                IFLA_OPERSTATE,                     # 16
+                IFLA_LINKMODE,                      # 17
+            ;
+        $option_packmap[$_] = '(H2)6(H2)*' # 6-byte or 8-byte MAC address; round up to even number of bytes
+            for
+                IFLA_ADDRESS,                       #  1
+                IFLA_BROADCAST,                     #  2
+                IFLA_PROTO_DOWN,                    # 39
+                IFLA_PERM_ADDRESS,                  # 54
+            ;
+        $option_packmap[$_] = 'L*'      # int32_t[]
+            for
+                IFLA_STATS,                         #  7    # long
+            ;
+        $option_packmap[$_] = 'Q*'      # int64_t[]
+            for
+                IFLA_STATS64,                       # 23    # long
+            ;
+
+#           0 or
+#               IFLA_UNSPEC,                        #  0
+#               IFLA_LINK,                          #  5
+#               IFLA_COST,                          #  8
+#               IFLA_PRIORITY,                      #  9
+#               IFLA_MASTER,                        # 10
+#               IFLA_WIRELESS,                      # 11        # Wireless Extension event - see wireless.h
+#               IFLA_PROTINFO,                      # 12        # Protocol specific information for a link
+#               IFLA_MAP,                           # 14    # long
+#               IFLA_WEIGHT,                        # 15
+#               IFLA_LINKINFO,                      # 18
+#               IFLA_NET_NS_PID,                    # 19
+#               IFLA_VFINFO_LIST,                   # 22
+#               IFLA_VF_PORTS,                      # 24
+#               IFLA_PORT_SELF,                     # 25
+#               IFLA_AF_SPEC,                       # 26    # long
+#               IFLA_NET_NS_FD,                     # 28
+#               IFLA_CARRIER,                       # 33
+#               IFLA_PHYS_PORT_ID,                  # 34
+#               IFLA_PHYS_SWITCH_ID,                # 36
+#               IFLA_LINK_NETNSID,                  # 37
+#               IFLA_PAD,                           # 42
+#               IFLA_EVENT,                         # 44
+#               IFLA_NEW_NETNSID,                   # 45
+#               IFLA_TARGET_NETNSID,                # 46        # New name for IFLA_IF_NETNSID
+#               IFLA_CARRIER_UP_COUNT,              # 47
+#               IFLA_MIN_MTU,                       # 50
+#               IFLA_PROP_LIST,                     # 52
+#               IFLA_PROTO_DOWN_REASON,             # 55
+#           ;
+
+        sub _pack_opt {
+            my ($self, $data_ref, $code, @args) = @_;
+            my $pack = $option_packmap[$code];
+            my $body = pack $pack, @args;
+            $$data_ref .= pack 'SSa*x![L]', length($body)+4, $code, $body;
+            return;
+        }
+        sub _unpack_opt {
+            my ($self, $data_ref) = @_;
+            my ($len, $code) = unpack 'SS', $$data_ref;
+            my $d = substr $$data_ref, 0, 1+($len-1|3), '';
+            my $pack = $option_packmap[$code] or return $code;
+            return unpack 'x[S]S'.$pack, $d;
+        }
+
+        sub show_ifla(@);
+
+        sub show_ifla_af_spec(@) {
+            my ($type, $val, $depth) = @_;
+
+            my $lpref = "\t" x $depth;
+            printf "%sifla/spec: type=%s (%d)\n", $lpref, AF_to_name($type), $type;
+
+            for (;$val ne '';) {
+                my $l = unpack 'S', $val or die;
+                $l >= 4 && $l <= length $val or die;
+                my $opt = substr $val, 0, 1+($l-1|3), '';
+                substr($opt, $l) = '';  # trim padding
+                show_ifla( unpack( 'x[S]Sa*', $opt ), $depth+1 );
+            }
+        }
+        #*show_0x8034 = \&show_ifla_af_spec;
+
+        my @unpackrecurse;
+        my @unpackmap;
+        $unpackmap[IFLA_UNSPEC]                 = '';                   # 0 (empty data)
+        $unpackmap[IFLA_ADDRESS]                = 'H12'; #'a6';         # 1
+        $unpackmap[IFLA_BROADCAST]              = 'H12'; #'a6';         # 2
+        $unpackmap[IFLA_IFNAME]                 = 'Z*';                 # 3
+        $unpackmap[IFLA_MTU]                    = 'L';                  # 4
+        $unpackmap[IFLA_QDISC]                  = 'Z';                  # 6
+        $unpackmap[IFLA_STATS]                  = 'L24';                # 7
+        $unpackmap[IFLA_TXQLEN]                 = 'L';                  # 1
+        $unpackmap[IFLA_MAP]                    = '(L2)*';              # 14
+        $unpackmap[IFLA_OPERSTATE]              = 'C';                  # 16
+        $unpackmap[IFLA_LINKMODE]               = 'C';                  # 17
+        $unpackmap[IFLA_NUM_VF]                 = 'L';                  # 21
+        $unpackmap[IFLA_STATS64]                = 'q24';                # 23
+        $unpackrecurse[IFLA_AF_SPEC]            = \&show_ifla_af_spec;  # 26
+        $unpackmap[IFLA_GROUP]                  = 'L';                  # 27
+        $unpackmap[IFLA_PROMISCUITY]            = 'L';                  # 30
+        $unpackmap[IFLA_NUM_TX_QUEUES]          = 'L';                  # 31
+        $unpackmap[IFLA_NUM_RX_QUEUES]          = 'L';                  # 32
+        $unpackmap[IFLA_CARRIER]                = 'V';                  # 33
+        $unpackmap[IFLA_CARRIER_CHANGES]        = 'L';                  # 35
+        $unpackmap[IFLA_PROTO_DOWN]             = 'C';                  # 39
+        $unpackmap[IFLA_GSO_MAX_SEGS]           = 'll';                 # 40
+        $unpackmap[IFLA_GSO_MAX_SIZE]           = 'SS';                 # 41
+        $unpackmap[IFLA_XDP]                    = 'S4';                 # 43
+        $unpackmap[IFLA_CARRIER_UP_COUNT]       = 'l';                  # 47
+        $unpackmap[IFLA_CARRIER_DOWN_COUNT]     = 'l';                  # 48
+        $unpackmap[IFLA_MIN_MTU]                = 'l';                  # 50
+        $unpackmap[IFLA_MAX_MTU]                = 'l';                  # 51
+        $unpackmap[IFLA_PERM_ADDRESS]           = 'H12'; #'a6';                 # 54
+        $unpackmap[IFLA_PARENT_DEV_NAME]        = 'Z';                  # 56
+        $unpackmap[IFLA_PARENT_DEV_BUS_NAME]    = 'l';                  # 57
+        #$unpackrecursive[32820]                = \&show_0x8034;        # 32820
+
+        sub show_ifla(@) {
+            my ($type, $val, $depth) = @_;
+            my $lpref = "\t" x $depth;
+            if ( my $rp = $unpackrecurse[$type] ) {
+                printf "%sifla: type=%s (%d)\n", $lpref, IFLA_to_name($type), $type;
+                for (;$val ne '';) {
+                    my $l = unpack 'S', $val or die;
+                    $l >= 4 && $l <= length $val or die;
+                    my $opt = substr $val, 0, 1+($l-1|3), '';
+                    substr($opt, $l) = '';  # trim padding
+                    $rp->( unpack('x[S]Sa*', $opt), $depth+1 );
+                }
+            } else {
+                my $um = $unpackmap[$type] || 'H*';
+                printf "%sopt: type=%s (%d) val=[%s]\n", $lpref, IFLA_to_name($type), $type, join ',', unpack $um, $val;
+            }
+        }
+
+        sub show_ifi(@) {
+            my ($args, $opts, $depth) = @_;
+            my ( $family, $type, $index, $flags, $change ) = @$args;
+            $depth //= 1;
+            my $lpref = "\t" x $depth;
+            printf "IFI:\n"
+                     . "%sfamily  %s (%d)\n"
+                     . "%stype    %s (%d)\n"
+                     . "%sindex   %d\n"
+                     . "%sflags   %08x/%08x\n",
+                    $lpref, AF_to_name $family, $family,
+                    $lpref, ARPHRD_to_name $type, $type,
+                    $lpref, $index,
+                    $lpref, $flags, $change;
+
+            for my $opt (@$opts) {
+                show_ifla(@$opt, $depth+1);
+            }
+        }
+
     }
     package Linux::IpRoute2::message::addr      { use importable; use parent Linux::IpRoute2::message::; }
     package Linux::IpRoute2::message::route     { use importable; use parent Linux::IpRoute2::message::; }
@@ -558,20 +751,8 @@ package Linux::IpRoute2::connector {
         SOCK_CLOEXEC
         SOCK_RAW
     );
-
     # Socket should have these but doesn't ...
-    use constant {
-        AF_NETLINK              =>  16,
-
-        SO_SNDBUF               =>   7,
-        SO_RCVBUF               =>   8,
-
-        SOL_SOCKET              =>   1,
-        SOL_NETLINK             => 270,
-    };
-    use constant {
-        PF_NETLINK              =>  AF_NETLINK,
-    };
+    use Linux::Socket::Extras qw( :netlink :so :sol );
 
     use Linux::IpRoute2::rtnetlink qw(
         NETLINK_ROUTE
@@ -746,110 +927,10 @@ package Linux::IpRoute2::connector {
 
     BEGIN { *DESTROY = \&close };
 
-    use Linux::IpRoute2::rtnetlink qw(
-        :pack
-    );
-
-    sub _make_rtattr($$@) {
-        my ($type, $pack_fmt, @args) = @_;
-        my $body = pack $pack_fmt, @args;
-        $body ne '' or die "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@args)."[@args]\n";
-        return pack 'SSa*x![L]', 4+length($body), $type, $body;
-    }
-
-    sub _set_len(\$) {
-        my ($ref) = @_;
-        substr($$ref, 0, 4) = pack 'L', length $$ref;
-    }
-
-    use constant {
-        ctrl_size   =>     0,       # always discard
-        name_size   =>  0x40,       # normally 12, but allow space in case it grows
-    };
-
-    sub talk {
-        my $self = shift;
-
-        my ($sendmsg_flags, $request_code, $request_flags) = splice @_, 0, 3;
-
-        my $request_seq = ++$self->{seq};
-
-        my $request = pack struct_nlmsghdr_pack . 'x![L]',
-                            0,              # length, to be filled in later
-                            $request_code,
-                            $request_flags,
-                            $request_seq,
-                            $self->{port_id};
-
-        my ($type_pack, $type_pack_size, $type_args,) = splice @_, 0, 3;
-        $request .= pack $type_pack . 'x![L]', @$type_args;
-
-        while (@_) {
-            my ($opt, $pack, $args) = splice @_, 0, 3;
-            $request .= _make_rtattr $opt, $pack, @$args;
-        }
-
-        # overwrite length at beginning of request
-        _set_len $request;
-      # substr($request, 0, 4) = pack 'L', length $request;     # 4 == length pack 'L', ...
-
-        my $rlen0 = $self->msend($sendmsg_flags, $request, undef, $self->FixedSocketName) or die "Could not send";;
-        if ($rlen0 != length $request) {
-            warn "sendmsg() returned $rlen0 when expecting ".length($request);
-            return;
-        }
-        #$rlen0 == 52 or warn "sendmsg() returned $rlen0 when expecting 52"; # implied by matching the entire request against a 52-byte string, above
-
-        my $accept_reply_size = 0x3fc;
-
-        my ($rlen, $recv_flags, $reply, $recv_ctrl, $reply_from);
-        for (;;) {
-            ($rlen, $recv_flags, $reply, $recv_ctrl, $reply_from) = $self->mrecv(MSG_PEEK|MSG_TRUNC, $accept_reply_size, ctrl_size, name_size);
-            last if $rlen > 0;
-            sleep 0.5;
-        }
-
-        $rlen == 1020 or warn "recvmsg(PEEK) returned len=$rlen when expecting 1020";
-        $reply_from eq $self->FixedSocketName or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', FixedSocketName)."]";
-
-        if ($recv_flags & MSG_TRUNC) {
-            # still need to get reply
-            ($rlen, $recv_flags, $reply, $recv_ctrl, $reply_from) = $self->mrecv(0, $rlen, ctrl_size, name_size);
-        } else {
-            # already peeked at full reply, just need to pop it from the queue
-            () = $self->mrecv(MSG_TRUNC, 0, 0, 0x400); # discard answer
-        }
-
-        $rlen == 1020 or warn "recvmsg() returned len=$rlen when expecting 1020";
-        $reply_from eq FixedSocketName or warn "recvmsg() returned from=[".(unpack 'H*', $reply_from)."] when expecting [".(unpack 'H*', FixedSocketName)."]";
-
-        my @r = $self->mrecv(MSG_TRUNC|MSG_DONTWAIT, 0, 0, 0x400);
-        unless (!@r && $!{EAGAIN}) {
-            warn "unexpected response after message; $!";
-            die;
-        }
-
-        my ( $reply_len2, $reply_code, $reply_flags, $reply_seq, $reply_port_id, $reply2 ) = unpack struct_nlmsghdr_pack . 'x![L] a*', $reply;
-        $reply_len2 = length $reply or die "Reply length mismatch got $reply_len2, expected ".length($reply)."\n";
-
-        my @resp_args = unpack $type_pack, substr $reply2, 0, $type_pack_size, '';
-        my @resp_opts;
-
-        for (;$reply2 ne '';) {
-            my $l = unpack 'S', $reply2 or die;
-            $l >= 4 && $l <= length $reply2 or die;
-            my $opt = substr $reply2, 0, 1+($l-1|3), '';
-            substr($opt, $l) = '';  # trim padding
-            push @resp_opts, [ unpack 'x[S]Sa*', $opt ];
-        }
-
-        return $reply_code, $reply_flags, $reply_seq, $reply_port_id, \@resp_args, \@resp_opts;
-    }
 }
 
-BEGIN { *AF_NETLINK = \&Linux::IpRoute2::connector::AF_NETLINK }
-
 use Socket qw( AF_INET6 );
+use Linux::Socket::Extras qw( AF_NETLINK );
 
 #use Linux::Syscalls qw( :msg );
 
@@ -866,25 +947,6 @@ use Linux::IpRoute2::if_link qw( :ifla ); # IFLA_EXT_MASK, IFLA_IFNAME, IFLA_to_
 
 use Linux::IpRoute2::if_arp qw( ARPHRD_to_name );
 
-{
-    # Most of the AF_* names are actually provided by «use Socket;» (which gets
-    # them from <linux/bits/socket.h>) so we only need to add this reverse
-    # mapping and the exceptions that Socket doesn't know about.
-    # These may move to their own file, but it can stay here while I'm testing.
-    use constant {
-        AF_NETLINK              =>  16,
-        PF_NETLINK              =>  16,
-    };
-my @af_names = qw(
-    unspec local inet ax25 ipx appletalk netrom bridge atmpvc x25 inet6 rose
-    decnet netbeui security key netlink packet ash econet atmsvc rds sna irda
-    pppox wanpipe llc ib mpls can tipc bluetooth iucv rxrpc isdn phonet
-    ieee802154 caif alg nfc vsock max
-);
-sub AF_to_name($) { my ($c) = @_; my $n = $af_names[$c] if $c >= 0; return $n // "code#$c"; }
-BEGIN { *PF_to_name = \&AF_to_name }
-}
-
 sub iprt2_connect_route {
     my $self = shift;
     my $class = ref $self || $self;
@@ -900,99 +962,6 @@ sub iprt2_connect_route {
         F4 => $f4,
     }, $class;
     return $self;
-}
-
-{
-sub show_ifla(@);
-
-sub show_ifla_af_spec(@) {
-    my ($type, $val, $depth) = @_;
-
-    my $lpref = "\t" x $depth;
-    printf "%sifla/spec: type=%s (%d)\n", $lpref, AF_to_name($type), $type;
-
-    for (;$val ne '';) {
-        my $l = unpack 'S', $val or die;
-        $l >= 4 && $l <= length $val or die;
-        my $opt = substr $val, 0, 1+($l-1|3), '';
-        substr($opt, $l) = '';  # trim padding
-        show_ifla( unpack( 'x[S]Sa*', $opt ), $depth+1 );
-    }
-}
-#*show_0x8034 = \&show_ifla_af_spec;
-
-my @unpackrecurse;
-my @unpackmap;
-$unpackmap[IFLA_UNSPEC]                 = '';                   # 0 (empty data)
-$unpackmap[IFLA_ADDRESS]                = 'H12'; #'a6';         # 1
-$unpackmap[IFLA_BROADCAST]              = 'H12'; #'a6';         # 2
-$unpackmap[IFLA_IFNAME]                 = 'Z*';                 # 3
-$unpackmap[IFLA_MTU]                    = 'L';                  # 4
-$unpackmap[IFLA_QDISC]                  = 'Z';                  # 6
-$unpackmap[IFLA_STATS]                  = 'L24';                # 7
-$unpackmap[IFLA_TXQLEN]                 = 'L';                  # 1
-$unpackmap[IFLA_MAP]                    = '(L2)*';              # 14
-$unpackmap[IFLA_OPERSTATE]              = 'C';                  # 16
-$unpackmap[IFLA_LINKMODE]               = 'C';                  # 17
-$unpackmap[IFLA_NUM_VF]                 = 'L';                  # 21
-$unpackmap[IFLA_STATS64]                = 'q24';                # 23
-$unpackrecurse[IFLA_AF_SPEC]            = \&show_ifla_af_spec;  # 26
-$unpackmap[IFLA_GROUP]                  = 'L';                  # 27
-$unpackmap[IFLA_PROMISCUITY]            = 'L';                  # 30
-$unpackmap[IFLA_NUM_TX_QUEUES]          = 'L';                  # 31
-$unpackmap[IFLA_NUM_RX_QUEUES]          = 'L';                  # 32
-$unpackmap[IFLA_CARRIER]                = 'V';                  # 33
-$unpackmap[IFLA_CARRIER_CHANGES]        = 'L';                  # 35
-$unpackmap[IFLA_PROTO_DOWN]             = 'C';                  # 39
-$unpackmap[IFLA_GSO_MAX_SEGS]           = 'll';                 # 40
-$unpackmap[IFLA_GSO_MAX_SIZE]           = 'SS';                 # 41
-$unpackmap[IFLA_XDP]                    = 'S4';                 # 43
-$unpackmap[IFLA_CARRIER_UP_COUNT]       = 'l';                  # 47
-$unpackmap[IFLA_CARRIER_DOWN_COUNT]     = 'l';                  # 48
-$unpackmap[IFLA_MIN_MTU]                = 'l';                  # 50
-$unpackmap[IFLA_MAX_MTU]                = 'l';                  # 51
-$unpackmap[IFLA_PERM_ADDRESS]           = 'H12'; #'a6';                 # 54
-$unpackmap[IFLA_PARENT_DEV_NAME]        = 'Z';                  # 56
-$unpackmap[IFLA_PARENT_DEV_BUS_NAME]    = 'l';                  # 57
-#$unpackrecursive[32820]                = \&show_0x8034;        # 32820
-
-sub show_ifla(@) {
-    my ($type, $val, $depth) = @_;
-    my $lpref = "\t" x $depth;
-    if ( my $rp = $unpackrecurse[$type] ) {
-        printf "%sifla: type=%s (%d)\n", $lpref, IFLA_to_name($type), $type;
-        for (;$val ne '';) {
-            my $l = unpack 'S', $val or die;
-            $l >= 4 && $l <= length $val or die;
-            my $opt = substr $val, 0, 1+($l-1|3), '';
-            substr($opt, $l) = '';  # trim padding
-            $rp->( unpack('x[S]Sa*', $opt), $depth+1 );
-        }
-    } else {
-        my $um = $unpackmap[$type] || 'H*';
-        printf "%sopt: type=%s (%d) val=[%s]\n", $lpref, IFLA_to_name($type), $type, join ',', unpack $um, $val;
-    }
-}
-
-sub show_ifi(@) {
-    my ($args, $opts, $depth) = @_;
-    my ( $family, $type, $index, $flags, $change ) = @$args;
-    $depth //= 1;
-    my $lpref = "\t" x $depth;
-    printf "IFI:\n"
-             . "%sfamily  %s (%d)\n"
-             . "%stype    %s (%d)\n"
-             . "%sindex   %d\n"
-             . "%sflags   %08x/%08x\n",
-            $lpref, AF_to_name $family, $family,
-            $lpref, ARPHRD_to_name $type, $type,
-            $lpref, $index,
-            $lpref, $flags, $change;
-
-    for my $opt (@$opts) {
-        show_ifla(@$opt, $depth+1);
-    }
-}
 }
 
 use Carp qw( confess );
@@ -1041,7 +1010,7 @@ sub TEST {
     Linux::IpRoute2::request::get_link::
             ->compose( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change )
             ->add_attr( IFLA_EXT_MASK, 'L',   RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
-            ->add_attr( IFLA_IFNAME,   'a*x', $iface_name )
+            ->add_attr( IFLA_IFNAME,   'Z*',  $iface_name )
             ->send( $self->{F4}, $sendmsg_flags ) or die "Bad send; $!";
 
     my ( $response, $recv_flags, $recv_ctrl, $recv_from ) =
@@ -1100,18 +1069,25 @@ sub TEST {
 
     $self->{F3}->set_netlink_opt(NETLINK_GET_STRICT_CHK, 1);
 
-    my ( $reply_code, $reply_flags, $reply_seq, $reply_port_id, $resp_args, $resp_opts ) =
-            $self->{F3}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
-                               struct_ifinfomsg_pack, struct_ifinfomsg_len,
-                                                      [ $ifi_family, $ifi_type, $ifi_index,
-                                                        $ifi_flags, $ifi_change, ],
-                               IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
-                             );
+    Linux::IpRoute2::request::get_link::
+            ->compose( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change )
+            ->add_attr( IFLA_EXT_MASK, 'L',   RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
+            ->send( $self->{F3}, $sendmsg_flags ) or die "Bad send; $!";
 
-    $#$resp_args == 4 or die;
-    show_ifi $resp_args, $resp_opts;
+    my ( $response2, $recv_flags2, $recv_ctrl2, $recv_from2 ) =
+        Linux::IpRoute2::response::->recv_new($self->{F3});
+#   my ( $reply_code, $reply_flags, $reply_seq, $reply_port_id, $resp_args, $resp_opts ) =
+#           $self->{F3}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
+#                              struct_ifinfomsg_pack, struct_ifinfomsg_len,
+#                                                     [ $ifi_family, $ifi_type, $ifi_index,
+#                                                       $ifi_flags, $ifi_change, ],
+#                              IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
+#                            );
 
-    ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change ) = @$resp_args;
+#   $#$resp_args == 4 or die;
+#   show_ifi $resp_args, $resp_opts;
+
+#   ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change ) = @$resp_args;
 
 }
 
