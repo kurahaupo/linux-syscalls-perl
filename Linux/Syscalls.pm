@@ -1626,16 +1626,11 @@ my @msg_bit_names = ( qw(
     RST ERRQUEUE NOSIGNAL MORE WAITFORONE ),
     (undef) x 12, qw( FASTOPEN CMSG_CLOEXEC )
 );
-# based on Linux::IpRoute2::Utils::bits_to_desc
+
+use Utils::EnumTools ();
 sub MSG_to_desc($) {
-    my $flags = $_[0] or return 'none';
-    my @knowns = map {
-                    my $n = $msg_bit_names[$_];
-                    my $bb = 1 << $_;
-                    $n && 0+$flags != ($flags &=~ $bb) && $n || ()
-                } 0 .. $#msg_bit_names;
-    return join '+', @knowns,
-                     $flags ? printf '%#.2x', $flags : ()
+    $_[1] = \@msg_bit_names;
+    goto &Utils::EnumTools::bits_to_desc;
 }
 }
 
