@@ -6,6 +6,11 @@ use warnings;
 
 package Linux::IpRoute2 v0.0.1;
 
+BEGIN {
+    use Data::Dumper;
+    $Data::Dumper::Useqq = 1;
+}
+
 package importable {
     # C<use parent I<packagename>;> implicitly does C<use I<packagename> ();>
     # to make sure the parent package is actually loaded.
@@ -51,33 +56,43 @@ package Linux::IpRoute2::message {
 
     use importable;
 
-    use Carp 'confess';
+    use Carp qw( confess cluck );
     use Data::Dumper;
 
     use Linux::Syscalls qw( MSG_to_desc );
     use Linux::IpRoute2::rtnetlink qw( struct_nlmsghdr_len );
 
+    sub _B($) { 1 << pop }
+
     use constant {
-        DirnNone => 0,
-        DirnSend => 1,
-        DirnRecv => 2,
-        DirnPeek => 3,
+        DirnNone        => 0,
+        DirnSend        => _B 0,
+        DirnRecv        => _B 1,
+        DirnPeek        => _B 2,
+        DirnSysCall     => _B 3,
+        DirnSockMethod  => _B 4,
+        DirnMesgMethod  => _B 5,
     };
-    my @dirn = ( "\e[1;33mAbstract", "\e[1;35mRequest", "\e[1;36mReply", "\e[1;34mPeek", );
+    my @dirb = qw( Send Recv Peek SysCall SockMethod MesgMethod );
+    sub DIRN_to_desc($;$) {
+        splice @_, 1, 0, \@dirb;
+        goto &Linux::Syscalls::_bits_to_desc;
+    }
 
     sub _show_msg(%) {
         my ($self) = shift if not $#_ % 2;
         ! defined $self || $self->isa(__PACKAGE__) || confess 'Bad invocant';
         my %args = @_;
         my $errno = $!;
-        my $dirn      = delete $args{dirn} // DirnNone;
+        my $dirn      = delete $args{dirn};
         my $op_res    = delete $args{op_res};
         my $data      = delete $args{data};
         my $ctrl      = delete $args{ctrl};
         my $name      = delete $args{name};
         my $sflags    = delete $args{sflags};
         my $rflags    = delete $args{rflags};
-        printf "%s:\n", $dirn[$dirn] || "\e[1;31mMessage";
+        printf "%s:\n", DIRN_to_desc $dirn if $dirn;
+        cluck "showing message" if ! $dirn;
         printf " result %d (maybe length of data)\n", $op_res if defined $op_res;
         printf " sflags %#x (%s)\n", $sflags, MSG_to_desc $sflags if defined $rflags;
         printf " rflags %#x (%s)\n", $rflags, MSG_to_desc $rflags if defined $rflags;
@@ -90,11 +105,12 @@ package Linux::IpRoute2::message {
     }
     sub show {
         my ($self) = shift;
-        _show_msg data => $self->{data}, @_;
+        _show_msg $self, data => $self->{data}, @_;
     }
 
     sub _unpack {
         my $self = shift;
+        cluck "In _unpack of $self";
         $self->{body} //= shift // do {
                 my $data = $self->{data} // return;
                 substr $data, struct_nlmsghdr_len;
@@ -104,12 +120,14 @@ package Linux::IpRoute2::message {
     package Linux::IpRoute2::message::link {
         use importable; use parent Linux::IpRoute2::message::;
 
-        use Carp 'confess';
+        use Carp qw( confess cluck );
 
         use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
 
         sub _unpack {
             my $self = shift;
+            cluck "In _unpack of $self";
+            warn "\e[1;33mIn Linux::IpRoute2::message::link::_unpack\e[m";
             $self->SUPER::_unpack(@_);
             my $body = $self->{body} // return;
 
@@ -230,6 +248,7 @@ package Linux::IpRoute2::message {
 package Linux::IpRoute2::request {
     use importable;
     use parent Linux::IpRoute2::message::;
+
     use Carp 'confess';
     use POSIX 'EMSGSIZE';
 
@@ -282,6 +301,8 @@ package Linux::IpRoute2::request {
 
         my $rlen = $conx->msend($sendmsg_flags, $msg, undef, $conx->FixedSocketName) or die "Could not send";;
 
+        $self->show( dirn => Linux::IpRoute2::message::DirnSend | Linux::IpRoute2::message::DirnMesgMethod );
+
         my $mlen = length $msg;
         if ($rlen != $mlen) {
             warn "sendmsg() returned $rlen when expecting $mlen";
@@ -298,8 +319,8 @@ package Linux::IpRoute2::request {
 }
 
 package Linux::IpRoute2::request::get_link {
-    use parent Linux::IpRoute2::request::,
-               Linux::IpRoute2::message::link::;
+    use parent Linux::IpRoute2::message::link::,
+               Linux::IpRoute2::request::;
     use Carp 'confess';
     use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST struct_ifinfomsg_pack );
     # From first half of "talk"
@@ -325,32 +346,33 @@ package Linux::IpRoute2::response {
     use importable;
     use parent Linux::IpRoute2::message::;
 
+    use Carp qw( cluck confess );
+    use Data::Dumper;
+
     package Linux::IpRoute2::response::link {
         use importable;
-        use parent Linux::IpRoute2::response::,
-                   Linux::IpRoute2::message::link::;
+        use parent Linux::IpRoute2::message::link::,
+                   Linux::IpRoute2::response::;
     }
 
-    package Linux::IpRoute2::response::addr      { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::addr::; }
-    package Linux::IpRoute2::response::route     { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::route::; }
-    package Linux::IpRoute2::response::neigh     { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::neigh::; }
-    package Linux::IpRoute2::response::rule      { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::rule::; }
-    package Linux::IpRoute2::response::qdisc     { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::qdisc::; }
-    package Linux::IpRoute2::response::tclass    { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::tclass::; }
-    package Linux::IpRoute2::response::tfilter   { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::tfilter::; }
-    package Linux::IpRoute2::response::action    { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::action::; }
-    package Linux::IpRoute2::response::prefix    { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::prefix::; }
-    package Linux::IpRoute2::response::multicast { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::multicast::; }
-    package Linux::IpRoute2::response::anycast   { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::anycast::; }
-    package Linux::IpRoute2::response::neightbl  { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::neightbl::; }
-    package Linux::IpRoute2::response::nduseropt { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::nduseropt::; }
-    package Linux::IpRoute2::response::addrlabel { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::addrlabel::; }
-    package Linux::IpRoute2::response::dcb       { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::dcb::; }
-    package Linux::IpRoute2::response::netconf   { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::netconf::; }
-    package Linux::IpRoute2::response::mdb       { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::mdb::; }
-    package Linux::IpRoute2::response::nsid      { use importable; use parent Linux::IpRoute2::response::, Linux::IpRoute2::message::nsid::; }
-
-    use Carp 'confess';
+    package Linux::IpRoute2::response::addr      { use importable; use parent Linux::IpRoute2::message::addr::,      Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::route     { use importable; use parent Linux::IpRoute2::message::route::,     Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::neigh     { use importable; use parent Linux::IpRoute2::message::neigh::,     Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::rule      { use importable; use parent Linux::IpRoute2::message::rule::,      Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::qdisc     { use importable; use parent Linux::IpRoute2::message::qdisc::,     Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::tclass    { use importable; use parent Linux::IpRoute2::message::tclass::,    Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::tfilter   { use importable; use parent Linux::IpRoute2::message::tfilter::,   Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::action    { use importable; use parent Linux::IpRoute2::message::action::,    Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::prefix    { use importable; use parent Linux::IpRoute2::message::prefix::,    Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::multicast { use importable; use parent Linux::IpRoute2::message::multicast::, Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::anycast   { use importable; use parent Linux::IpRoute2::message::anycast::,   Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::neightbl  { use importable; use parent Linux::IpRoute2::message::neightbl::,  Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::nduseropt { use importable; use parent Linux::IpRoute2::message::nduseropt::, Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::addrlabel { use importable; use parent Linux::IpRoute2::message::addrlabel::, Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::dcb       { use importable; use parent Linux::IpRoute2::message::dcb::,       Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::netconf   { use importable; use parent Linux::IpRoute2::message::netconf::,   Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::mdb       { use importable; use parent Linux::IpRoute2::message::mdb::,       Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::nsid      { use importable; use parent Linux::IpRoute2::message::nsid::,      Linux::IpRoute2::response::; }
 
     # Process an in-coming NLM message
 
@@ -513,9 +535,13 @@ package Linux::IpRoute2::response {
         $self->{port_id}    = $port_id;
 
         $self->_rebless($code);
+        my $how = $self->can('_unpack');
+        warn "\e[1;41mAttempting unpack\e[m of $self";
+        #warn " using ".(*$how{NAME});
         $self->_unpack($body);
+        warn " ... \e[1;46mafter unpack\e[m to ".Dumper($self);
 
-        $self->show( dirn => Linux::IpRoute2::message::DirnRecv );
+        $self->show( dirn => Linux::IpRoute2::message::DirnRecv | Linux::IpRoute2::message::DirnMesgMethod );
 
         return $self if not wantarray;
         return $self, $recv_flags, $recv_ctrl, $recv_from;
@@ -668,7 +694,7 @@ package Linux::IpRoute2::connector {
         my $r = sendmsg $sock, $flags, $msg, $ctrl, $name;
 
         Linux::IpRoute2::message::_show_msg
-            dirn => Linux::IpRoute2::message::DirnSend,
+            dirn => Linux::IpRoute2::message::DirnSend | Linux::IpRoute2::message::DirnSockMethod,
             sflags => $flags,
             op_res => $r,
             data => $msg,
@@ -685,8 +711,9 @@ package Linux::IpRoute2::connector {
 
         my ($op_res, $rflags, $msg, $ctrl, $name) = @r;
         Linux::IpRoute2::message::_show_msg
-            dirn    => $flags & MSG_PEEK ? Linux::IpRoute2::message::DirnPeek
-                                         : Linux::IpRoute2::message::DirnRecv,
+            dirn    => Linux::IpRoute2::message::DirnRecv
+                     | Linux::IpRoute2::message::DirnSockMethod
+                     | ( $flags & MSG_PEEK && Linux::IpRoute2::message::DirnSockMethod ),
             op_res  => $op_res,
             data    => $msg,
             sflags  => $flags,

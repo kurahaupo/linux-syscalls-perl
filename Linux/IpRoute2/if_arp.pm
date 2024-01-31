@@ -12,7 +12,9 @@ package Linux::IpRoute2::if_arp v0.0.1;
 
 use Exporter 'import';
 
-use Utils::EnumTools qw( bits_to_desc _B );
+use Linux::Syscalls ();
+
+sub _B($) { 1 << pop }
 
 ## ARP protocol HARDWARE identifiers.
 use constant {
@@ -156,7 +158,10 @@ use constant {
 
 {
 my @atf_names = (undef, qw( com perm publ usetrailers netmask dontpub ));
-sub ATF_to_desc($) { return bits_to_desc($_[0], \@atf_names) }
+sub ATF_to_desc($) {
+    splice @_, 1, 0, \@atf_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
 }
 
 ##
