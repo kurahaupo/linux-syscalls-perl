@@ -222,6 +222,7 @@ package Linux::IpRoute2::message {
         my $self = shift;
         my $code = shift // $self->{code} // return;
         my $class = $unpack_director[$code] || return;
+        warn "Changing object class from ".ref($self)." to $class";
         bless $self, $class;
     }
 }
