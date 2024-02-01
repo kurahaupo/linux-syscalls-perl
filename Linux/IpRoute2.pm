@@ -932,20 +932,12 @@ package Linux::IpRoute2::connector {
 use Socket qw( AF_INET6 );
 use Linux::Socket::Extras qw( AF_NETLINK );
 
-#use Linux::Syscalls qw( :msg );
-
 use Linux::IpRoute2::rtnetlink qw(
     NETLINK_GET_STRICT_CHK
-    NLM_F_REQUEST
     RTEXT_FILTER_SKIP_STATS
     RTEXT_FILTER_VF
-    RTM_GETLINK
-    struct_ifinfomsg_pack
-    struct_ifinfomsg_len
 );
-use Linux::IpRoute2::if_link qw( :ifla ); # IFLA_EXT_MASK, IFLA_IFNAME, IFLA_to_name
-
-use Linux::IpRoute2::if_arp qw( ARPHRD_to_name );
+use Linux::IpRoute2::if_link qw( IFLA_EXT_MASK IFLA_IFNAME );
 
 sub iprt2_connect_route {
     my $self = shift;
@@ -972,30 +964,6 @@ sub TEST {
     my $self = __PACKAGE__->iprt2_connect_route(0);
     say Dumper($self);
 
-    # sendmsg(4,
-    #         {
-    #           msg_name(12)={
-    #             sa_family=AF_NETLINK,
-    #             pid=0,
-    #             groups=00000000
-    #           },
-    #           msg_iov(1)=[
-    #             {
-    #               "\x34\x00\x00\x00\x12\x00\x01\x00"      #  nlmsghdr:(msglen(0x34), type(RTM_GETLINK=18), flags(NLM_F_REQUEST=1),
-    #               "\x96\xcc\xb0\x65\x00\x00\x00\x00"      #            seq(time), port_id(0))
-    #               "\x00\x00\x00\x00\x00\x00\x00\x00"      #  ifinfomsg:(ifi_family(ANY=0), ifi_type(ANY=0), ifi_index(ANY=0),
-    #               "\x00\x00\x00\x00\x00\x00\x00\x00"      #             ifi_flags(0), ifi_change(0))
-    #               "\x08\x00\x1d\x00\x09\x00\x00\x00"      #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF|RTEXT_FILTER_SKIP_STATS=9))
-    #               "\x09\x00\x03\x00\x65\x74\x68\x30"      #  ifla:(len(9), type(IFLA_IFNAME=3), str("eth0\0"), pad:3)
-    #               "\x00\x00\x00\x00",
-    #               52
-    #             }
-    #           ],
-    #           msg_controllen=0,
-    #           msg_flags=0
-    #         },
-    #         0
-    #        ) = 52
     my $sendmsg_flags = 0;
     my $iface_name  = 'eth0';
 
@@ -1015,47 +983,8 @@ sub TEST {
 
     my ( $response, $recv_flags, $recv_ctrl, $recv_from ) =
         Linux::IpRoute2::response::->recv_new($self->{F4});
-#       $self->{F4}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
-#                          struct_ifinfomsg_pack, struct_ifinfomsg_len,
-#                                                 [ $ifi_family, $ifi_type, $ifi_index,
-#                                                   $ifi_flags, $ifi_change, ],
-#                          IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
-#                          IFLA_IFNAME,   'a*x', [ $iface_name ],
-#                        );
 
     $response->show;
-
-#   $#$resp_args == 4 or die;
-
-#   show_ifi $resp_args, $resp_opts;
-
-    #my ( $reply_code, $reply_flags, $reply_seq, $reply_port_id, $resp_args, $resp_opts ) ;
-
-    # sendmsg(3,
-    #         {
-    #           msg_name(12)={
-    #             sa_family=AF_NETLINK,
-    #             pid=0,
-    #             groups=00000000
-    #           },
-    #           msg_iov(1)=[
-    #             {
-    #               "\x28\x00\x00\x00\x12\x00\x01\x00"      #  nlmsghdr:(msglen(0x28), type(RTM_GETLINK=18), flags(NLM_F_REQUEST=1),
-    #               "\x96\xcc\xb0\x65\x00\x00\x00\x00"      #            seq(time), port_id(0))
-    #               "\x0a\x00\x00\x00\x02\x00\x00\x00"      #  ifinfomsg:(ifi_family(INET6=10), ifi_type(ANY=0), ifi_index(2),
-    #               "\x00\x00\x00\x00\x00\x00\x00\x00"      #             ifi_flags(0), ifi_change(0))
-    #               "\x08\x00\x1d\x00\x09\x00\x00\x00",     #  ifla:(len(8), type(IFLA_EXT_MASK=29), u32(RTEXT_FILTER_VF|RTEXT_FILTER_SKIP_STATS=9))
-    #               40
-    #             }
-    #           ],
-    #           msg_controllen=0,
-    #           msg_flags=0
-    #         },
-    #         0
-    #        ) = 40
-
-  # my ( $rfi_family, $rfi_type, $rfi_index, $rfi_flags, $rfi_change ) = @$resp_args;
-  # $ifi_index = $rfi_index;    # use answer from previous request, since that's why we asked it.
 
     ## Use previous answers as parameters to the next question
 
@@ -1076,18 +1005,6 @@ sub TEST {
 
     my ( $response2, $recv_flags2, $recv_ctrl2, $recv_from2 ) =
         Linux::IpRoute2::response::->recv_new($self->{F3});
-#   my ( $reply_code, $reply_flags, $reply_seq, $reply_port_id, $resp_args, $resp_opts ) =
-#           $self->{F3}->talk( $sendmsg_flags, RTM_GETLINK, NLM_F_REQUEST,
-#                              struct_ifinfomsg_pack, struct_ifinfomsg_len,
-#                                                     [ $ifi_family, $ifi_type, $ifi_index,
-#                                                       $ifi_flags, $ifi_change, ],
-#                              IFLA_EXT_MASK, 'L',   [ RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS ],
-#                            );
-
-#   $#$resp_args == 4 or die;
-#   show_ifi $resp_args, $resp_opts;
-
-#   ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change ) = @$resp_args;
 
 }
 
