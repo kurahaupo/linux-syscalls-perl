@@ -877,6 +877,9 @@ package Time::Nanosecond v0.1.1 {
         return POSIX::strftime( $fmt, @r[0..8] );
     }
     push @EXPORT_OK, 'strftime';
+
+    our %EXPORT_TAGS;
+    $EXPORT_TAGS{everything} = \@EXPORT_OK;
 }
 
 1;
