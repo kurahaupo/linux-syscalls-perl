@@ -33,11 +33,6 @@ use Linux::Syscalls::x86_64;
 #    include <asm/unistd_64.h>   /* x86_64 */
 #   endif
 
-our @EXPORT = (qw(
-    %pack_map
-    %syscall_map
-));
-
 use constant { _X32_SYSCALL_BIT => 0x40000000 };    # 1 << 30
 
 
@@ -106,5 +101,13 @@ $_ |= _X32_SYSCALL_BIT for values %syscall_map;
 $pack_map{time_t}   = 'l' ;     # seconds
 $pack_map{timespec} = 'lL';     # seconds, nanoseconds
 $pack_map{timeval}  = 'lL';     # seconds, microseconds
+
+our @EXPORT = qw(
+    %pack_map
+    %syscall_map
+);
+
+our %EXPORT_TAGS;
+$EXPORT_TAGS{everything} = \@EXPORT;
 
 1;

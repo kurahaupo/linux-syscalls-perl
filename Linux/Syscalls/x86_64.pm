@@ -33,12 +33,6 @@ use Exporter 'import';
 
 my $x32 = $Config{ptrsize} == 4;   # normally 8
 
-our @EXPORT = (qw(
-    %pack_map
-    %syscall_map
-    $x32
-));
-
 use constant { X32_SYSCALL_BIT => 0x40000000 };    # 1 << 30
 
 our %syscall_map = (
@@ -488,5 +482,14 @@ if ( $x32 ) {
     $pack_map{timespec} = 'lL';     # seconds, nanoseconds
     $pack_map{timeval}  = 'lL';     # seconds, microseconds
 }
+
+our @EXPORT = qw(
+    %pack_map
+    %syscall_map
+    $x32
+);
+
+our %EXPORT_TAGS;
+$EXPORT_TAGS{everything} = \@EXPORT;
 
 1;
