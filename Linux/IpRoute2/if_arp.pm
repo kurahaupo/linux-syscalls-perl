@@ -325,9 +325,15 @@ our %EXPORT_TAGS = (
     ]],
 );
 
-our @EXPORT_OK = (qw(
-                    ARPHRD_CISCO
-                ),
-                map { @$_ } values %EXPORT_TAGS);
+my @export_compat = qw(
+    ARPHRD_CISCO
+);
+
+my %seen;
+our @EXPORT_OK = grep { ! $seen{$_}++ }
+                    @export_compat,
+                    map { @$_ } values %EXPORT_TAGS;
+
+$EXPORT_TAGS{everything} = \@EXPORT_OK;
 
 1;

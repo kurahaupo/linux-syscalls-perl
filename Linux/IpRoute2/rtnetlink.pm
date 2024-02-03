@@ -741,7 +741,7 @@ sub RTEXT_FILTER_to_desc($) {
 
 use constant {
     NETLINK_ROUTE               =>     0,   # Routing/device hook
-    NETLINK_UNUSED              =>     1,   # Unused number
+  # NETLINK_UNUSED              =>     1,   # Unused number
     NETLINK_USERSOCK            =>     2,   # Reserved for user mode socket protocols
     NETLINK_FIREWALL            =>     3,   # Unused number, formerly ip_queue
     NETLINK_SOCK_DIAG           =>     4,   # socket monitoring
@@ -1355,14 +1355,18 @@ our %EXPORT_TAGS = (
     ]],
 );
 
+# Items that don't belong to any group
+our @export_allowed = qw(
+    NET_MAJOR
+    RTNETLINK_HAVE_PEERINFO
+    TCA_ACT_TAB
+);
+
 my %seen;
 our @EXPORT_OK = grep { ! $seen{$_} }
-        qw(
-            NETLINK_UNUSED
-            NET_MAJOR
-            RTNETLINK_HAVE_PEERINFO
-            TCA_ACT_TAB
-        ),
-        map { @$_ } values %EXPORT_TAGS;
+                    @export_allowed,
+                    map { @$_ } values %EXPORT_TAGS;
+
+$EXPORT_TAGS{everything} = \@EXPORT_OK;
 
 1;
