@@ -38,6 +38,9 @@ sub bits_to_desc($$) {
 sub _B($) { 1 << pop }
 
 use Exporter 'import';
-our @EXPORT_OK = qw( bits_to_desc _B );
+our @EXPORT_OK = qw(
+    _B
+    bits_to_desc
+);
 
 1;
