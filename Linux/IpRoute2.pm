@@ -1011,6 +1011,9 @@ sub TEST {
 use Exporter 'import';
 our @EXPORT = qw( iprt2_connect );
 
+our %EXPORT_TAGS;
+$EXPORT_TAGS{everything} = \@EXPORT;
+
 1;
 
 __END__

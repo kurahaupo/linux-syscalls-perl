@@ -65,7 +65,8 @@ our %EXPORT_TAGS = (
 
 my %seen;
 our @EXPORT_OK = grep { ! $seen{$_} }
-        qw(),
-        map { @$_ } values %EXPORT_TAGS;
+                    map { @$_ } values %EXPORT_TAGS;
+
+$EXPORT_TAGS{everything} = \@EXPORT_OK;
 
 1;

@@ -2341,9 +2341,15 @@ our %EXPORT_TAGS = (
     ]],
 );
 
-our @EXPORT_OK = (qw(
+my @export_deprecated = qw(
                     IFLA_IF_NETNSID
-                ),
-                map { @$_ } values %EXPORT_TAGS);
+                );
+
+my %seen;
+our @EXPORT_OK = grep { ! $seen{$_}++ }
+                    @export_deprecated,
+                    map { @$_ } values %EXPORT_TAGS;
+
+$EXPORT_TAGS{everything} = \@EXPORT_OK;
 
 1;

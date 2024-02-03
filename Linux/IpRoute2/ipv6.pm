@@ -291,20 +291,24 @@ our %EXPORT_TAGS = (
 
 );
 
+# Items that don't belong to any group
 my @export_allowed = qw(
-    IPV6_SRCRT_TYPE_2
     IPV6_MIN_MTU
     IPV6_OPT_ROUTERALERT_MLD
+    IPV6_SRCRT_TYPE_2
 );
 
+# Items that shouldn't be used in new code
 my @export_deprecated = qw(
     IPV6_SRCRT_STRICT
     IPV6_SRCRT_TYPE_0
 );
 
-our @EXPORT_OK = (@export_allowed,
-                  @export_deprecated,
-                  map { @$_ } values %EXPORT_TAGS);
+my %seen;
+our @EXPORT_OK = grep { ! $seen{$_}++ }
+                    @export_allowed,
+                    @export_deprecated,
+                    map { @$_ } values %EXPORT_TAGS;
 
 $EXPORT_TAGS{everything} = \@EXPORT_OK;
 
