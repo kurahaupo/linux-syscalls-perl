@@ -433,9 +433,11 @@ my @export_deprecated = qw(
     IPOPT_TIMESTAMP
 );
 
-our @EXPORT_OK = (@export_allowed,
-                  @export_deprecated,
-                  map { @$_ } values %EXPORT_TAGS);
+my %seen;
+our @EXPORT_OK = grep { ! $seen{$_}++ }
+                    @export_allowed,
+                    @export_deprecated,
+                    map { @$_ } values %EXPORT_TAGS;
 
 $EXPORT_TAGS{everything} = \@EXPORT_OK;
 
