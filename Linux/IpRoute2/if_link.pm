@@ -171,7 +171,7 @@ use constant {
     IFLA_PROTO_DOWN_REASON              =>    55,
     IFLA_PARENT_DEV_NAME                =>    56,
     IFLA_PARENT_DEV_BUS_NAME            =>    57,
-  # IFLA_MAX                            =>    58 - 1 | 0,
+    IFLA_MAX                            =>    58 - 1 | 0,
 };
 
 use constant {
@@ -1430,7 +1430,7 @@ use constant {
     IFLA_XDP_SKB_PROG_ID                =>     6,
     IFLA_XDP_HW_PROG_ID                 =>     7,
     IFLA_XDP_EXPECTED_FD                =>     8,
-  # IFLA_XDP_MAX                        =>     9 - 1 | 0,
+    IFLA_XDP_MAX                        =>     9 - 1 | 0,
 };
 
 {
@@ -2341,12 +2341,18 @@ our %EXPORT_TAGS = (
     ]],
 );
 
+my @export_allowed = qw(
+                    IFLA_MAX
+                    IFLA_XDP_MAX
+);
+
 my @export_deprecated = qw(
                     IFLA_IF_NETNSID
                 );
 
 my %seen;
 our @EXPORT_OK = grep { ! $seen{$_}++ }
+                    @export_allowed,
                     @export_deprecated,
                     map { @$_ } values %EXPORT_TAGS;
 
