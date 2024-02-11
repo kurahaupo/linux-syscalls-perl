@@ -4,57 +4,116 @@ use v5.10;
 use strict;
 use warnings;
 
-package Linux::IpRoute2 v0.0.1;
+# INTERNAL DATA STRUCTURES
+#
+# Messages and fragments are subtyped to correspond to their payload type &
+# semantics. Related operation codes may share a message class; for example,
+# codes RTM_NEWLINK, RTM_DELLINK, RTM_GETLINK, & RTM_SETLINK all use the same
+# base data class Linux::IpRoute2::message::link, which in turn is a subclass
+# of Linux::IpRoute2::message. (In this context a "link"
+# refers to a network interface.)
+#
+# Messages are also subtyped as "requests" and "responses"; this generally
+# leads to an inheritance diamond; for example the "link" request and response
+# classes are at the apexes of these inheritance graphs:
+#
+#          ╭─────────╮                     ╭──────────╮
+#          ⎪  link   ⎪                     ⎪   link   ⎪
+#          ⎪ request ⎪                     ⎪ response ⎪
+#          ╰────╥────╯                     ╰────╥─────╯
+#               ║                               ║
+#        ╔══════╩══════╗                 ╔══════╩══════╗
+#        ║             ║                 ║             ║
+#   ╭────╨────╮   ╭────╨────╮       ╭────╨────╮   ╭────╨─────╮
+#   ⎪  link   ⎪   ⎪ request ⎪       ⎪   link  ⎪   ⎪ response ⎪
+#   ⎪ message ⎪   ╰────╥────╯       ⎪ message ⎪   ╰────╥─────╯
+#   ╰────╥────╯        ║            ╰────╥────╯        ║
+#        ║             ║                 ║             ║
+#        ╚══════╦══════╝                 ╚══════╦══════╝
+#               ║                               ║
+#          ╭────╨────╮                     ╭────╨────╮
+#          ⎪ message ⎪                     ⎪ message ⎪
+#          ╰─────────╯                     ╰─────────╯
+#
+# Note that the (generic) "request" and "response" classes cannot override
+# methods in the (generic) "message" class because they are to the right of
+# their peer, so they can only add new methods. This is not an obstacle in
+# general because their additional functions relate to network transport.
+#
+#
+# The data classes provide a "pack" method that returns a binary string,
+# which can either be a whole message, or a component (attribute) to
+# incorporate into a message.
+#
+# The "response" hierarchy includes a polymorphic "unpack_new", that
+# takes a byte stream and extracts different object types from it.
+#
+# The base "generic message" class provides:
+#
+# The "request" class inherits from the base "message" class; it provides
+#     - a polymorphic constructor to instantiate a request message from a
+#       message code
+#     - a method to add attributes
+#     - a method to send to a socket (or file)
+#
+# are used in two ways:
+#   messages    - can
+#   attributes  - attached to a message or another attribute
+#
+#
+# They provide polymorphic instantiation:
+#   new_by_code
+#   unpack_new  - builds a new object
+#
+#   unpack_new - provide the type-code and the binary data
 
+#
 BEGIN {
     use Data::Dumper;
     $Data::Dumper::Useqq = 1;
 }
 
-package importable {
-    # C<use parent I<packagename>;> implicitly does C<use I<packagename> ();>
-    # to make sure the parent package is actually loaded.
-    #
-    # Normally when you “use” a package, it first checks to see if it's already
-    # loaded, and if not, looks for a filename that's related to its package
-    # name. If it can't find that file, it simply fails.
-    #
-    # Unfornately the “is already loaded” check only works if it was previously
-    # loaded by “use” or “require”. If you simply created the package directly
-    # but in a different file, that doesn't count, which means when you try to
-    # use it (or use parent it) you get a fatal error that the filename does
-    # not exists.
-    #
-    # This mini package makes it easy to work around this obstacle, by simply
-    # writing
-    #   use importable;
-    # at the top of your package.
-    use Carp 'carp', 'croak';
-
-    sub import {
-        (shift)->isa(__PACKAGE__) or croak "Invalid invocation" if @_;
-        @_ == 0 or croak "Extra args";
-        my ($pkg, $filename) = caller;
-        $pkg =~ s#::#/#g;   # convert package path to POSIX file path
-        $pkg .= '.pm';
-        ! $INC{$pkg} || $INC{$pkg} eq $filename
-            or croak "Package ".($pkg =~ s/\.pm$//r =~ s#/#::#gr)
-                    . " is already importable from $INC{$pkg};"
-                    . " can't make importable from $filename";
-        $INC{$pkg} = $filename;
-      # carp "making $pkg usable in $filename" if $^C && $^W;
-    }
-    # This package faces the same obstacle as those it's intending to help;
-    # invoking our own "import" resolves this.
-    BEGIN { __PACKAGE__->import }
-    # Auto-destruct this package once this file has been compiled
-    UNITCHECK { undef *importable::; }
-}
+#   package importable {
+#       # C<use parent I<packagename>;> implicitly does C<use I<packagename> ();>
+#       # to make sure the parent package is actually loaded.
+#       #
+#       # Normally when you “use” a package, it first checks to see if it's already
+#       # loaded, and if not, looks for a filename that's related to its package
+#       # name. If it can't find that file, it simply fails.
+#       #
+#       # Unfornately the “is already loaded” check only works if it was previously
+#       # loaded by “use” or “require”. If you simply created the package directly
+#       # but in a different file, that doesn't count, which means when you try to
+#       # use it (or use parent it) you get a fatal error that the filename does
+#       # not exists.
+#       #
+#       # This mini package makes it easy to work around this obstacle, by simply
+#       # writing
+#       # at the top of your package.
+#       use Carp 'carp', 'croak';
+#
+#       sub import {
+#           (shift)->isa(__PACKAGE__) or croak "Invalid invocation" if @_;
+#           @_ == 0 or croak "Extra args";
+#           my ($pkg, $filename) = caller;
+#           $pkg =~ s#::#/#g;   # convert package path to POSIX file path
+#           $pkg .= '.pm';
+#           ! $INC{$pkg} || $INC{$pkg} eq $filename
+#               or croak "Package ".($pkg =~ s/\.pm$//r =~ s#/#::#gr)
+#                       . " is already importable from $INC{$pkg};"
+#                       . " can't make importable from $filename";
+#           $INC{$pkg} = $filename;
+#         # carp "making $pkg usable in $filename" if $^C && $^W;
+#       }
+#       # This package faces the same obstacle as those it's intending to help;
+#       # invoking our own "import" resolves this.
+#       BEGIN { __PACKAGE__->import }
+#       # Auto-destruct this package once this file has been compiled
+#       UNITCHECK { undef *importable::; }
+#   }
 
 package Linux::IpRoute2::message {
     # Base class for all NETLINK messages
-
-    use importable;
 
     use Carp qw( confess cluck );
     use Data::Dumper;
@@ -73,10 +132,12 @@ package Linux::IpRoute2::message {
         DirnSockMethod  => _B 4,
         DirnMesgMethod  => _B 5,
     };
+    {
     my @dirb = qw( Send Recv Peek SysCall SockMethod MesgMethod );
     sub DIRN_to_desc($;$) {
         splice @_, 1, 0, \@dirb;
         goto &Linux::Syscalls::_bits_to_desc;
+    }
     }
 
     sub _show_msg(%) {
@@ -108,9 +169,11 @@ package Linux::IpRoute2::message {
         _show_msg $self, data => $self->{data}, @_;
     }
 
-    sub _unpack {
+    sub unpack_new {
         my $self = shift;
-        cluck "In _unpack of $self";
+        $self = bless {}, $self if ! ref $self;
+        my ($data) = @_;
+        cluck "In unpack_new of $self";
         $self->{body} //= shift // do {
                 my $data = $self->{data} // return;
                 substr $data, struct_nlmsghdr_len;
@@ -118,19 +181,219 @@ package Linux::IpRoute2::message {
         return $self;
     }
     package Linux::IpRoute2::message::link {
-        use importable; use parent Linux::IpRoute2::message::;
+        use parent -norequire, Linux::IpRoute2::message::;
 
         use Carp qw( confess cluck );
 
-        use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
-        use Linux::IpRoute2::if_link qw( :ifla );
+        use Data::Dumper;
 
-        sub _unpack {
+        use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
+
+        my @attr_pkg_map;
+
+        #
+        # Dynamically construct a message-attribute class for each possible IFLA code
+        #
+        package Linux::IpRoute2::fragment::link {
+            package Linux::IpRoute2::fragment::link::_unknown {}
+
+            use Carp 'croak';
+            use Linux::IpRoute2::if_link qw( IFLA_to_name IFLA_MAX );
+
+            BEGIN {
+                for my $ifla ( 0 .. IFLA_MAX ) {
+                    my $cnam = IFLA_to_name($ifla) // next;
+                    next unless $cnam && $cnam =~ /^\w+$/;
+
+                    my $rpkg = 'Linux::IpRoute2::fragment::link::'.$cnam;
+                    $attr_pkg_map[$ifla] = eval qq{
+                        package $rpkg {
+                            use parent -norequire, Linux::IpRoute2::fragment::link::_unknown::;
+                            use constant { code => $ifla };
+                        }
+                        ${rpkg}::;
+                    };
+                }
+            }
+
+            use constant packpat => '';
+
+            sub unpack_new {
+                my ($class, $data) = @_;
+                $class = ref $class || $class;
+                my ($c, @v) = unpack 'x![S]S' . $class->packpat . 'H*', $data;
+                my $self = bless \@v, $class;
+                $self->code == $c or die "Code mismatch in constructor";
+                return $self;
+            }
+
+            sub new_by_code {
+                my ($class, @args) = @_;
+                $class = ref $class || $class;
+                my $code = $args[0];
+                my $xpkg = $attr_pkg_map[$code] || croak "new_by_code - no Linux::IpRoute2::fragment::link::... package for code $code";
+                return bless \@args, $xpkg if ! $class || $xpkg->isa($class);
+                $class->isa($xpkg) or croak "new_by_code($code) - requested class $xpkg is neither ancestor nor descendent of $class ";
+                return bless \@args, $class;
+            }
+
+            sub code { return $_[0][0] }
+            sub extra { return $_[0][-1] }
+
+            # return packed data
+            sub getpack {
+                my ($self) = @_;
+                my $res = pack 'x![S]S' . $self->packpat, $self->code, @$self;
+                substr($res, 0, 2) = pack 'S', length $res;
+                return $res;
+            }
+            package Linux::IpRoute2::fragment::link::_unknown {
+                use parent -norequire, Linux::IpRoute2::fragment::link::;
+                use constant packpat => 'a*';
+                sub data { return unpack 'H*', $_[0][1] }
+            }
+
+            package Linux::IpRoute2::fragment::link::unspec                { use constant packpat => 'x0';                                }         #  0
+            package Linux::IpRoute2::fragment::link::ifname                { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         #  3
+            package Linux::IpRoute2::fragment::link::mtu                   { use constant packpat => 'l';   sub bytes { return $_[0][1] } }         #  4
+            package Linux::IpRoute2::fragment::link::qdisc                 { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         #  6
+            package Linux::IpRoute2::fragment::link::stats                 { use constant packpat => 'l24'; sub stats { return @{$_[1]}[1..24] } }  #  7 int32_t[24]
+            package Linux::IpRoute2::fragment::link::txqlen                { use constant packpat => 'l';   sub bytes { return $_[0][1] } }         # 13
+            package Linux::IpRoute2::fragment::link::map                   { use constant packpat => '(L2)*';                             }         # 14
+            package Linux::IpRoute2::fragment::link::operstate             { use constant packpat => 'C';   sub state { return $_[0][1] } }         # 16
+            package Linux::IpRoute2::fragment::link::linkmode              { use constant packpat => 'C';   sub mode  { return $_[0][1] } }         # 17
+            package Linux::IpRoute2::fragment::link::ifalias               { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         # 20
+            package Linux::IpRoute2::fragment::link::num_vf                { use constant packpat => 'l';   sub count { return $_[0][1] } }         # 21
+            package Linux::IpRoute2::fragment::link::stats64               { use constant packpat => 'q24'; sub stats { return @{$_[1]}[1..24] } }  # 23 int64_t[24]
+            package Linux::IpRoute2::fragment::link::af_spec               {}                                                                       # 26  (RECURSIVE?)
+            package Linux::IpRoute2::fragment::link::group                 { use constant packpat => 'l';   sub group { return $_[0][1] } }         # 27
+            package Linux::IpRoute2::fragment::link::ext_mask              { use constant packpat => 'l';   sub mask  { return $_[0][1] } }         # 29
+            package Linux::IpRoute2::fragment::link::promiscuity           { use constant packpat => 'l';   sub flag  { return $_[0][1] } }         # 30
+            package Linux::IpRoute2::fragment::link::num_tx_queues         { use constant packpat => 'l';   sub count { return $_[0][1] } }         # 31
+            package Linux::IpRoute2::fragment::link::num_rx_queues         { use constant packpat => 'l';   sub count { return $_[0][1] } }         # 32
+            package Linux::IpRoute2::fragment::link::carrier               { use constant packpat => 'V';                                 }         # 33
+            package Linux::IpRoute2::fragment::link::carrier_changes       { use constant packpat => 'l';   sub count { return $_[0][1] } }         # 35
+            package Linux::IpRoute2::fragment::link::phys_port_name        { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         # 38
+            package Linux::IpRoute2::fragment::link::proto_down            { use constant packpat => 'C';   sub state { return $_[0][1] } }         # 39
+            package Linux::IpRoute2::fragment::link::gso_max_segs          { use constant packpat => 'L';   sub count { return $_[0][1] } }         # 40
+            package Linux::IpRoute2::fragment::link::gso_max_size          { use constant packpat => 'L';   sub bytes { return $_[0][1] } }         # 41
+            package Linux::IpRoute2::fragment::link::xdp                   {}                                                                       # 43    (NESTED)
+            package Linux::IpRoute2::fragment::link::carrier_up_count      { use constant packpat => 'l';   sub count { return $_[0][1] } }         # 47
+            package Linux::IpRoute2::fragment::link::carrier_down_count    { use constant packpat => 'l';   sub count { return $_[0][1] } }         # 48
+            package Linux::IpRoute2::fragment::link::new_ifindex           { use constant packpat => 'l';   sub index { return $_[0][1] } }         # 49
+            package Linux::IpRoute2::fragment::link::min_mtu               { use constant packpat => 'l';   sub bytes { return $_[0][1] } }         # 50
+            package Linux::IpRoute2::fragment::link::max_mtu               { use constant packpat => 'l';   sub bytes { return $_[0][1] } }         # 51
+            package Linux::IpRoute2::fragment::link::alt_ifname            { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         # 53
+            package Linux::IpRoute2::fragment::link::parent_dev_name       { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         # 56
+            package Linux::IpRoute2::fragment::link::parent_dev_bus_name   { use constant packpat => 'Z*';  sub name  { return $_[0][1] } }         # 57
+            #$unpackrecurse[32820]               = \&show_0x8034;                                                                                   # 52|0x8000 = 32820
+
+            package Linux::IpRoute2::fragment::link::_macaddr {
+                use parent -norequire, Linux::IpRoute2::fragment::link::;
+                BEGIN {
+                    # Override the 'use parent ...' previously set for each of these classes:
+                    @Linux::IpRoute2::fragment::link::address::ISA             = #  1
+                    @Linux::IpRoute2::fragment::link::broadcast::ISA           = #  2
+                    @Linux::IpRoute2::fragment::link::perm_address::ISA        = # 54
+                     __PACKAGE__;
+                }
+                # Store as a string of 12 or 16 hex digits (without punctuation) so
+                # that we can use the inherited unpack_new and getpack.
+                use constant packpat => 'H*';
+              # Special version that applies a sanity check to the length
+              # sub unpack_new {
+              #     my $self = shift->SUPER::unpack_new(@_);
+              #     given (length $self->[1]) { when (not $_ == 12 || $_ == 16) { die "Wrong length for MAC address" } }
+              #     return $self;
+              # }
+                sub macaddr { return $_[0][1] =~ s/\w\w(?=.)/$&:/gr }
+                sub macaddr_compat { return $_[0][1] }    # just the digits, no separators
+            }
+
+            package Linux::IpRoute2::fragment::link::xdp {
+                use constant packpat => '(S2)*';
+                my @xdp_attr_pkg_map;
+                package Linux::IpRoute2::fragment::link::xdp::_base {
+                    use  Linux::IpRoute2::if_link qw( IFLA_XDP_MAX IFLA_XDP_to_name );
+
+                    BEGIN {
+                        for my $xdp ( 0 .. IFLA_XDP_MAX ) {
+                            my $cnam = IFLA_XDP_to_name($xdp) // next;
+                            next unless $cnam && $cnam =~ /^\w+$/;
+
+                            my $rpkg = 'Linux::IpRoute2::fragment::link::xdp::'.$cnam;
+                            $xdp_attr_pkg_map[$xdp] = eval qq{
+                                package $rpkg {
+                                    use parent -norequire, Linux::IpRoute2::fragment::link::xdp::_base::;
+                                    use constant { code => $xdp };
+                                }
+                                ${rpkg}::;
+                            };
+                        }
+                    }
+
+                    use constant packpat => '';
+                    sub unpack_new {
+                        my ($class, $data) = @_;
+                        $class = ref $class || $class;
+                        my $self = bless \(my @v), $class;
+                        (my $c, @v) = unpack 'x![S]S' . $class->packpat . 'H*', $data;
+                        $self->code == $c or die "Code mismatch in constructor";
+                        return $self;
+                    }
+
+                    sub extra { return $_[0][-1] }
+
+                    # return packed data
+                    sub getpack {
+                        my ($self) = @_;
+                        my $res = pack 'x![S]S' . $self->packpat, @$self;
+                        substr($res, 0, 2) = pack 'S', length $res;
+                        return $res;
+                    }
+                }
+
+                sub unpack_new {
+                    my ($class, $data) = @_;
+                    $class = ref $class || $class;
+                    my $self = bless \(my @v), $class;
+                    (my $c, @v) = unpack 'x![S]S' . $class->packpat . 'H*', $data;
+                    $self->code == $c or die "Code mismatch in constructor";
+
+                    my @xdp_opts;
+                    for ( my $len, my $offset = 0 ; $offset < length $data ; $offset += 1+($len-1|3) ) {
+                        ($len, my $code) = unpack '@'.$offset.'SS', $data;
+                        my $rpkg = $xdp_attr_pkg_map[$code]
+                                    || Linux::IpRoute2::fragment::link::xdp::_base::;
+
+                        my $v = $rpkg->unpack_new(substr $data, $offset, $len);
+
+                        ref $v or die "_unpack_opt returned non-ref ($v)";
+                        $xdp_opts[$code] = $v;
+                    }
+                    $self->{opts}       = [ sort { $a->code <=> $b->code } @xdp_opts ];
+
+                    $self->_unpack_refine if $self->can('_unpack_refine');
+
+                    return $self;
+                }
+
+                sub getpack {
+                }
+
+                sub xdp {
+                    my $self = shift;
+                    return @$self[1..$#$self];
+                }
+            }
+        }
+
+        sub unpack_new {
             my $self = shift;
-            cluck "In _unpack of $self";
-            warn "\e[1;33mIn Linux::IpRoute2::message::link::_unpack\e[m";
-            $self->SUPER::_unpack(@_);
-            my $body = $self->{body} // return;
+            my ($body) = @_;
+            cluck "In unpack_new of $self";
+            warn "\e[1;33mIn Linux::IpRoute2::message::link::unpack_new\e[m";
+            $self->SUPER::unpack_new(@_);
 
             # splice the IFINFO header off
             my (
@@ -139,7 +402,7 @@ package Linux::IpRoute2::message {
                 $ifi_index,
                 $ifi_flags,
                 $ifi_change,
-                $reply3,
+                $data,
             ) = my @resp_args = unpack struct_ifinfomsg_pack . 'x![L]a*', $body; # substr $body, 0, struct_ifinfomsg_len, '';
             @resp_args  == 6 or confess 'Unpack response failed!';
 
@@ -150,232 +413,43 @@ package Linux::IpRoute2::message {
             $self->{ifi_change} = $ifi_change;
 
             my @resp_opts;
+            for ( my $len, my $offset = 0 ; $offset < length $data ; $offset += 1+($len-1|3) ) {
+                ($len, my $code) = unpack '@'.$offset.'SS', $data;
+                my $rpkg = $attr_pkg_map[$code]
+                            || Linux::IpRoute2::fragment::link::;
 
-            for (;$reply3 ne '';) {
-                my $l = unpack 'S', $reply3 or die;
-                $l >= 4 && $l <= length $reply3 or die;
-                my $opt = substr $reply3, 0, 1+($l-1|3), '';
-                substr($opt, $l) = '';  # trim padding
-                push @resp_opts, [ unpack 'x[S]Sa*', $opt ];
+                my $v = $rpkg->unpack_new(substr $data, $offset, $len);
+
+                ref $v or die "_unpack_opt returned non-ref ($v)";
+                push @resp_opts, $v;
             }
-
-            $self->{opts}       = [ sort { $a->[0] <=> $b->[0] } @resp_opts ];
+            $self->{opts}       = [ sort { $a->code <=> $b->code } @resp_opts ];
 
             $self->_unpack_refine if $self->can('_unpack_refine');
 
             return $self;
         }
 
-        my @option_packmap;
-
-        $option_packmap[$_] = 'Z*'      # C-string
-            for
-                IFLA_IFNAME,                        #  3
-                IFLA_QDISC,                         #  6
-                IFLA_IFALIAS,                       # 20
-                IFLA_PHYS_PORT_NAME,                # 38
-                IFLA_ALT_IFNAME,                    # 53        # Alternative ifname
-                IFLA_PARENT_DEV_NAME,               # 56
-                IFLA_PARENT_DEV_BUS_NAME,           # 57
-            ;
-        $option_packmap[$_] = 'l'       # int32_t
-            for
-                IFLA_MTU,                           #  4
-                IFLA_TXQLEN,                        # 13
-                IFLA_NUM_VF,                        # 21        # Number of VFs if device is SR-IOV PF
-                IFLA_GROUP,                         # 27        # Group the device belongs to
-                IFLA_EXT_MASK,                      # 29        # Extended info mask, VFs, etc
-                IFLA_PROMISCUITY,                   # 30        # Promiscuity count: > 0 means acts PROMISC
-                IFLA_NUM_TX_QUEUES,                 # 31
-                IFLA_NUM_RX_QUEUES,                 # 32
-                IFLA_CARRIER_CHANGES,               # 35
-                IFLA_GSO_MAX_SEGS,                  # 40
-                IFLA_GSO_MAX_SIZE,                  # 41
-                IFLA_CARRIER_DOWN_COUNT,            # 48
-                IFLA_NEW_IFINDEX,                   # 49
-                IFLA_MAX_MTU,                       # 51
-            ;
-        $option_packmap[$_] = 'q'       # int64_t
-            for
-                IFLA_XDP,                           # 43
-            ;
-        $option_packmap[$_] = 'C'       # uint8_t
-            for
-                IFLA_OPERSTATE,                     # 16
-                IFLA_LINKMODE,                      # 17
-            ;
-        $option_packmap[$_] = '(H2)6(H2)*' # 6-byte or 8-byte MAC address; round up to even number of bytes
-            for
-                IFLA_ADDRESS,                       #  1
-                IFLA_BROADCAST,                     #  2
-                IFLA_PROTO_DOWN,                    # 39
-                IFLA_PERM_ADDRESS,                  # 54
-            ;
-        $option_packmap[$_] = 'L*'      # int32_t[]
-            for
-                IFLA_STATS,                         #  7    # long
-            ;
-        $option_packmap[$_] = 'Q*'      # int64_t[]
-            for
-                IFLA_STATS64,                       # 23    # long
-            ;
-
-#           0 or
-#               IFLA_UNSPEC,                        #  0
-#               IFLA_LINK,                          #  5
-#               IFLA_COST,                          #  8
-#               IFLA_PRIORITY,                      #  9
-#               IFLA_MASTER,                        # 10
-#               IFLA_WIRELESS,                      # 11        # Wireless Extension event - see wireless.h
-#               IFLA_PROTINFO,                      # 12        # Protocol specific information for a link
-#               IFLA_MAP,                           # 14    # long
-#               IFLA_WEIGHT,                        # 15
-#               IFLA_LINKINFO,                      # 18
-#               IFLA_NET_NS_PID,                    # 19
-#               IFLA_VFINFO_LIST,                   # 22
-#               IFLA_VF_PORTS,                      # 24
-#               IFLA_PORT_SELF,                     # 25
-#               IFLA_AF_SPEC,                       # 26    # long
-#               IFLA_NET_NS_FD,                     # 28
-#               IFLA_CARRIER,                       # 33
-#               IFLA_PHYS_PORT_ID,                  # 34
-#               IFLA_PHYS_SWITCH_ID,                # 36
-#               IFLA_LINK_NETNSID,                  # 37
-#               IFLA_PAD,                           # 42
-#               IFLA_EVENT,                         # 44
-#               IFLA_NEW_NETNSID,                   # 45
-#               IFLA_TARGET_NETNSID,                # 46        # New name for IFLA_IF_NETNSID
-#               IFLA_CARRIER_UP_COUNT,              # 47
-#               IFLA_MIN_MTU,                       # 50
-#               IFLA_PROP_LIST,                     # 52
-#               IFLA_PROTO_DOWN_REASON,             # 55
-#           ;
-
-        sub _pack_opt {
-            my ($self, $data_ref, $code, @args) = @_;
-            my $pack = $option_packmap[$code];
-            my $body = pack $pack, @args;
-            $$data_ref .= pack 'SSa*x![L]', length($body)+4, $code, $body;
-            return;
-        }
-        sub _unpack_opt {
-            my ($self, $data_ref) = @_;
-            my ($len, $code) = unpack 'SS', $$data_ref;
-            my $d = substr $$data_ref, 0, 1+($len-1|3), '';
-            my $pack = $option_packmap[$code] or return $code;
-            return unpack 'x[S]S'.$pack, $d;
-        }
-
-        sub show_ifla(@);
-
-        sub show_ifla_af_spec(@) {
-            my ($type, $val, $depth) = @_;
-
-            my $lpref = "\t" x $depth;
-            printf "%sifla/spec: type=%s (%d)\n", $lpref, AF_to_name($type), $type;
-
-            for (;$val ne '';) {
-                my $l = unpack 'S', $val or die;
-                $l >= 4 && $l <= length $val or die;
-                my $opt = substr $val, 0, 1+($l-1|3), '';
-                substr($opt, $l) = '';  # trim padding
-                show_ifla( unpack( 'x[S]Sa*', $opt ), $depth+1 );
-            }
-        }
-        #*show_0x8034 = \&show_ifla_af_spec;
-
-        my @unpackrecurse;
-        my @unpackmap;
-        $unpackmap[IFLA_UNSPEC]                 = '';                   # 0 (empty data)
-        $unpackmap[IFLA_ADDRESS]                = 'H12'; #'a6';         # 1
-        $unpackmap[IFLA_BROADCAST]              = 'H12'; #'a6';         # 2
-        $unpackmap[IFLA_IFNAME]                 = 'Z*';                 # 3
-        $unpackmap[IFLA_MTU]                    = 'L';                  # 4
-        $unpackmap[IFLA_QDISC]                  = 'Z';                  # 6
-        $unpackmap[IFLA_STATS]                  = 'L24';                # 7
-        $unpackmap[IFLA_TXQLEN]                 = 'L';                  # 1
-        $unpackmap[IFLA_MAP]                    = '(L2)*';              # 14
-        $unpackmap[IFLA_OPERSTATE]              = 'C';                  # 16
-        $unpackmap[IFLA_LINKMODE]               = 'C';                  # 17
-        $unpackmap[IFLA_NUM_VF]                 = 'L';                  # 21
-        $unpackmap[IFLA_STATS64]                = 'q24';                # 23
-        $unpackrecurse[IFLA_AF_SPEC]            = \&show_ifla_af_spec;  # 26
-        $unpackmap[IFLA_GROUP]                  = 'L';                  # 27
-        $unpackmap[IFLA_PROMISCUITY]            = 'L';                  # 30
-        $unpackmap[IFLA_NUM_TX_QUEUES]          = 'L';                  # 31
-        $unpackmap[IFLA_NUM_RX_QUEUES]          = 'L';                  # 32
-        $unpackmap[IFLA_CARRIER]                = 'V';                  # 33
-        $unpackmap[IFLA_CARRIER_CHANGES]        = 'L';                  # 35
-        $unpackmap[IFLA_PROTO_DOWN]             = 'C';                  # 39
-        $unpackmap[IFLA_GSO_MAX_SEGS]           = 'll';                 # 40
-        $unpackmap[IFLA_GSO_MAX_SIZE]           = 'SS';                 # 41
-        $unpackmap[IFLA_XDP]                    = 'S4';                 # 43
-        $unpackmap[IFLA_CARRIER_UP_COUNT]       = 'l';                  # 47
-        $unpackmap[IFLA_CARRIER_DOWN_COUNT]     = 'l';                  # 48
-        $unpackmap[IFLA_MIN_MTU]                = 'l';                  # 50
-        $unpackmap[IFLA_MAX_MTU]                = 'l';                  # 51
-        $unpackmap[IFLA_PERM_ADDRESS]           = 'H12'; #'a6';                 # 54
-        $unpackmap[IFLA_PARENT_DEV_NAME]        = 'Z';                  # 56
-        $unpackmap[IFLA_PARENT_DEV_BUS_NAME]    = 'l';                  # 57
-        #$unpackrecursive[32820]                = \&show_0x8034;        # 32820
-
-        sub show_ifla(@) {
-            my ($type, $val, $depth) = @_;
-            my $lpref = "\t" x $depth;
-            if ( my $rp = $unpackrecurse[$type] ) {
-                printf "%sifla: type=%s (%d)\n", $lpref, IFLA_to_name($type), $type;
-                for (;$val ne '';) {
-                    my $l = unpack 'S', $val or die;
-                    $l >= 4 && $l <= length $val or die;
-                    my $opt = substr $val, 0, 1+($l-1|3), '';
-                    substr($opt, $l) = '';  # trim padding
-                    $rp->( unpack('x[S]Sa*', $opt), $depth+1 );
-                }
-            } else {
-                my $um = $unpackmap[$type] || 'H*';
-                printf "%sopt: type=%s (%d) val=[%s]\n", $lpref, IFLA_to_name($type), $type, join ',', unpack $um, $val;
-            }
-        }
-
-        sub show_ifi(@) {
-            my ($args, $opts, $depth) = @_;
-            my ( $family, $type, $index, $flags, $change ) = @$args;
-            $depth //= 1;
-            my $lpref = "\t" x $depth;
-            printf "IFI:\n"
-                     . "%sfamily  %s (%d)\n"
-                     . "%stype    %s (%d)\n"
-                     . "%sindex   %d\n"
-                     . "%sflags   %08x/%08x\n",
-                    $lpref, AF_to_name $family, $family,
-                    $lpref, ARPHRD_to_name $type, $type,
-                    $lpref, $index,
-                    $lpref, $flags, $change;
-
-            for my $opt (@$opts) {
-                show_ifla(@$opt, $depth+1);
-            }
-        }
-
     }
-    package Linux::IpRoute2::message::addr      { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::route     { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::neigh     { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::rule      { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::qdisc     { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::tclass    { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::tfilter   { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::action    { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::prefix    { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::multicast { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::anycast   { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::neightbl  { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::nduseropt { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::addrlabel { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::dcb       { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::netconf   { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::mdb       { use importable; use parent Linux::IpRoute2::message::; }
-    package Linux::IpRoute2::message::nsid      { use importable; use parent Linux::IpRoute2::message::; }
+
+    package Linux::IpRoute2::message::addr      { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::route     { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::neigh     { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::rule      { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::qdisc     { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::tclass    { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::tfilter   { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::action    { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::prefix    { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::multicast { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::anycast   { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::neightbl  { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::nduseropt { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::addrlabel { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::dcb       { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::netconf   { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::mdb       { use parent -norequire, Linux::IpRoute2::message::; }
+    package Linux::IpRoute2::message::nsid      { use parent -norequire, Linux::IpRoute2::message::; }
 
     use Linux::IpRoute2::rtnetlink qw( :rtm );
 
@@ -439,13 +513,11 @@ package Linux::IpRoute2::message {
 }
 
 package Linux::IpRoute2::request {
-    use importable;
-    use parent Linux::IpRoute2::message::;
+    use parent -norequire, Linux::IpRoute2::message::;
 
     use Carp 'confess';
+    use Data::Dumper;
     use POSIX 'EMSGSIZE';
-
-    use Linux::IpRoute2::rtnetlink qw( struct_nlmsghdr_pack );
 
     sub start {
         my $self = shift;
@@ -463,34 +535,11 @@ package Linux::IpRoute2::request {
         substr($self->{data}, 0, 4) = pack 'L', length $self->{data};
         $self;
     }
-    sub _pack($;$$) {
-        my ($self, $seq, $pid) = @_;
-        my ($code, $flags) = @{ $self->{header} };
-        my $request = pack struct_nlmsghdr_pack,
-                            0,              # length, to be filled in...
-                            $code,
-                            $flags,
-                            $seq // 0,      # sequence (dummy)
-                            $pid // 0;      # port-id
-
-        # Concatenate the packed base request and all the packed options,
-        # inserting padding so that each has 4-byte alignment.
-        $request = pack '(a*x![L])*', $request, @{ $self->{options} };
-
-        # ... now fill in length;  4 == sizeof(uint32_t), where uint32_t is the result of pack 'L'
-        substr $request, 0, 4, pack L => length $request;
-        return $self->{data} = $request;
-    }
-    sub show {
-        my ($self) = shift;
-        $self->_pack;
-        $self->SUPER::show(@_);
-    }
     sub send {
         my ($self, $conx, $sendmsg_flags) = @_;
         $sendmsg_flags //= 0;   # optional
 
-        my $msg = $self->_pack(++$conx->{seq}, $conx->{port_id});
+        my $msg = $self->getpack(++$conx->{seq}, $conx->{port_id});
 
         my $rlen = $conx->msend($sendmsg_flags, $msg, undef, $conx->FixedSocketName) or die "Could not send";;
 
@@ -509,67 +558,93 @@ package Linux::IpRoute2::request {
         }
         return $rlen;
     }
-}
 
-package Linux::IpRoute2::request::get_link {
-    use parent Linux::IpRoute2::message::link::,
-               Linux::IpRoute2::request::;
-    use Carp 'confess';
-    use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST struct_ifinfomsg_pack );
-    # From first half of "talk"
-    sub compose {
-        my $self = shift;
-        $#_ == 4 or confess "Wrong args";
-        my ( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change ) = @_;
-        $self = $self->SUPER::start(RTM_GETLINK, NLM_F_REQUEST);
-        push @{ $self->{options} }, pack struct_ifinfomsg_pack, $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change;
-        return $self;
-    }
-    sub add_attr {
-        my $self = shift;
-        my ($opt_type, $pack_fmt, @args) = @_;
-        my $body = pack $pack_fmt, @args;
-        $body ne '' or confess "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@args)."[@args]\n";
-        push @{ $self->{options} }, pack 'SSa*x![L]', 4+length($body), $opt_type, $body;
-        return $self;
+    package Linux::IpRoute2::request::get_link {
+        use parent -norequire,
+                   Linux::IpRoute2::message::link::,
+                   Linux::IpRoute2::request::;
+        use Carp 'confess';
+        use Data::Dumper;
+        use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST
+                                           struct_ifinfomsg_pack
+                                           struct_nlmsghdr_pack );
+        # From first half of "talk"
+        sub compose {
+            my $self = shift;
+            $#_ == 4 or confess "Wrong args";
+            $self = $self->SUPER::start(RTM_GETLINK, NLM_F_REQUEST);
+            $self->{ifinfomsg} = \@_;
+            return $self;
+        }
+        sub add_ifla {
+            my $self = shift;
+            my $opt = Linux::IpRoute2::fragment::link::->new_by_code(@_);
+            warn "Adding option $opt\n"
+                ."\t".Dumper($opt)."";
+            push @{ $self->{options} }, $opt;
+          # my ($opt_type, @args) = @_;
+          # @@@FIXUP
+          # my $body = pack $pack_fmt, @args;
+          # $body ne '' or confess "Pack result was empty; probably insufficient args?\nfmt=$pack_fmt, args=".(0+@args)."[@args]\n";
+          # push @{ $self->{options} }, pack 'SSa*x![L]', 4+length($body), $opt_type, $body;
+            return $self;
+        }
+        sub getpack($;$$) {
+            my ($self, $seq, $pid) = @_;
+            my ($code, $flags) = @{ $self->{header} };
+            warn "_pack($self):\t". Dumper($self);
+            my $request = pack struct_nlmsghdr_pack,
+                                0,              # length, to be filled in...
+                                $code,
+                                $flags,
+                                $seq // 0,      # sequence (dummy)
+                                $pid // 0;      # port-id
+
+            my $ifinfomsg = pack struct_ifinfomsg_pack, @{$self->{ifinfomsg}};
+
+            # Concatenate the packed base request and all the packed options,
+            # inserting padding so that each has 4-byte alignment.
+            $request = pack '(a*x![L])*',
+                            $request,
+                            $ifinfomsg,
+                            map { $_->_pack }
+                                @{ $self->{options} };
+
+            # ... now fill in length;  4 == sizeof(uint32_t), where uint32_t is the result of pack 'L'
+            substr $request, 0, 4, pack L => length $request;
+            return $self->{data} = $request;
+        }
     }
 }
 
 package Linux::IpRoute2::response {
-    use importable;
-    use parent Linux::IpRoute2::message::;
+    use parent -norequire, Linux::IpRoute2::message::;
 
     use Carp qw( cluck confess );
     use Data::Dumper;
 
-    package Linux::IpRoute2::response::link {
-        use importable;
-        use parent Linux::IpRoute2::message::link::,
-                   Linux::IpRoute2::response::;
-    }
-
-    package Linux::IpRoute2::response::addr      { use importable; use parent Linux::IpRoute2::message::addr::,      Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::route     { use importable; use parent Linux::IpRoute2::message::route::,     Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::neigh     { use importable; use parent Linux::IpRoute2::message::neigh::,     Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::rule      { use importable; use parent Linux::IpRoute2::message::rule::,      Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::qdisc     { use importable; use parent Linux::IpRoute2::message::qdisc::,     Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::tclass    { use importable; use parent Linux::IpRoute2::message::tclass::,    Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::tfilter   { use importable; use parent Linux::IpRoute2::message::tfilter::,   Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::action    { use importable; use parent Linux::IpRoute2::message::action::,    Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::prefix    { use importable; use parent Linux::IpRoute2::message::prefix::,    Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::multicast { use importable; use parent Linux::IpRoute2::message::multicast::, Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::anycast   { use importable; use parent Linux::IpRoute2::message::anycast::,   Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::neightbl  { use importable; use parent Linux::IpRoute2::message::neightbl::,  Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::nduseropt { use importable; use parent Linux::IpRoute2::message::nduseropt::, Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::addrlabel { use importable; use parent Linux::IpRoute2::message::addrlabel::, Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::dcb       { use importable; use parent Linux::IpRoute2::message::dcb::,       Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::netconf   { use importable; use parent Linux::IpRoute2::message::netconf::,   Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::mdb       { use importable; use parent Linux::IpRoute2::message::mdb::,       Linux::IpRoute2::response::; }
-    package Linux::IpRoute2::response::nsid      { use importable; use parent Linux::IpRoute2::message::nsid::,      Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::link      { use parent -norequire, Linux::IpRoute2::message::link::,      Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::addr      { use parent -norequire, Linux::IpRoute2::message::addr::,      Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::route     { use parent -norequire, Linux::IpRoute2::message::route::,     Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::neigh     { use parent -norequire, Linux::IpRoute2::message::neigh::,     Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::rule      { use parent -norequire, Linux::IpRoute2::message::rule::,      Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::qdisc     { use parent -norequire, Linux::IpRoute2::message::qdisc::,     Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::tclass    { use parent -norequire, Linux::IpRoute2::message::tclass::,    Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::tfilter   { use parent -norequire, Linux::IpRoute2::message::tfilter::,   Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::action    { use parent -norequire, Linux::IpRoute2::message::action::,    Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::prefix    { use parent -norequire, Linux::IpRoute2::message::prefix::,    Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::multicast { use parent -norequire, Linux::IpRoute2::message::multicast::, Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::anycast   { use parent -norequire, Linux::IpRoute2::message::anycast::,   Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::neightbl  { use parent -norequire, Linux::IpRoute2::message::neightbl::,  Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::nduseropt { use parent -norequire, Linux::IpRoute2::message::nduseropt::, Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::addrlabel { use parent -norequire, Linux::IpRoute2::message::addrlabel::, Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::dcb       { use parent -norequire, Linux::IpRoute2::message::dcb::,       Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::netconf   { use parent -norequire, Linux::IpRoute2::message::netconf::,   Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::mdb       { use parent -norequire, Linux::IpRoute2::message::mdb::,       Linux::IpRoute2::response::; }
+    package Linux::IpRoute2::response::nsid      { use parent -norequire, Linux::IpRoute2::message::nsid::,      Linux::IpRoute2::response::; }
 
     # Process an in-coming NLM message
 
-    use Linux::Syscalls qw( MSG_PEEK MSG_TRUNC MSG_DONTWAIT );   # :msg
     use Linux::IpRoute2::rtnetlink qw( :rtm );
 
     my @unpack_director;
@@ -639,6 +714,8 @@ package Linux::IpRoute2::response {
         ctrl_size   =>     0,       # always discard
         name_size   =>  0x40,       # normally 12, but allow space in case it grows
     };
+
+    use Linux::Syscalls qw( MSG_PEEK MSG_TRUNC MSG_DONTWAIT );   # :msg
 
     # From second half of "talk"
     sub recv_new {
@@ -728,10 +805,10 @@ package Linux::IpRoute2::response {
         $self->{port_id}    = $port_id;
 
         $self->_rebless($code);
-        my $how = $self->can('_unpack');
+        my $how = $self->can('unpack_new');
         warn "\e[1;41mAttempting unpack\e[m of $self";
         #warn " using ".(*$how{NAME});
-        $self->_unpack($body);
+        $self->unpack_new($body);
         warn " ... \e[1;46mafter unpack\e[m to ".Dumper($self);
 
         $self->show( dirn => Linux::IpRoute2::message::DirnRecv | Linux::IpRoute2::message::DirnMesgMethod );
@@ -926,9 +1003,9 @@ package Linux::IpRoute2::connector {
     );
 
     BEGIN { *DESTROY = \&close };
-
 }
 
+package Linux::IpRoute2 v0.0.1 {
 use Socket qw( AF_INET6 );
 use Linux::Socket::Extras qw( AF_NETLINK );
 
@@ -960,6 +1037,9 @@ use Carp qw( confess );
 
 sub TEST {
     use Data::Dumper;
+    use Carp qw( confess cluck );
+    $SIG{__WARN__} = \&cluck;
+    $SIG{__DIE__} = sub { print "\e[1;41mDying...\e[m\n"; undef $SIG{__DIE__}; goto &confess };
 
     my $self = __PACKAGE__->iprt2_connect_route(0);
     say Dumper($self);
@@ -977,8 +1057,8 @@ sub TEST {
 
     Linux::IpRoute2::request::get_link::
             ->compose( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change )
-            ->add_attr( IFLA_EXT_MASK, 'L',   RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
-            ->add_attr( IFLA_IFNAME,   'Z*',  $iface_name )
+            ->add_ifla( IFLA_EXT_MASK, RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
+            ->add_ifla( IFLA_IFNAME,   $iface_name )
             ->send( $self->{F4}, $sendmsg_flags ) or die "Bad send; $!";
 
     my ( $response, $recv_flags, $recv_ctrl, $recv_from ) =
@@ -1000,7 +1080,7 @@ sub TEST {
 
     Linux::IpRoute2::request::get_link::
             ->compose( $ifi_family, $ifi_type, $ifi_index, $ifi_flags, $ifi_change )
-            ->add_attr( IFLA_EXT_MASK, 'L',   RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
+            ->add_ifla( IFLA_EXT_MASK, RTEXT_FILTER_VF | RTEXT_FILTER_SKIP_STATS )
             ->send( $self->{F3}, $sendmsg_flags ) or die "Bad send; $!";
 
     my ( $response2, $recv_flags2, $recv_ctrl2, $recv_from2 ) =
@@ -1013,6 +1093,7 @@ our @EXPORT = qw( iprt2_connect );
 
 our %EXPORT_TAGS;
 $EXPORT_TAGS{everything} = \@EXPORT;
+}
 
 1;
 
@@ -1137,8 +1218,6 @@ recvmsg(3,
        valid_lft forever preferred_lft forever
 +++ exited with 0 +++
 
-
-
  IFLA_UNSPEC                0           ?
 IFLA_ADDRESS                1           a6          val=[001c230d76cc]
 IFLA_BROADCAST              2           a6          val=[ffffffffffff]
@@ -1199,3 +1278,58 @@ IFLA_PARENT_DEV_NAME       56           Z           val=[303030303a30393a30302e3
 IFLA_PARENT_DEV_BUS_NAME   57           l           val=[70636900]
  ...
 IFLA_CODE#32820         32820=0x8034    RECURSIVE   val=[0b003500656e703973300000]
+
+        sub show_ifla_af_spec(@);
+
+        sub show_ifla(@) {
+            my ($type, $val, $depth) = @_;
+            my $lpref = "\t" x $depth;
+            if ( my $rp = $unpackrecurse[$type] ) {
+                printf "%sifla: type=%s (%d)\n", $lpref, IFLA_to_name($type), $type;
+                for (;$val ne '';) {
+                    my $l = unpack 'S', $val or die;
+                    $l >= 4 && $l <= length $val or die;
+                    my $opt = substr $val, 0, 1+($l-1|3), '';
+                    substr($opt, $l) = '';  # trim padding
+                    $rp->( unpack('x[S]Sa*', $opt), $depth+1 );
+                }
+            } else {
+                my $um = $unpackmap[$type] || 'H*';
+                printf "%sopt: type=%s (%d) val=[%s]\n", $lpref, IFLA_to_name($type), $type, join ',', unpack $um, $val;
+            }
+        }
+
+        sub show_ifla_af_spec(@) {
+            my ($type, $val, $depth) = @_;
+
+            my $lpref = "\t" x $depth;
+            printf "%sifla/spec: type=%s (%d)\n", $lpref, AF_to_name($type), $type;
+
+            for (;$val ne '';) {
+                my $l = unpack 'S', $val or die;
+                $l >= 4 && $l <= length $val or die;
+                my $opt = substr $val, 0, 1+($l-1|3), '';
+                substr($opt, $l) = '';  # trim padding
+                show_ifla( unpack( 'x[S]Sa*', $opt ), $depth+1 );
+            }
+        }
+
+        sub show_ifi(@) {
+            my ($args, $opts, $depth) = @_;
+            my ( $family, $type, $index, $flags, $change ) = @$args;
+            $depth //= 1;
+            my $lpref = "\t" x $depth;
+            printf "IFI:\n"
+                     . "%sfamily  %s (%d)\n"
+                     . "%stype    %s (%d)\n"
+                     . "%sindex   %d\n"
+                     . "%sflags   %08x/%08x\n",
+                    $lpref, AF_to_name $family, $family,
+                    $lpref, ARPHRD_to_name $type, $type,
+                    $lpref, $index,
+                    $lpref, $flags, $change;
+
+            for my $opt (@$opts) {
+                show_ifla(@$opt, $depth+1);
+            }
+        }
