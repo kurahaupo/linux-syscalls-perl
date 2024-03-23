@@ -1,24 +1,32 @@
 # linux-syscalls-perl
 
-The `Linux::Syscalls` module attempts to provide non-native (but still fast)
-access to all Linux system calls that aren't in the core POSIX module. That
-includes both actual POSIX calls that lack support in `POSIX.pm` such as
+The `Linux::Syscalls` module attempts to provide non-native access to Linux
+system calls that aren't in the core POSIX module.
+
+This includes both actual POSIX calls that lack support in `POSIX.pm` such as
 `fstatat`, specialized services provided through multiplexer interfaces such as
 `ioctl`, common BSD & SysV calls that didn't make the cut into POSIX (such as
 `chroot`), Linux extensions to syscalls (`waitid` taking an extra parameter),
 and truly Linux-specific syscalls such as `getcpu`.
 
-Only a small subset of these are implemented so far.
+Only a small subset of these are implemented so far, based on need in other
+projects; if you need a syscall that isn't implemented please submit a [feature
+request on github](https://github.com/kurahaupo/linux-syscalls-perl/issues).
 
-As a design goal, all inputs are passed as parameters, and all outputs are
-returned; no placing outputs into global variables or into references that are
-passed in.
+## Design goals
+
+1. No XS code. It should be possible to drop this module into any environment
+   and have it _just work_.
+2. Everything is passed or returned by value. No tweaking global values (other
+   than `$!`) and no passing references to be filled in.
 
 (The implementation of any system call that takes a buffer to be filled instead
 allocates a buffer and returns that to the caller. That especially applies to
 "small" buffers such as the `int status` passed to `wait()`. For calls that can
 accept an arbitrary buffer size and return an arbitrary list of values, such as
-`getdents`, a buffer size hint is accepted as a parameter.)
+`getdents`, a buffer size hint is accepted as a parameter. If `wantarray`
+indicates that a result will not be used, `NULL` may be used instead of an
+output buffer.)
 
 ## Contributing to this project
 
