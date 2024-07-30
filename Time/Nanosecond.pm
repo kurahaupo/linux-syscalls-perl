@@ -64,7 +64,7 @@ package Time::Nanosecond::ts {
     use POSIX qw(floor);
 
     BEGIN { $INC{'Time/Nanosecond/ts.pm'} = __FILE__ }
-    use parent Time::Nanosecond::base::;
+    use parent -norequire => Time::Nanosecond::base::;
 
     use constant _prec => undef;
 
@@ -237,7 +237,7 @@ BEGIN { if (0x80000000 << 31 || $^C) { eval q{
 package Time::Nanosecond::ns {
     # Represent a time as an integer number of nanoseconds
 
-    use parent Time::Nanosecond::base::;
+    use parent -norequire => Time::Nanosecond::base::;
 
     use POSIX qw(floor);
 
