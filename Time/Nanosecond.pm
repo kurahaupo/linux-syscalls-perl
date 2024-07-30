@@ -310,7 +310,7 @@ package Time::Nanosecond::ns {
         ;
 
     sub compare {
-        my ($t, $u) = @_;
+        my ($t, $u, $swap) = @_;
         my $r = $$t <=> ( ref $u ? $u->nanoseconds : do { no integer; $u * 1E9 } );
         $r = -$r if $swap;
         return $r;
