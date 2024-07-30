@@ -267,7 +267,7 @@ package Time::Nanosecond::ns {
         my ($t) = @_;
         my $r = $$t % 1E9;
         $r += 1E9 if $r<0;
-        return
+        return $r;
     }
 
     sub _sec($) {
