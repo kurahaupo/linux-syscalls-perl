@@ -743,7 +743,8 @@ package Time::Nanosecond v0.1.1 {
 
             if (!defined $prec || $prec < 0 || $prec > 9) {
                 $prec = $r[9] // 9;
-            } else {
+            }
+            if ($prec != 9) {
               # $ns *= 2;
                 $ns /= 10 ** (9-$prec);
               # $ns++;
