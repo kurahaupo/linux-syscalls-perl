@@ -103,31 +103,39 @@ package `Time::Nanosecond` is provided for dealing with such timestamps
 losslessly and (hopefully) painlessly.
 
 * Constructors:
-  * `from_timespec`
-  * `from_timeval`
-  * `from_nanoseconds`
-  * `from_microseconds`
-  * `from_milliseconds`
-  * `from_centiseconds`
-  * `from_deciseconds`
-  * `from_seconds` (floating point)
+  * `new_seconds` (integer)
+  * `new_fseconds` (floating point)
+  * `new_deciseconds`
+  * `new_centiseconds`
+  * `new_milliseconds`
+  * `new_microseconds`
+  * `new_nanoseconds`
+  * `new_timespec`
+  * `new_timeval`
 * Conversions:
-  * `timespec` (as pair)
-  * `timeval` (as pair)
-  * `nanoseconds` (as integer)
-  * `microseconds` (as integer)
-  * `milliseconds` (as floating point)
-  * `centiseconds` (as floating point)
-  * `deciseconds` (as floating point)
-  * `seconds` (as floating point)
+  * `seconds` (as integer or floating point)
+  * `deciseconds`
+  * `centiseconds`
+  * `milliseconds`
+  * `microseconds`
+  * `nanoseconds`
+  * `timespec`
+  * `timeval`
 * Operators:
   * `gmtime`
   * `localtime`
   * `withprecision` (returns a new object rather than mutating in-place)
 
-Only the `new_fseconds` constructor accepts a fractional value, and assumes
-microsecond precision. All the other constructors accept integers and set
-the precision accordingly.
+All the constructors except `new_fseconds` accept integers and set the
+precision accordingly; the `new_fseconds` constructor accepts a floating-point
+value, and assumes microsecond precision.
+
+The `seconds` through `nanoseconds` conversions return integers when that would
+match the nominal precision and is within the range representable by a Perl IV,
+or otherwise return a Perl FV (floating point, which may lose some precision).
+The `timespec` conversion is based on C's `struct timespec` and returns
+seconds and nanoseconds in list context. The `timeval` conversion is based on
+C's `struct timeval` and returns seconds and microseconds in list context.
 
 The `gmtime` and `localtime` methods return a blessed scalar that is a subclass
 of `Time::tm` with the addition of a `strftime` method.
