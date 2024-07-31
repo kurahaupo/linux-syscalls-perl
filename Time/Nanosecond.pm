@@ -108,8 +108,14 @@ package Time::Nanosecond::ts {
     # delegated constructor
     sub from_seconds($) {
         my $class = shift;
-        my $s = floor $_[0];
+        return _normalize bless [ $_[0], 0 ], $class;
+    }
+
+    # delegated constructor
+    sub from_fseconds($) {
+        my $class = shift;
         no integer;     # needed to map [0.0,1.0) to [0,999999999]
+        my $s = floor $_[0];
         my $ns = ($_[0] - $s) * 1E9;
         return _normalize bless [ $s, $ns ], $class;
     }
@@ -131,7 +137,7 @@ package Time::Nanosecond::ts {
     sub add {
         my ($t, $u) = @_;
         my @t = @$t;
-        $u = ref($t)->from_seconds($u) if ! ref $u;
+        $u = ref($t)->from_fseconds($u) if ! ref $u;
         $t[0] += $u->_sec;
         $t[1] += $u->_nsec;
         return _normalize bless \@t, ref $t;
@@ -140,7 +146,7 @@ package Time::Nanosecond::ts {
     sub subtract {
         my ($t, $u, $swap) = @_;
         my @t = @$t;
-        $u = ref($t)->from_seconds($u) if ! ref $u;
+        $u = ref($t)->from_fseconds($u) if ! ref $u;
         $t[0] -= $u->_sec;
         $t[1] -= $u->_nsec;
         if ($swap) {
@@ -163,7 +169,7 @@ package Time::Nanosecond::ts {
 
     sub compare {
         my ($t, $u, $swap) = @_;
-        $u = ref($t)->from_seconds($u) if ! ref $u;
+        $u = ref($t)->from_fseconds($u) if ! ref $u;
         my $r;
         if (ref $u) {
             $r = $t->[0] <=> $u->_sec
@@ -251,9 +257,17 @@ package Time::Nanosecond::ns {
 
     # delegated constructor
     sub from_seconds($) {
-        my $class = shift;
+        my ($class, $ns) = @_;
+        $ns *= 1E9;
+        return bless \$ns, $class;
+    }
+
+    # delegated constructor
+    sub from_fseconds($) {
+        my ($class, $ns) = @_;
         no integer;     # needed to map [0.0,1.0) to [0,999999999]
-        my $ns = floor( $_[0] * 1E9 );
+        $ns *= 1E9;
+        $ns = int $ns;
         return bless \$ns, $class;
     }
 
@@ -609,23 +623,36 @@ package Time::Nanosecond v0.1.1 {
 
     sub new_timeval($$)  {
         return Time::Nanosecond::ts6->from_timeval(@_) if @_ >= 2;
-        return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
     }
     push @EXPORT_OK, qw( new_timeval  );
 
     sub new_timespec($$) {
         return Time::Nanosecond::ts->from_timespec(@_) if @_ >= 2;
-        return Time::Nanosecond::ts6->from_microseconds($_[0] * 1E6) if @_;
     }
     push @EXPORT_OK, qw( new_timespec );
 
     sub new_seconds($) {
-        return Time::Nanosecond::ts0->from_microseconds($_[0] * 1E6) if @_;
+        return Time::Nanosecond::ts0->from_seconds($_[0]) if @_;
     }
     push @EXPORT_OK, qw( new_seconds );
 
+    sub new_fseconds($) {
+        return Time::Nanosecond::ts6->from_fseconds($_[0]) if @_;
+    }
+    push @EXPORT_OK, qw( new_seconds );
+
+    sub new_deciseconds($) {
+        return Time::Nanosecond::ts1->from_deciseconds($_[0]) if @_;
+    }
+    push @EXPORT_OK, qw( new_deciseconds );
+
+    sub new_centiseconds($) {
+        return Time::Nanosecond::ts2->from_centiseconds($_[0]) if @_;
+    }
+    push @EXPORT_OK, qw( new_centiseconds );
+
     sub new_milliseconds($) {
-        return Time::Nanosecond::ts3->from_microseconds($_[0] * 1E3) if @_;
+        return Time::Nanosecond::ts3->from_milliseconds($_[0]) if @_;
     }
     push @EXPORT_OK, qw( new_milliseconds );
 
@@ -633,6 +660,11 @@ package Time::Nanosecond v0.1.1 {
         return Time::Nanosecond::ts6->from_microseconds($_[0]) if @_;
     }
     push @EXPORT_OK, qw( new_microseconds );
+
+    sub new_nanoseconds($) {
+        return Time::Nanosecond::ts9->from_nanoseconds($_[0]) if @_;
+    }
+    push @EXPORT_OK, qw( new_nanoseconds );
 
     ################################################################################
     #
