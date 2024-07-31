@@ -480,6 +480,11 @@ package Time::Nanosecond::base {
         return $t->_sec, $t->_µsec;
     }
 
+    sub withprecision($$) {
+        my ($r, $p) = @_;
+        return $r->copy->_setprecision($p);
+    }
+
     sub stringify {
         my $t = shift;
         my $s = $t->_sec;
