@@ -62,6 +62,7 @@ package Time::Nanosecond::ts {
     # is desired, as there's no performance improvement in providing two classes.
 
     use POSIX qw(floor);
+    use Scalar::Util qw( blessed );
 
     BEGIN { $INC{'Time/Nanosecond/ts.pm'} = __FILE__ }
     use parent -norequire => Time::Nanosecond::base::;
@@ -171,7 +172,7 @@ package Time::Nanosecond::ts {
         my ($t, $u, $swap) = @_;
         $u = ref($t)->from_fseconds($u) if ! ref $u;
         my $r;
-        if (ref $u) {
+        if (blessed $u && $u->can('_nsec')) {
             $r = $t->[0] <=> $u->_sec
               || $t->[1] <=> $u->_nsec;
         } else {
@@ -486,7 +487,7 @@ package Time::Nanosecond::base {
         return $t->_sec, $t->_nsec if wantarray;
         cluck 'timespec called in non-array context';
         return;
-        if (ref $t && $t->isa(Time::Nanosecond::ts::)) { return $t }
+        if (blessed $t && $t->isa(Time::Nanosecond::ts::)) { return $t }
         return Time::Nanosecond::ts->from_timespec($t->_sec, $t->_nsec);
     }
 
@@ -495,7 +496,7 @@ package Time::Nanosecond::base {
         return $t->_sec, $t->_µsec if wantarray;
         cluck 'timeval called in non-array context';
         return;
-        if (ref $t && $t->isa(Time::Nanosecond::ts::) && $t->_nsec % 1000 == 0) { return $t }
+        if (blessed $t && $t->isa(Time::Nanosecond::ts::) && $t->_nsec % 1000 == 0) { return $t }
         return Time::Nanosecond::ts->from_timeval($t->_sec, $t->_µsec);
     }
 
@@ -590,6 +591,8 @@ package Time::Nanosecond::base {
 
 package Time::Nanosecond v0.1.1 {
 
+    use Scalar::Util qw( blessed );
+
     use Exporter 'import';
     our @EXPORT;
     our @EXPORT_OK;
@@ -608,14 +611,14 @@ package Time::Nanosecond v0.1.1 {
     # rather than an int), rather than returning a "ctime" string.
 
     sub localtime {
-        return $_[0]->localtime if UNIVERSAL::can($_[0], 'localtime');
+        return $_[0]->localtime if blessed($_[0]) && $_[0]->can('localtime');
         goto &Time::localtime::localtime if exists &Time::localtime::localtime;
         goto &CORE::localtime;
     }
     push @EXPORT_OK, 'localtime';
 
     sub gmtime {
-        return $_[0]->gmtime if UNIVERSAL::can($_[0], 'gmtime');
+        return $_[0]->gmtime if blessed($_[0]) && $_[0]->can('gmtime');
         goto &Time::gmtime::gmtime if exists &Time::gmtime::gmtime;
         goto &CORE::gmtime;
     }
@@ -760,7 +763,7 @@ package Time::Nanosecond v0.1.1 {
             # Take a working copy, since we might want to mangle it
             my $ns = $keep_nsec //= int do {
                             no integer;
-                            ref $r[0] && UNIVERSAL::can($r[0], '_nsec')
+                            blessed $r[0] && $r[0]->can('_nsec')
                                 ? $r[0]->_nsec
                                 : ($r[0] - int $r[0]) * 1E9 + 0.5
                         };
