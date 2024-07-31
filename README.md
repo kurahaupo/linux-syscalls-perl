@@ -102,15 +102,6 @@ is inadequate to represent these nanosecond-resolution values, so a helper
 package `Time::Nanosecond` is provided for dealing with such timestamps
 losslessly and (hopefully) painlessly.
 
-`Time::Nanosecond` provides two reference implementations, so that
-speed/space trade-offs can be assessed in different situations:
-  * `Time::Nanosecond::ns` holds integer nanoseconds (only if 64-bit integers
-    are available); and
-  * `Time::Nanosecond::ts` holds a pair holding seconds and nanoseconds,
-    equivalent to `struct timespec`.
-
-Both implementations provide the same functionality:
-
 * Constructors:
   * `from_timespec`
   * `from_timeval`
@@ -129,6 +120,37 @@ Both implementations provide the same functionality:
   * `centiseconds` (as floating point)
   * `deciseconds` (as floating point)
   * `seconds` (as floating point)
+* Operators:
+  * `gmtime`
+  * `localtime`
+
+Only the `new_fseconds` constructor accepts a fractional value, and assumes
+microsecond precision. All the other constructors accept integers and set
+the precision accordingly.
+
+The `gmtime` and `localtime` methods return a blessed scalar that is a subclass
+of `Time::tm` with the addition of a `strftime` method.
+
+`Time::Nanosecond` provides two implementations that can be selected by
+either `use Time::Nanosecond ':ts';` or `use Time::Nanosecond ':ns';`,
+allowing you to make a speed/space trade-off:
+
+  * `Time::Nanosecond::ts` holds a pair holding seconds and nanoseconds,
+    equivalent to `struct timespec`.
+  * `Time::Nanosecond::ns` holds integer nanoseconds (only available if Perl is
+    compiled with 64-bit integer support); and
+These provide indentical functionality, and can interoperate with each other.
+
+Both of them provide the same interface for converting
+to/from the equivalents of `struct timespec`, `struct timeval`, floating-point
+`time_t`, and integer seconds, deciseconds, centiseconds, milliseconds,
+microseconds, and nanoseconds. Implied precision is inferred from the
+constructor, and carried over in any arithmetic.
+
+It also provides drop-in replacements for `localtime`, `gmtime` and `strftime`
+that can handle fractional seconds. This adds a new format specifier `%N` and
+modifies the `%S`, `%T` and `%s` specifiers, allowing a precision to be
+specified.
 
 Basic arithmetic operations are provided, along with drop-in replacements for
 `localtime`, `gmtime` and `strftime` that can handle fractional seconds.
