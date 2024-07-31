@@ -105,7 +105,7 @@ package Time::Nanosecond::ts {
     sub _µsec($) { my ($t) = @_; return $t->[1] / 1E3; }
     sub _msec($) { my ($t) = @_; return $t->[1] / 1E6; }
 
-    # constructor
+    # delegated constructor
     sub from_seconds($) {
         my $class = shift;
         my $s = floor $_[0];
@@ -114,7 +114,7 @@ package Time::Nanosecond::ts {
         return _normalize bless [ $s, $ns ], $class;
     }
 
-    # constructor
+    # delegated constructor
     sub from_nanoseconds($) {
         my $class = shift;
         my $s = $_[0] / 1E9;
@@ -122,7 +122,7 @@ package Time::Nanosecond::ts {
         return _normalize bless [ $s, $ns ], $class;
     }
 
-    # constructor
+    # delegated constructor
     sub from_timespec($$) {
         my $class = shift;
         return _normalize bless [ @_ ], $class;
@@ -241,7 +241,7 @@ package Time::Nanosecond::ns {
 
     use POSIX qw(floor);
 
-    # constructor
+    # delegated constructor
     sub from_seconds($) {
         my $class = shift;
         no integer;     # needed to map [0.0,1.0) to [0,999999999]
@@ -249,14 +249,14 @@ package Time::Nanosecond::ns {
         return bless \$ns, $class;
     }
 
-    # constructor
+    # delegated constructor
     sub from_nanoseconds($) {
         my $class = shift;
         my $ns = $_[0];
         return bless \$ns, $class;
     }
 
-    # constructor
+    # delegated constructor
     sub from_timespec($$) {
         my $class = shift;
         my $ns = $_[0] * 1E9 + $_[1];
@@ -346,37 +346,40 @@ package Time::Nanosecond::base {
     use Carp qw(cluck);
     use POSIX qw(floor);
 
-    # constructor
+    # fallback delegated constructor
     sub from_timeval($$) {
         my ($class, $sec, $µs) = @_;
         return $class->from_timespec($sec, $µs * 1000);
     }
 
-    # constructor
+    # These fallback delegated constructors require from_nanoseconds to be
+    # implemented by the subclass.
+
+    # fallback delegated constructor
     sub from_seconds($) {
         my ($class, $sec) = @_;
         return $class->from_nanoseconds($sec * 1E9);
     }
 
-    # constructor
+    # fallback delegated constructor
     sub from_deciseconds($) {
         my ($class, $ds) = @_;
         return $class->from_nanoseconds($ds * 1E8);
     }
 
-    # constructor
+    # fallback delegated constructor
     sub from_centiseconds($) {
         my ($class, $cs) = @_;
         return $class->from_nanoseconds($cs * 1E7);
     }
 
-    # constructor
+    # fallback delegated constructor
     sub from_milliseconds($) {
         my ($class, $ms) = @_;
         return $class->from_nanoseconds($ms * 1E6);
     }
 
-    # constructor
+    # fallback delegated constructor
     sub from_microseconds($) {
         my ($class, $µs) = @_;
         return $class->from_nanoseconds($µs * 1E3);
@@ -390,19 +393,17 @@ package Time::Nanosecond::base {
     sub _nsec($) { no integer; return floor( $_[0]->_fsec * 1E9 + 0.5 ) }
     sub _µsec($) {             return        $_[0]->_nsec / 1E3         }  # microseconds
 
-    # Unicode version 6 deprecated classic micro µ (U+00b5) in favour of Greek mu
-    # μ (U+03bc).
-    #
-    # We contend that this was a mistake, as for several decades X11 has set
-    # aside AltGr+m for U+00b5 on Latin keyboard layouts, so that U+00b5 has
-    # become embedded in places that are case-sensitive and have no code-point
-    # folding, such as passwords and APIs, including this one.
-    #
-    # We therefore decline to change _µsec to _μsec, especially since it's
-    # essentially a callback, so that these would be backwards:
-    #
-    #   sub _μsec($) { return shift->_µsec(@_) }
-    #   sub _usec($) { return shift->_µsec(@_) }
+    # Unicode version 6 deprecated U+00b5 (classic SI micro symbol µ), unifying
+    # it with U+03bc (Greek letter mu μ). But since _µsec is an internal
+    # callback and should not be use outside this module, we decline to offer
+    # aliases such as _μsec or _usec.
+    #BEGIN { *_μsec = *_usec = \&_µsec; }
+    # (Furthermore, we contend that this deprecation was a mistake, because it
+    # assumes that normalisation is always available, and that is simply not
+    # true. For several decades X11 has set aside AltGr+m for U+00b5 on Latin
+    # keyboard layouts, so that U+00b5 has become embedded in places that are
+    # case-sensitive and have no code-point folding, such as passwords and
+    # APIs, such as this one.)
 
     # Default conversions; good for most uses.
 
@@ -610,8 +611,7 @@ package Time::Nanosecond v0.1.1 {
     # We extend Perl's version of strftime as follows:
     #
     #   1.  A new '.' modifier introduces a precision, similar to printf, applicable
-    #       to the 'r', 's', 'S' and 'T' conversions. If no digits occur after the
-    #       '.' then the maximum precision (9) is used.
+    #       to the 'r', 's', 'S' and 'T' conversions.
     #
     #   2.  A new 'N' conversion provides the fractional part of the second; if a
     #       width is specified, this acts the same as the precision (mimicking
@@ -663,10 +663,11 @@ package Time::Nanosecond v0.1.1 {
     #   In general the existing format conversions do not visibly change unless
     #   there the '.' modifier is included; 'N' is new, and therefore an exception
     #
-    #   The '.' is excluded if trailing 0 suppression results in no digits
-    #   after the decimal point, or if the precision is 0.
+    #   The '.' is excluded if the precision is 0, or if trailing 0 suppression
+    #   results in no digits after the decimal point.
     #
-    #   Only ρ values 1..9 are guaranteed to be supported, and in particular:
+    #   Only ρ values 0..9 are guaranteed to be supported, and in particular:
+    #       %.0χ (seconds)
     #       %.1χ (deciseconds)
     #       %.2χ (centiseconds)
     #       %.3χ (milliseconds)
@@ -680,7 +681,7 @@ package Time::Nanosecond v0.1.1 {
                          | %[-^#_0]*\d*\.?\d*[EO]?\w
                          )}x, $fmt;
 
-        my $keep_nsec;   # stash after first use
+        my $keep_nsec;   # stash upon first use
 
         for my $pp (@p) {
             if ( not $pp =~ m<^%([-_#^0]*)(\d*)(?:(\.)(\d*))?([OE]?)([NrsST])$>x ) {
