@@ -231,7 +231,7 @@ package Time::Nanosecond::ts0 {
     use constant _prec => 0;
 }
 
-BEGIN { if (0x80000000 << 31) { eval q{
+BEGIN { if (0x80000000 << 31 || $^C) { eval q{
 # This entire class will be elided if integers are narrower than 62 bits.
 
 package Time::Nanosecond::ns {
