@@ -150,9 +150,15 @@ package Time::Nanosecond::ts {
         return _normalize bless \@t, ref $t;
     }
 
+    sub negate {
+        my ($t) = @_;
+        return _normalize bless [ map { -$_ } @$t ], ref $t;
+    }
+
     use overload
         '+'     => \&add,
         '-'     => \&subtract,
+        'neg'   => \&negate,
         ;
 
     sub compare {
@@ -190,7 +196,9 @@ package Time::Nanosecond::ts {
     }
 
     use overload
-        bool    => \&boolify,
+        'bool'  => \&boolify,
+        '0+'    => \&seconds,   # use base method
+        'int'   => \&_sec,
         ;
 
 }
@@ -304,9 +312,16 @@ package Time::Nanosecond::ns {
         return bless \$r, ref $t;
     }
 
+    sub negate {
+        my ($t) = @_;
+        my $r = -$$t;
+        return bless \$r, ref $t;
+    }
+
     use overload
         '+'     => \&add,
         '-'     => \&subtract,
+        'neg'   => \&negate,
         ;
 
     sub compare {
@@ -335,7 +350,9 @@ package Time::Nanosecond::ns {
     }
 
     use overload
-        bool    => \&boolify,
+        'bool'  => \&boolify,
+        '0+'    => \&seconds,
+        'int'   => \&_sec,
         ;
 
 }
@@ -506,10 +523,16 @@ package Time::Nanosecond::base {
         return $t->_sec || $t->_nsec;
     }
 
+    sub negate {
+        my $t = shift;
+        return $t->subtract(0, 1);  # swap and subtract
+    }
+
     use overload
         '""'    => \&stringify,
-        bool    => \&boolify,
+        'bool'  => \&boolify,
         '0+'    => \&seconds,
+        'neg'   => \&negate,
         ;
 
     sub localtime {
