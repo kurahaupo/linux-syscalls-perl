@@ -123,6 +123,7 @@ losslessly and (hopefully) painlessly.
 * Operators:
   * `gmtime`
   * `localtime`
+  * `withprecision` (returns a new object rather than mutating in-place)
 
 Only the `new_fseconds` constructor accepts a fractional value, and assumes
 microsecond precision. All the other constructors accept integers and set
