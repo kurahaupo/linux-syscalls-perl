@@ -1,7 +1,7 @@
 # linux-syscalls-perl
 
-The `Linux::Syscalls` module attempts to provide non-native access to Linux
-system calls that aren't in the core POSIX module.
+The `Linux::Syscalls` module provides access to Linux system calls that aren't
+in the core POSIX module.
 
 This includes both actual POSIX calls that lack support in `POSIX.pm` such as
 `fstatat`, specialized services provided through multiplexer interfaces such as
@@ -15,18 +15,15 @@ request on github](https://github.com/kurahaupo/linux-syscalls-perl/issues).
 
 ## Design goals
 
-1. No XS code. It should be possible to drop this module into any environment
-   and have it _just work_.
+1. It should be possible to drop this module into any environment and have it
+   _just work_; this means everything must be implemented as pure Perl before
+   adding XS code to improve performance.
 2. Everything is passed or returned by value. No tweaking global values (other
    than `$!`) and no passing references to be filled in.
-
-(The implementation of any system call that takes a buffer to be filled instead
-allocates a buffer and returns that to the caller. That especially applies to
-"small" buffers such as the `int status` passed to `wait()`. For calls that can
-accept an arbitrary buffer size and return an arbitrary list of values, such as
-`getdents`, a buffer size hint is accepted as a parameter. If `wantarray`
-indicates that a result will not be used, `NULL` may be used instead of an
-output buffer.)
+3. Everything is properly encoded and decoded; no need for the user to use
+   `pack` or `unpack`.
+4. Keep parameters in the order specified in the Linux man pages for the
+   syscall; this may differ from the order used in `POSIX` or `CORE`.
 
 ## Contributing to this project
 
@@ -39,19 +36,20 @@ anomalies. Please ensure you have `/bin/bash` installed.
 
 ## Process management
 
-All of the various `*wait*` system calls are provided; all information is
-returned as tuples in line with the overall design goal as above. In particular
-`$?` is untouched.
+All of the various *wait*-like system calls are covered, including `wait`,
+`wait3`, `wait4`, `waitpid`, and `waitid`. An additional `waitid5` function
+returns the additional information provided by the Linux `waitid` system call.
 
-`waitid5` is added as an interface to obtaining the additional information
-returned from the Linux `waitid` system call.
+All information is returned as tuples in line with the overall design goal as
+above. In particular `$?` is untouched.
 
 The exit status of a program is conventionally truncated to 8 bits, but where
-more bits are available, these functions attempt to make that information
-available.
+more bits are available, these functions attempt to make the whole of that
+value available. (Linux does not currently provide a way for a process to exit
+with a value wider than 8 bits; see Future work below.)
 
-(Hopefully a new `exit2` call can be implemented that will post a wide exit
-code; see Future work below.)
+(This module does not provide `killpg` because the built-in `kill` function
+already provides that functionality by negating the signal number.)
 
 ## Filedescriptors and Filenames
 
@@ -84,21 +82,9 @@ approaches require holding two open filedesciptors.)
 Therefore the `getdents` system call is provided as an alternative to
 `readdir`.
 
-Moreover, the `getdents` system call can return additional information: on many
-systems it can return a filetype, so that it's not necessary to perform a
-`fstatat` operation to identify subdirectories.
-
-It also provides drop-in replacements for `localtime`, `gmtime` and `strftime`
-that can handle fractional seconds. This adds a new format specifier `%N` and
-modifies the `%S`, `%T` and `%s` specifiers, allowing a precision to be
-specified.
-
-It provides two reference implementations (three, if 64-bit integers are
-available), so that speed/space trade-offs can be assessed in different
-situations. All of them provide the same interface for converting to/from the
-equivalents of `struct timespec`, `struct timeval` and floating-point `time_t`.
-Implied precision is inferred from the constructor, and carried over in any
-arithmetic.
+Moreover, the `getdents` system call can return filetype information on systems
+that can return it, so that `fstatat` isn't necessary to identify
+subdirectories.
 
 ## Timestamps
 
@@ -158,8 +144,10 @@ to its own git repository later.)
 
 ## Future work
 
-Currently only `x86_64` and `i386` are supported and only a subset of available
-system calls are implemented.
+This package is a work in progress.
+
+* Only a subset of available system calls are currently implemented.
+* Only `x86_64`, `i386` and `mipsel` are currently supported.
 
 Both will be expanded on as as-needed basis. Please let me know if you have any
 particular calls you need to use.

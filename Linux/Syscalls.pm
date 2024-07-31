@@ -47,13 +47,43 @@
 #   * getdents (dirent)
 #   * stat, lstat
 #   * statfs
-# These returned objects have methods to choose the fields, but named without
-# any invariant prefix so that (for example) stat returns an object with an
-# "ino" method rather than a "st_ino" method.
+# These returned objects have methods named to match the C struct fields except
+# without any invariant prefix (so that for example stat returns an object with
+# an "ino" method rather than a "st_ino" method).
 #
 # To make stat and lstat usable as drop-in replacements for the built-in stat
 # and lstat, they return the same list as provided by those functions when
 # wantarray is true, and only return a blessed object when wantarray is false.
+
+# Design goals. Please keep these in mind when making changes.
+#
+#   1. It should be possible to drop this module into any environment and have
+#      it _just work_; this means everything must be implemented as pure Perl
+#      before adding XS code to improve performance.
+#
+#   2. Everything is passed or returned by value. No tweaking global values
+#      (other than `$!`) and no passing references to be filled in.
+#
+#   3. Accept parameters in the order specified in section 2 of the Linux man
+#      pages, and add extra parameters at the end.
+#
+#      We necessarily deviate from the exact syscall semantics by avoiding
+#      accepting buffers to be filled in (meaning we omit the relevant
+#      parameter). Instead, a buffer is allocated internally. If the result
+#      will not be used (as indicated by wantarray or otherwise), and if
+#      allowed, NULL will be passed to the syscall in place of an output
+#      buffer. For system calls that take an arbitrary buffer size, an optional
+#      buffer size hint is accepted as a parameter.
+#
+#      Where POSIX or CORE provides a version whose parameters differ from
+#      this, if possible avoid overriding it. (This particularly applies to the
+#      chown, chmod, and utime families, where the kernel call takes one
+#      filename followed by the values to be adjusted, but the Perl CORE
+#      functions take the values to be adjusted followed by an arbitrary list
+#      of filenames.)
+#
+#   4. Everything is appropriately encoded and decoded; no need for the user to
+#      use `pack` or `unpack`.
 
 use 5.010;
 use utf8;       # allow $µs symbol
@@ -331,6 +361,16 @@ BEGIN { CHMOD_MASK == 07777 or die "Internal Error; for details read source code
 # Linux syscalls vary on whether they take (or return) a timespec or a timeval.
 # In general only older POSIX-compatible calls deal in timeval (with microsecond
 # resolution); all other calls deal in timespec (with nanosecond resolution).
+#
+# Where the Time::Nanosecond package has been loaded, use it to ensure full
+# precision of all values, but otherwise use Perl FVs (the same as
+# Time::HiRes).
+#
+# Unfortunately a Perl FV is only accurate to microseconds, meaning that some
+# loss of precision will normally occur. To avoid this, always have
+#   use Time::Nanosecond;
+# before
+#   use Linux::Syscalls;
 #
 # It seems unlikely that picosecond resolution will ever be needed, as Moore's
 # law finally ran out for CPU clock speeds at around 5 GHz, and although they
