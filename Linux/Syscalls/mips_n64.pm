@@ -364,4 +364,7 @@ our @EXPORT = qw(
 
 );
 
+our %EXPORT_TAGS;
+$EXPORT_TAGS{everything} = \@EXPORT;
+
 1;
