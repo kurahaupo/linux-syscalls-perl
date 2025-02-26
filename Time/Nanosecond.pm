@@ -256,6 +256,8 @@ package Time::Nanosecond::ns {
 
     use POSIX qw(floor);
 
+    use constant _prec => undef;
+
     # delegated constructor
     sub from_seconds($) {
         my ($class, $ns) = @_;
@@ -370,6 +372,42 @@ package Time::Nanosecond::ns {
         'int'   => \&_sec,
         ;
 
+}
+
+package Time::Nanosecond::ns9 {
+    # Same but with default precision of 9 digits (nanoseconds)
+    use parent Time::Nanosecond::ns::;
+    use constant _prec => 9;
+}
+
+package Time::Nanosecond::ns6 {
+    # Same but with default precision of 6 digits (microseconds)
+    use parent Time::Nanosecond::ns::;
+    use constant _prec => 6;
+}
+
+package Time::Nanosecond::ns3 {
+    # Same but with default precision of 3 digits (milliseconds)
+    use parent Time::Nanosecond::ns::;
+    use constant _prec => 3;
+}
+
+package Time::Nanosecond::ns2 {
+    # Same but with default precision of 2 digits (centiseconds)
+    use parent Time::Nanosecond::ns::;
+    use constant _prec => 2;
+}
+
+package Time::Nanosecond::ns1 {
+    # Same but with default precision of 1 digit (deciseconds)
+    use parent Time::Nanosecond::ns::;
+    use constant _prec => 1;
+}
+
+package Time::Nanosecond::ns0 {
+    # Same but with default precision of 0 digit (whole seconds)
+    use parent Time::Nanosecond::ns::;
+    use constant _prec => 0;
 }
 }}}
 
