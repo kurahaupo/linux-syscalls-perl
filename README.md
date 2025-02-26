@@ -133,9 +133,9 @@ value, and assumes microsecond precision.
 The `seconds` through `nanoseconds` conversions return integers when that would
 match the nominal precision and is within the range representable by a Perl IV,
 or otherwise return a Perl FV (floating point, which may lose some precision).
-The `timespec` conversion is based on C's `struct timespec` and returns
-seconds and nanoseconds in list context. The `timeval` conversion is based on
-C's `struct timeval` and returns seconds and microseconds in list context.
+The `timespec` conversion is based on C's `struct timespec` and returns seconds
+and nanoseconds in list context. The `timeval` conversion is based on C's
+`struct timeval` and returns seconds and microseconds in list context.
 
 The `gmtime` and `localtime` methods return a blessed scalar that is a subclass
 of `Time::tm` with the addition of a `strftime` method.
@@ -145,33 +145,30 @@ either `use Time::Nanosecond ':ts';` or `use Time::Nanosecond ':ns';`,
 allowing you to make a speed/space trade-off:
 
   * `Time::Nanosecond::ts` holds a pair holding seconds and nanoseconds,
-    equivalent to `struct timespec`.
+    equivalent to `struct timespec`; and
   * `Time::Nanosecond::ns` holds integer nanoseconds (only available if Perl is
-    compiled with 64-bit integer support); and
+    compiled with 64-bit integer support).
+
 These provide indentical functionality, and can interoperate with each other.
 
-Both of them provide the same interface for converting
-to/from the equivalents of `struct timespec`, `struct timeval`, floating-point
-`time_t`, and integer seconds, deciseconds, centiseconds, milliseconds,
-microseconds, and nanoseconds. Implied precision is inferred from the
-constructor, and carried over in any arithmetic.
-
-It also provides drop-in replacements for `localtime`, `gmtime` and `strftime`
-that can handle fractional seconds. This adds a new format specifier `%N` and
-modifies the `%S`, `%T` and `%s` specifiers, allowing a precision to be
-specified.
+Both provide the same interface for converting to/from the equivalents of
+`struct timespec`, `struct timeval`, floating-point `time_t`, and integer
+seconds, deciseconds, centiseconds, milliseconds, microseconds, and
+nanoseconds. Implied precision is inferred from the constructor, and carried
+over in any arithmetic.
 
 Basic arithmetic operations are provided, along with drop-in replacements for
-`localtime`, `gmtime` and `strftime` that can handle fractional seconds.
+`localtime`, `gmtime`, and `strftime` that can handle fractional seconds.
 
 The `strftime` replacement adds a new format specifier `%N` and modifies the
 `%S`, `%T` and `%s` specifiers, allowing a precision to be specified.
 
-Since the `from_seconds` and `seconds` deal with floating point, it's trivial to
-convert to & from most other formats.
+Since the `from_seconds` and `seconds` deal with floating point, it's trivial
+to convert to & from most other formats.
 
-(The `Time::Nanosecond` package is not really Linux-specific, and may be moved
-to its own git repository later.)
+The `Time::Nanosecond` module is not really Linux-specific, but is included
+here because the `Linux::Syscalls` module is so heavily dependent on it.
+In future it may be moved to its own git repository.
 
 ## Future work
 
