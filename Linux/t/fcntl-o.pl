@@ -9,30 +9,6 @@ my $num_errors = 0;
 use Fcntl ();
 
 my @list = qw(
-    O_RDONLY O_WRONLY O_RDWR
-
-    O_ACCMODE
-    O_APPEND
-    O_ASYNC
-    O_CREAT
-    O_DIRECT
-    O_LARGEFILE
-    O_DIRECTORY
-    O_DSYNC
-    O_EXCL
-    O_NDELAY
-    O_NOATIME
-    O_NOCTTY
-    O_NOFOLLOW
-    O_NONBLOCK
-    O_RSYNC
-    O_SYNC
-    O_TRUNC
-);
-
-use Linux::Syscalls;
-
-for my $t (qw(
     O_RDONLY
     O_WRONLY
     O_RDWR
@@ -63,9 +39,16 @@ for my $t (qw(
     O_PATH
 
     O_FSYNC
+    O_MSYNC
     O_TMPFILE
+);
 
-)) {
+my %allow_undef = map { ($_=>1) } qw{ O_RSYNC };     # libc lies about this; we don't
+my %allow_zero = map { ($_=>1) } qw{ O_LARGEFILE };
+
+use Linux::Syscalls;
+
+for my $t (@list) {
 
     no strict 'refs';
     my $ff = "Fcntl::$t";
@@ -77,22 +60,25 @@ for my $t (qw(
             if ( $fv == $lv ) {
                 printf "\e[32;1mOK\e[39;22m   %28s = %#9.6x = %s\n", $lf, $fv, $ff;
                 next;
-            } elsif ( $fv ==0 ) {
-                state %allow_zero; %allow_zero or %allow_zero = map { ($_=>1) } qw{ O_LARGEFILE };
+            } elsif ( $fv == 0 ) {
                 if ( $allow_zero{$t} ) {
                     printf "\e[38;2;99;99;99mIGNR %28s = %#9.6x & %s = %#9.6x (allowed)\e[39m\n", $lf, $lv, $ff, $fv;
                     next;
                 }
             }
         } else {
+                if ( $allow_undef{$t} ) {
+                    printf "\e[38;2;99;99;99mIGNR %28s = undef & %s = %#9.6x (allowed)\e[39m\n", $lf, $ff, $fv;
+                    next;
+                }
             printf "\e[33;1mMISS\e[39;22m %28s = undef BUT %-19s = %#9.6x\n", $lf, $ff, $fv;
             ++$num_errors;
             next;
         }
     } else {
-        # If the constant is not defined by Fcntl then the value, if any,
-        # provided by Linux::Syscalls cannot be "wrong": assume its value is
-        # correct, but ignore it if it's undefined.
+        # If the constant is not defined by Fcntl then the value we provide, if
+        # any, cannot be "wrong". So assume its value is correct, or ignore it
+        # if it's undefined.
         if ( defined $lv  ) {
             printf "\e[32mPASS\e[39;22m %28s = %#9.6x BUT %-19s = (undef)\n", $lf, $lv, $ff;
         } else {

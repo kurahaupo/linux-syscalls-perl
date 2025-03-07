@@ -91,7 +91,7 @@ use strict;
 use warnings;
 use feature 'state';
 
-package Linux::Syscalls v0.7.1;
+package Linux::Syscalls v0.8.0;
 
 use base 'Exporter';
 
@@ -291,7 +291,7 @@ my %o_const = (
     O_RDWR      =>   0x000002,  #
     O_READ      =>   0x000000,  # == O_RDONLY (non-standard)
     O_WRITE     =>   0x000001,  # == O_WRONLY (non-standard)
-#   O_EXEC                      # (not in Linux!?)
+    O_EXEC      =>   undef,     # (not in Linux; HURD only, for use with fexecve(); for Linux use O_PATH & execveat(fd,"",argv,envp,AT_EMPTY_PATH) instead)
     O_ACCMODE   =>   0x000003,  #
 
     # Linux-only access modes
@@ -301,15 +301,14 @@ my %o_const = (
     # (in the order listed in https://www.gnu.org/software/libc/manual/html_node/Operating-Modes.html)
     O_APPEND    =>   0x000400,  #
 #   O_NONBLOCK & O_NDELAY -- see above
-    O_ASYNC     =>   0x002000,  #
-    O_FSYNC     =>   0x101000,  # == O_SYNC Synchronize writing of file data; each write call will make sure the data is reliably stored on disk before returning. By implication metadata is also uptodate before returning.
-    O_SYNC      =>   0x101000,  #
-    O_NOATIME   =>   0x040000,  # Do not set atime when reading (useful for backups)
-
-    # Linux-only operating modes
-    O_DIRECT    =>   0x004000,  # Direct disk access
     O_DSYNC     =>   0x001000,  # Synchronize data (but not metadata)
-    O_RSYNC     =>   0x101000,  # Should be its own bit, but currently == O_SYNC. When reading from cache, ensure that it's synch'ed to disk before returning.
+    O_ASYNC     =>   0x002000,  #
+    O_DIRECT    =>   0x004000,  # Direct disk access
+    O_NOATIME   =>   0x040000,  # Do not set atime when reading (useful for backups)
+    O_MSYNC     =>   0x100000,  # Synchronize metadata (but not data) - Linux-only
+    O_SYNC      =>   0x101000,  #
+    O_FSYNC     =>   0x101000,  # == O_SYNC Synchronize writing of file data; each write call will make sure the data is reliably stored on disk before returning. By implication metadata is also uptodate before returning.
+    O_RSYNC     =>   undef,     # When reading from cache, ensure that it's synch'ed to disk before returning; not implemented in Linux, so override incorrect Linux specification O_RSYNC == O_SYNC
 
     # Filedescriptor flags, not shared through dup()
     # Arrange for fd to be closed upon execve by using
@@ -337,11 +336,11 @@ my %o_const = (
 _export_tag qw{ O_ =>
     O_RDONLY O_WRONLY O_RDWR O_ACCMODE O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND
     O_NONBLOCK O_NDELAY O_DSYNC O_ASYNC O_DIRECT O_LARGEFILE O_DIRECTORY
-    O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_RSYNC O_PATH O_TMPFILE
+    O_NOFOLLOW O_NOATIME O_CLOEXEC O_SYNC O_PATH O_TMPFILE
 };
 
-# Not in Linux, so not exported by default
-_export_ok qw{ O_FSYNC O_NOLINK O_READ O_WRITE };
+# Not in Linux, or non-standard, so not exported by default
+_export_ok qw{ O_EXEC O_FSYNC O_NOLINK O_READ O_RSYNC O_WRITE };
 
 ################################################################################
 
