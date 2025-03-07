@@ -91,7 +91,7 @@ use strict;
 use warnings;
 use feature 'state';
 
-package Linux::Syscalls v0.7.0;
+package Linux::Syscalls v0.7.1;
 
 use base 'Exporter';
 
@@ -2725,6 +2725,39 @@ sub waitid_($$$;$$) {
     # Note pid & stat first, to be more consistent with other wait* calls
     return $si_status, $si_code, $si_pid, $si_uid, $si_signo,
            @wru;
+}
+
+################################################################################
+
+# execveat like execve but takes fd+filepath+flags instead of filepath
+# (This is Linux-specific)
+_export_tag qw{ proc exec => execveat };
+sub execveat($$\@;\@$) {
+    my ($dir_fd, $path, $argv, $envp, $flags) = @_;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
+    $envp ||= [];
+    if (ref $envp eq 'HASH') {
+        $envp = [ map { ( $_ => $envp->{$_} ) } keys %$envp ];
+    }
+    for my $p ( $argv, $envp ) {
+        $p = pack 'p*', @$p, undef;
+    }
+    state $syscall_id = _get_syscall_id 'execveat';
+    my $r = syscall $syscall_id,
+                    $dir_fd,
+                    $path,
+                    $argv,
+                    $envp,
+                    $flags;
+    $r == -1 and return;
+    return $r;
+}
+
+# fexecve can be implemented either using execveat or /proc/$pid/fd/$fd
+_export_tag qw{ proc exec => fexecve };
+sub fexecve($\@;\@) {
+    splice @_, 1, 0, undef;     # empty path
+    goto &execveat;
 }
 
 ################################################################################
