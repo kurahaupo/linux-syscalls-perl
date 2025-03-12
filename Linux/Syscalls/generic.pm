@@ -554,4 +554,7 @@ our @EXPORT = qw(
     %pack_map
 );
 
+our %EXPORT_TAGS;
+$EXPORT_TAGS{everything} = \@EXPORT_OK;
+
 1;
