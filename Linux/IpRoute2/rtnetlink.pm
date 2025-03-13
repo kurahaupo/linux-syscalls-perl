@@ -22,77 +22,108 @@ use constant {
 };
 
 {
-my @rtnl_family_names = ((undef) x 128, qw( ipmr ip6mr ));
-sub RTNL_FAMILY_to_name($) { my $c = $_[0]; my $n = $rtnl_family_names[$c] if $c >= 0; return $n // "code#$c"; }
+my @names = ((undef) x 128, qw( ipmr ip6mr ));
+sub RTNL_FAMILY_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RTNL_FAMILY_to_name($) { return &RTNL_FAMILY_to_label // "code#$_[0]" }
 }
 
 use constant {
-  # RTM_BASE            =>    16,
-
-    RTM_NEWLINK         =>    16,
-    RTM_DELLINK         =>    17,
-    RTM_GETLINK         =>    18,
-    RTM_SETLINK         =>    19,
-    RTM_NEWADDR         =>    20,
-    RTM_DELADDR         =>    21,
-    RTM_GETADDR         =>    22,
-    RTM_NEWROUTE        =>    24,
-    RTM_DELROUTE        =>    25,
-    RTM_GETROUTE        =>    26,
-    RTM_NEWNEIGH        =>    28,
-    RTM_DELNEIGH        =>    29,
-    RTM_GETNEIGH        =>    30,
-    RTM_NEWRULE         =>    32,
-    RTM_DELRULE         =>    33,
-    RTM_GETRULE         =>    34,
-    RTM_NEWQDISC        =>    36,
-    RTM_DELQDISC        =>    37,
-    RTM_GETQDISC        =>    38,
-    RTM_NEWTCLASS       =>    40,
-    RTM_DELTCLASS       =>    41,
-    RTM_GETTCLASS       =>    42,
-    RTM_NEWTFILTER      =>    44,
-    RTM_DELTFILTER      =>    45,
-    RTM_GETTFILTER      =>    46,
-    RTM_NEWACTION       =>    48,
-    RTM_DELACTION       =>    49,
-    RTM_GETACTION       =>    50,
-    RTM_NEWPREFIX       =>    52,
-    RTM_GETMULTICAST    =>    58,
-    RTM_GETANYCAST      =>    62,
-    RTM_NEWNEIGHTBL     =>    64,
-    RTM_GETNEIGHTBL     =>    66,
-    RTM_SETNEIGHTBL     =>    67,
-    RTM_NEWNDUSEROPT    =>    68,
-    RTM_NEWADDRLABEL    =>    72,
-    RTM_DELADDRLABEL    =>    73,
-    RTM_GETADDRLABEL    =>    74,
-    RTM_GETDCB          =>    78,
-    RTM_SETDCB          =>    79,
-    RTM_NEWNETCONF      =>    80,
-    RTM_GETNETCONF      =>    82,
-    RTM_NEWMDB          =>    84,
-    RTM_DELMDB          =>    85,
-    RTM_GETMDB          =>    86,
-    RTM_NEWNSID         =>    88,
-    RTM_DELNSID         =>    89,
-    RTM_GETNSID         =>    90,
-
-  # RTM_MAX             =>    90 | 3, # max, rounded up
+    RTM_TMIN            =>     4,
 };
 
+# The 0~3 are skipped, possibly to avoid clashing with the op values
+my @RTM_types;
+BEGIN {
+@RTM_types = ((undef) x RTM_TMIN, qw(
+                    LINK
+                    ADDR
+                    ROUTE
+                    NEIGH
+                    RULE
+                    QDISC
+                    TCLASS
+                    TFILTER
+                    ACTION
+                    PREFIX
+                    MULTICAST
+                    ANYCAST
+                    NEIGHTBL
+                    NDUSEROPT
+                    ADDRLABEL
+                    DCB
+                    NETCONF
+                    MDB
+                    NSID
+                ));
+}
+
+use constant {
+    RTM_TMAX            =>  $#RTM_types,
+    RTM_TSHIFT          =>     2,       # type shift
+};
+use constant {
+    RTM_TMASK           =>  ~0 << RTM_TSHIFT,
+};
+
+my @RTM_ops;
+BEGIN {
+@RTM_ops = qw(
+                    NEW
+                    DEL
+                    GET
+                    SET
+                );
+}
+
+use constant {
+    RTM_OMASK           =>  ~RTM_TMASK, # operation mask
+    RTM_OSHIFT          =>     0,       # operation shift
+};
+
+use constant {
+    RTM_BASE            =>  RTM_TMIN      << RTM_TSHIFT,               # 16 == min, rounded down
+    RTM_MAX             =>  RTM_TMAX      << RTM_TSHIFT | RTM_OMASK,   # 91 == max, rounded up
+};
+
+# Define composite symbols like RTM_{NEW,DEL,GET,SET}{LINK,ADDR,ROUTE...NSID}
+my @RTM_op_types;
 {
-my @rtm_names;
-$rtm_names[eval 'RTM_'.uc $_ or die] = $_ for qw(
-    newlink dellink getlink setlink newaddr deladdr getaddr newroute delroute
-    getroute newneigh delneigh getneigh newrule delrule getrule newqdisc
-    delqdisc getqdisc newtclass deltclass gettclass newtfilter deltfilter
-    gettfilter newaction delaction getaction newprefix getmulticast getanycast
-    newneightbl getneightbl setneightbl newnduseropt newaddrlabel deladdrlabel
-    getaddrlabel getdcb setdcb newnetconf getnetconf newmdb delmdb getmdb
-    newnsid delnsid getnsid
-);
-sub RTM_to_name($) { my $c = $_[0]; my $n = $rtm_names[$c] if $c >= 0; return $n // "code#$c"; }
+    # The following magic string limits the list of exported composites to only
+    # those defined in /usr/include/linux/rtnetlink.h
+    my $q = pack 'h*', '0000f77777777144d17c577';
+    my %n;
+    for my $type (RTM_TMIN .. $#RTM_types) {
+        my $tsym = $RTM_types[$type] // next;
+        for my $op (0..$#RTM_ops) {
+            my $code = $type << RTM_TSHIFT | $op;
+            vec($q, $code, 1) || next;
+            my $sym = $RTM_ops[$op].$tsym;
+            $RTM_op_types[$code] = $sym;
+            $n{'RTM_'.$sym} = $code;
+        }
+        $n{'RTM_'.$tsym} = $type;
+    }
+    for my $op (0..$#RTM_ops) {
+        $n{'RTM_'.$RTM_ops[$op]} = $op;
+    }
+    constant::->import(\%n);
+}
+my @RTM_symbols =
+        grep { no strict 'refs'; $_ && defined &$_ }
+        map { $_ ? "RTM_$_" : () }
+            @RTM_op_types,
+            @RTM_types,
+            @RTM_ops;
+
+sub RTM_to_name($) {
+    my ($c) = @_;
+    my $on = $RTM_ops[$c & RTM_OMASK];  # Cannot fail
+    my $t = $c >> RTM_TSHIFT;
+    if ($c >= 0) {
+        my $tn = $RTM_types[$t];
+        return lc($on.$tn) if $tn;
+    }
+    return sprintf '%s#%u', lc $on, $t;
 }
 
 # Generic structure for encapsulation of optional route information.
@@ -152,11 +183,12 @@ use constant {
 };
 
 {
-my @rtn_names;
-$rtn_names[eval 'RTN_'.uc $_] = $_ for qw(
+my @names = qw(
     unspec unicast local broadcast anycast multicast blackhole unreachable
-    prohibit throw nat xresolve );
-sub RTN_to_name($) { my $c = $_[0]; my $n = $rtn_names[$c] if $c >= 0; return $n // "code#$c"; }
+    prohibit throw nat xresolve
+);
+sub RTN_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RTN_to_name($) { return &RTN_to_label // "code#$_[0]" }
 }
 
 ## rtm_protocol
@@ -188,11 +220,12 @@ use constant {
 };
 
 {
-my @rtprot_names;
-$rtprot_names[eval 'RTPROT_'.uc $_] = $_ for qw(
+my @names;
+$names[eval 'RTPROT_'.uc $_] = $_ for qw(
     unspec redirect kernel boot static gated ra mrt zebra bird dnrouted xorp
     ntk dhcp mrouted babel );
-sub RTPROT_to_name($) { my $c = $_[0]; my $n = $rtprot_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub RTPROT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RTPROT_to_name($) { return &RTPROT_to_label // "code#$_[0]" }
 }
 
 ## rtm_scope
@@ -221,10 +254,11 @@ use constant {
 };
 
 {
-my @rt_scope_names;
-$rt_scope_names[eval 'RT_SCOPE_'.uc $_] = $_ for qw(
+my @names;
+$names[eval 'RT_SCOPE_'.uc $_] = $_ for qw(
     universe global site link host nowhere );
-sub RT_SCOPE_to_name($) { my $c = $_[0]; my $n = $rt_scope_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub RT_SCOPE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RT_SCOPE_to_name($) { return &RT_SCOPE_to_label // "code#$_[0]" }
 }
 
 # rtm_flags
@@ -237,9 +271,9 @@ use constant {
 };
 
 {
-my @rtmf_names = ((undef) x 8, qw( notify cloned equalize prefix lookup ));
+my @names = ((undef) x 8, qw( notify cloned equalize prefix lookup ));
 sub RTMF_to_desc($) {
-    splice @_, 1, 0, \@rtmf_names;
+    splice @_, 1, 0, \@names;
     goto &Linux::Syscalls::_bits_to_desc
 }
 }
@@ -257,11 +291,12 @@ use constant {
 };
 
 {
-my @rt_table_names;
-$rt_table_names[eval 'RT_TABLE_'.uc $_] = $_ for qw(
+my @names;
+$names[eval 'RT_TABLE_'.uc $_] = $_ for qw(
     unspec compat default main local
 );
-sub RT_TABLE_to_name($) { my $c = $_[0]; my $n = $rt_table_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub RT_TABLE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RT_TABLE_to_name($) { return &RT_TABLE_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -294,10 +329,11 @@ use constant {
 };
 
 {
-my @rta_names = qw( unspec dst src iif oif gateway priority prefsrc metrics
+my @names = qw( unspec dst src iif oif gateway priority prefsrc metrics
     multipath protoinfo flow cacheinfo session mp_algo table mark mfc_stats via
     newdst pref encap_type encap );
-sub RTA_to_name($) { my $c = $_[0]; my $n = $rta_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub RTA_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RTA_to_name($) { return &RTA_to_label // "code#$_[0]" }
 }
 
 # RTM_MULTIPATH --- array of struct rtnexthop.
@@ -330,9 +366,9 @@ use constant {
 };
 
 {
-my @rtnhf_names = qw( dead pervasive onlink offload linkdown );
+my @names = qw( dead pervasive onlink offload linkdown );
 sub RTNHF_to_desc($) {
-    splice @_, 1, 0, \@rtnhf_names;
+    splice @_, 1, 0, \@names;
     goto &Linux::Syscalls::_bits_to_desc;
 }
 }
@@ -383,9 +419,9 @@ use constant {
 };
 
 {
-my @rtnetlinkf_names = qw( have_peerinfo );
+my @names = qw( have_peerinfo );
 sub RTNETLINKF_to_desc($) {
-    splice @_, 1, 0, \@rtnetlinkf_names;
+    splice @_, 1, 0, \@names;
     goto &Linux::Syscalls::_bits_to_desc;
 }
 }
@@ -416,9 +452,11 @@ use constant {
 
 
 {
-my @rtax_names = qw( unspec lock mtu window rtt rttvar ssthresh cwnd advmss
-    reordering hoplimit initcwnd features rto_min initrwnd quickack cc_algo );
-sub RTAX_to_name($) { my $c = $_[0]; my $n = $rtax_names[$c] if $c >= 0; return $n // "code#$c"; }
+my @names = qw( unspec lock mtu window rtt rttvar ssthresh cwnd advmss
+                     reordering hoplimit initcwnd features rto_min initrwnd
+                     quickack cc_algo );
+sub RTAX_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RTAX_to_name($) { return &RTAX_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -431,9 +469,9 @@ use constant {
 };
 
 {
-my @rtaxf_names = qw( ecn sack timestamp allfrag );
+my @names = qw( ecn sack timestamp allfrag );
 sub RTAXF_to_desc($) {
-    splice @_, 1, 0, \@rtaxf_names;
+    splice @_, 1, 0, \@names;
     goto &Linux::Syscalls::_bits_to_desc;
 }
 }
@@ -473,7 +511,7 @@ use constant {
 
 use constant {
     struct_rta_mfc_stats_pack   =>  'QQQ',
-    struct_rta_mfc_stats_narg   =>     length 'QQQ',  # @@@FIXUP
+    struct_rta_mfc_stats_narg   =>     3,
     struct_rta_mfc_stats_len    =>    24,   # == 8+8+8
 };
 
@@ -491,8 +529,8 @@ use constant {
 
 use constant {
     struct_rtgenmsg_pack        => 'Cx3',
-    struct_rtgenmsg_narg        =>     length 'Cx3',  # @@@FIXUP
-    struct_rtgenmsg_len         =>     1,
+    struct_rtgenmsg_narg        =>     1,
+    struct_rtgenmsg_len         =>     4,   # == 1+3
 };
 
     #   struct rtgenmsg {
@@ -509,7 +547,7 @@ use constant {
 
 use constant {
     struct_ifinfomsg_pack       =>  'CxSiII',
-    struct_ifinfomsg_narg       =>     length 'CxSiII',  # @@@FIXUP
+    struct_ifinfomsg_narg       =>     5,
     struct_ifinfomsg_len        =>    16,   # == 1+1+2+4+4+4
 };
 
@@ -527,9 +565,9 @@ use constant {
 #
 
 use constant {
-    struct_prefixmsg_pack       =>  'CxSiC4',
-    struct_prefixmsg_narg       =>     length 'CxSiC4',  # @@@FIXUP
-    struct_prefixmsg_len        =>     8,   # == 1+1+2+4
+    struct_prefixmsg_pack       =>  'CxSiCCCC',
+    struct_prefixmsg_narg       =>     7,
+    struct_prefixmsg_len        =>    12,   # == 1+1+2+4+1+1+1+1
 };
 
     #   struct prefixmsg {
@@ -553,13 +591,14 @@ use constant {
 
 
 {
-my @prefix_family_names = qw( unspec address cacheinfo );
-sub PREFIX_FAMILY_to_name($) { my $c = $_[0]; my $n = $prefix_family_names[$c] if $c >= 0; return $n // "code#$c"; }
+my @names = qw( unspec address cacheinfo );
+sub PREFIX_FAMILY_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub PREFIX_FAMILY_to_name($) { return &PREFIX_FAMILY_to_label // "code#$_[0]" }
 }
 use constant {
     struct_prefix_cacheinfo_pack    =>  'LL',
-    struct_prefix_cacheinfo_narg    =>     length 'LL',  # @@@FIXUP
-    struct_prefix_cacheinfo_len     =>     8,
+    struct_prefix_cacheinfo_narg    =>     2,
+    struct_prefix_cacheinfo_len     =>     8,   # == 4+4
 };
     #   struct prefix_cacheinfo {
     #        uint32_t   preferred_time;
@@ -573,8 +612,8 @@ use constant {
 
 use constant {
     struct_tcmsg_pack           => 'CCSix![L]LLL',
-    struct_tcmsg_narg           =>     length 'CCSix![L]LLL',  # @@@FIXUP
-    struct_tcmsg_len            =>    20, # TODO: Check
+    struct_tcmsg_narg           =>     7,
+    struct_tcmsg_len            =>    20,   # == 1+1+2+4+4+4+4
 };
     #   struct tcmsg {
     #       unsigned char      tcm_family;
@@ -601,8 +640,9 @@ use constant {
 };
 
 {
-my @tca_names = qw( unspec kind options stats xstats rate fcnt stats2 stab );
-sub TCA_to_name($) { my $c = $_[0]; my $n = $tca_names[$c] if $c >= 0; return $n // "code#$c"; }
+my @names = qw( unspec kind options stats xstats rate fcnt stats2 stab );
+sub TCA_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub TCA_to_name($) { return &TCA_to_label // "code#$_[0]" }
 }
 
 #define TCA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct tcmsg))))
@@ -614,7 +654,7 @@ sub TCA_to_name($) { my $c = $_[0]; my $n = $tca_names[$c] if $c >= 0; return $n
 
 use constant {
     struct_nduseroptmsg_pack    => 'CxSiCCSI',
-    struct_nduseroptmsg_narg    =>     length 'CxSiCCSI',  # @@@FIXUP
+    struct_nduseroptmsg_narg    =>     7,
     struct_nduseroptmsg_len     =>    16,
 };
 
@@ -638,8 +678,9 @@ use constant {
 };
 
 {
-my @nd_user_opt_names = qw( unspec srcaddr );
-sub NDUSEROPT_to_name($) { my $c = $_[0]; my $n = $nd_user_opt_names[$c] if $c >= 0; return $n // "code#$c"; }
+my @names = qw( unspec srcaddr );
+sub NDUSEROPT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub NDUSEROPT_to_name($) { return &NDUSEROPT_to_label // "code#$_[0]" }
 }
 
 # RTnetlink multicast groups - backwards compatibility for userspace
@@ -703,7 +744,7 @@ use constant {
 # TC action piece
 use constant {
     struct_tcamsg_pack  => 'Cx![L]',
-    struct_tcamsg_narg  =>     length 'Cx![L]',  # @@@FIXUP
+    struct_tcamsg_narg  =>     1,
     struct_tcamsg_len   =>     4,
 };
     #   struct tcamsg {
@@ -730,9 +771,9 @@ use constant {
 };
 
 {
-my @rtext_filter_names = qw( vf brvlan brvlan_comp skip_stats );
+my @names = qw( vf brvlan brvlan_comp skip_stats );
 sub RTEXT_FILTER_to_desc($) {
-    splice @_, 1, 0, \@rtext_filter_names;
+    splice @_, 1, 0, \@names;
     goto &Linux::Syscalls::_bits_to_desc;
 }
 }
@@ -770,17 +811,18 @@ use constant {
 };
 
 {
-my @netlink_names = ( 'ROUTE', undef, qw(
+my @names = ( 'ROUTE', undef, qw(
     USERSOCK FIREWALL SOCK_DIAG NFLOG XFRM SELINUX ISCSI AUDIT
     FIB_LOOKUP CONNECTOR NETFILTER IP6_FW DNRTMSG KOBJECT_UEVENT GENERIC DM
     SCSITRANSPORT ECRYPTFS RDMA CRYPTO SMC
 ));
-sub NETLINK_to_name($) { my $c = $_[0]; my $n = $netlink_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub NETLINK_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub NETLINK_to_name($) { return &NETLINK_to_label // "code#$_[0]" }
 }
 
 use constant {
     struct_sockaddr_nl_pack     =>  'Sx[S]LL',
-    struct_sockaddr_nl_narg     =>     length 'Sx[S]LL',  # @@@FIXUP
+    struct_sockaddr_nl_narg     =>     3,
     struct_sockaddr_nl_len      =>    12,   # 2+2+4+4 == length pack struct_sockaddr_nl_pack, (0) x 3;
 };
 
@@ -793,7 +835,7 @@ use constant {
 
 use constant {
     struct_nlmsghdr_pack        =>  'LSSLL',
-    struct_nlmsghdr_narg        =>  length 'LSSLL',  # @@@FIXUP
+    struct_nlmsghdr_narg        =>     5,
     struct_nlmsghdr_len         =>    16,   # 4+2+2+4+4 == length pack struct_nlmsghdr_pack, (0) x 5;
 };
     #   struct nlmsghdr {
@@ -850,7 +892,7 @@ use constant {
 
 use constant {
     struct_nl_pktinfo_pack      =>   'L',
-    struct_nl_pktinfo_narg      =>   length 'L',  # @@@FIXUP
+    struct_nl_pktinfo_narg      =>     1,
     struct_nl_pktinfo_len       =>     4,   # == length pack struct_nl_pktinfo_pack, 0;
 };
 
@@ -860,7 +902,7 @@ use constant {
 
 use constant {
     struct_nl_mmap_req_pack     =>  'I4',
-    struct_nl_mmap_req_narg     =>  length 'I4',  # @@@FIXUP
+    struct_nl_mmap_req_narg     =>     4,
     struct_nl_mmap_req_len      =>    16,   # == length pack struct_nl_mmap_req_pack, (0) x 4;
 };
 
@@ -905,7 +947,6 @@ use constant {
 # NLMSG_NEXT(nlh,len)   ((len) -= NLMSG_ALIGN((nlh)->nlmsg_len), (struct nlmsghdr *)(((char *)(nlh)) + NLMSG_ALIGN((nlh)->nlmsg_len)))
 # NLMSG_OK(nlh,len)     ((len) >= (int)sizeof(struct nlmsghdr) && (nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && (nlh)->nlmsg_len <= (len))
 # NLMSG_PAYLOAD(nlh,len) ((nlh)->nlmsg_len - NLMSG_SPACE((len)))
-
 
 use constant {
     NLMSG_NOOP                  =>     1,    # Nothing.
@@ -1084,57 +1125,19 @@ our %EXPORT_TAGS = (
         NLM_F_CAPPED
     ]],
 
-    rtm => [qw[
-        RTM_DELACTION
-        RTM_DELADDR
-        RTM_DELADDRLABEL
-        RTM_DELLINK
-        RTM_DELMDB
-        RTM_DELNEIGH
-        RTM_DELNSID
-        RTM_DELQDISC
-        RTM_DELROUTE
-        RTM_DELRULE
-        RTM_DELTCLASS
-        RTM_DELTFILTER
-        RTM_GETACTION
-        RTM_GETADDR
-        RTM_GETADDRLABEL
-        RTM_GETANYCAST
-        RTM_GETDCB
-        RTM_GETLINK
-        RTM_GETMDB
-        RTM_GETMULTICAST
-        RTM_GETNEIGH
-        RTM_GETNEIGHTBL
-        RTM_GETNETCONF
-        RTM_GETNSID
-        RTM_GETQDISC
-        RTM_GETROUTE
-        RTM_GETRULE
-        RTM_GETTCLASS
-        RTM_GETTFILTER
-        RTM_NEWACTION
-        RTM_NEWADDR
-        RTM_NEWADDRLABEL
-        RTM_NEWLINK
-        RTM_NEWMDB
-        RTM_NEWNDUSEROPT
-        RTM_NEWNEIGH
-        RTM_NEWNEIGHTBL
-        RTM_NEWNETCONF
-        RTM_NEWNSID
-        RTM_NEWPREFIX
-        RTM_NEWQDISC
-        RTM_NEWROUTE
-        RTM_NEWRULE
-        RTM_NEWTCLASS
-        RTM_NEWTFILTER
-        RTM_SETDCB
-        RTM_SETLINK
-        RTM_SETNEIGHTBL
+    rtm => [sort qw[
+        RTM_BASE
+        RTM_MAX
+        RTM_OMASK
+        RTM_OSHIFT
+        RTM_TMASK
+        RTM_TMAX
+        RTM_TMIN
+        RTM_TSHIFT
         RTM_to_name
-    ]],
+        ],
+        @RTM_symbols,
+        ],
 
     rtm_flags => [qw[
         RTM_F_CLONED
@@ -1273,7 +1276,8 @@ our %EXPORT_TAGS = (
         PREFIX_ADDRESS
         PREFIX_CACHEINFO
         PREFIX_UNSPEC
-        prefix_family_names
+        PREFIX_FAMILY_to_label
+        PREFIX_FAMILY_to_name
     ]],
 
     tca => [qw[
@@ -1356,17 +1360,19 @@ our %EXPORT_TAGS = (
 );
 
 # Items that don't belong to any group
-our @export_allowed = qw(
+my @export_allowed = qw(
     NET_MAJOR
     RTNETLINK_HAVE_PEERINFO
     TCA_ACT_TAB
 );
 
+{
 my %seen;
 our @EXPORT_OK = grep { ! $seen{$_} }
                     @export_allowed,
                     map { @$_ } values %EXPORT_TAGS;
 
-$EXPORT_TAGS{everything} = \@EXPORT_OK;
+$EXPORT_TAGS{ALL} = \@EXPORT_OK;
+}
 
 1;

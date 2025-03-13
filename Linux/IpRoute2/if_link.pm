@@ -191,7 +191,8 @@ my @names = qw(
     max_mtu prop_list alt_ifname perm_address proto_down_reason parent_dev_name
     parent_dev_bus_name
 );
-sub IFLA_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_to_name($) { return &IFLA_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -203,7 +204,8 @@ use constant {
 
 {
 my @names = qw( unspec mask value );
-sub IFLA_PROTO_DOWN_REASON_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_PROTO_DOWN_REASON_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_PROTO_DOWN_REASON_to_name($) { return &IFLA_PROTO_DOWN_REASON_to_label // "code#$_[0]" }
 }
 
 # The following C macros have no corresponding method in Perl; instead we pack
@@ -220,7 +222,8 @@ use constant {
 
 {
 my @names = qw( unspec conf );
-sub IFLA_INET_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_INET_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_INET_to_name($) { return &IFLA_INET_to_label // "code#$_[0]" }
 }
 
 #
@@ -273,7 +276,8 @@ my @names = qw(
     unspec flags conf stats mcast cacheinfo icmp6stats token addr_gen_mode
     ra_mtu
 );
-sub IFLA_INET6_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_INET6_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_INET6_to_name($) { return &IFLA_INET6_to_label // "code#$_[0]" }
 }
 
 # enum in6_addr_gen_mode
@@ -286,7 +290,8 @@ use constant {
 
 {
 my @names = qw( eui64 none stable_privacy random );
-sub IN6_ADDR_GEN_MODE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IN6_ADDR_GEN_MODE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IN6_ADDR_GEN_MODE_to_name($) { return &IN6_ADDR_GEN_MODE_to_label // "code#$_[0]" }
 }
 
 # Bridge section
@@ -360,7 +365,8 @@ my @names = qw(
     vlan_stats_enabled mcast_stats_enabled mcast_igmp_version mcast_mld_version
     vlan_stats_per_port multi_boolopt mcast_querier_state
 );
-sub IFLA_BR_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_BR_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_BR_to_name($) { return &IFLA_BR_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -379,7 +385,8 @@ use constant {
 
 {
 my @names = qw( unspec hairpin );
-sub BRIDGE_MODE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub BRIDGE_MODE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub BRIDGE_MODE_to_name($) { return &BRIDGE_MODE_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -435,7 +442,8 @@ my @names = qw(
     neigh_suppress isolated backup_port mrp_ring_open mrp_in_open
     mcast_eht_hosts_limit mcast_eht_hosts_cnt
 );
-sub IFLA_BRPORT_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_BRPORT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_BRPORT_to_name($) { return &IFLA_BRPORT_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -463,7 +471,8 @@ use constant {
 my @names = qw(
     unspec kind data xstats slave_kind slave_data
 );
-sub IFLA_INFO_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_INFO_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_INFO_to_name($) { return &IFLA_INFO_to_label // "code#$_[0]" }
 }
 
 # VLAN section
@@ -482,7 +491,8 @@ use constant {
 my @names = qw(
     unspec id flags egress_qos ingress_qos protocol
 );
-sub IFLA_VLAN_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VLAN_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VLAN_to_name($) { return &IFLA_VLAN_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -504,7 +514,8 @@ use constant {
 my @names = qw(
     unspec mapping
 );
-sub IFLA_VLQ_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VLQ_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VLQ_to_name($) { return &IFLA_VLQ_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -535,7 +546,8 @@ my @names = qw(
     unspec mode flags macaddr_mode macaddr macaddr_data macaddr_count
     bc_queue_len bc_queue_len_used
 );
-sub IFLA_MACVLAN_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_MACVLAN_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_MACVLAN_to_name($) { return &IFLA_MACVLAN_to_label // "code#$_[0]" }
 }
 
 # enum macvlan_mode
@@ -561,7 +573,8 @@ use constant {
 
 {
 my @names = qw( add del flush set );
-sub MACVLAN_MACADDR_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub MACVLAN_MACADDR_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub MACVLAN_MACADDR_to_name($) { return &MACVLAN_MACADDR_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -583,7 +596,8 @@ use constant {
 
 {
 my @names = qw( unspec table );
-sub IFLA_VRF_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VRF_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VRF_to_name($) { return &IFLA_VRF_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -594,7 +608,8 @@ use constant {
 
 {
 my @names = qw( unspec table );
-sub IFLA_VRF_PORT_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VRF_PORT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VRF_PORT_to_name($) { return &IFLA_VRF_PORT_to_label // "code#$_[0]" }
 }
 
 # MACSEC section
@@ -623,7 +638,8 @@ my @names = qw(
     unspec sci port icv_len cipher_suite window encoding_sa encrypt protect
     inc_sci es scb replay_protect validation pad offload max
 );
-sub IFLA_MACSEC_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_MACSEC_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_MACSEC_to_name($) { return &IFLA_MACSEC_to_label // "code#$_[0]" }
 }
 
 # XFRM section
@@ -636,7 +652,8 @@ use constant {
 
 {
 my @names = qw( unspec link if_id );
-sub IFLA_XFRM_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_XFRM_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_XFRM_to_name($) { return &IFLA_XFRM_to_label // "code#$_[0]" }
 }
 
 # enum macsec_validation_type
@@ -649,7 +666,8 @@ use constant {
 
 {
 my @names = qw( disabled check strict );
-sub MACSEC_VALIDATE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub MACSEC_VALIDATE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub MACSEC_VALIDATE_to_name($) { return &MACSEC_VALIDATE_to_label // "code#$_[0]" }
 }
 
 # enum macsec_offload
@@ -662,7 +680,8 @@ use constant {
 
 {
 my @names = qw( off phy mac );
-sub MACSEC_OFFLOAD_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub MACSEC_OFFLOAD_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub MACSEC_OFFLOAD_to_name($) { return &MACSEC_OFFLOAD_to_label // "code#$_[0]" }
 }
 
 # IPVLAN section
@@ -675,7 +694,8 @@ use constant {
 
 {
 my @names = qw( unspec mode  flags );
-sub IFLA_IPVLAN_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_IPVLAN_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_IPVLAN_to_name($) { return &IFLA_IPVLAN_to_label // "code#$_[0]" }
 }
 
 #enum ipvlan_mode
@@ -688,7 +708,8 @@ use constant {
 
 {
 my @names = qw( l2 l3 l3s );
-sub IPVLAN_MODE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IPVLAN_MODE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IPVLAN_MODE_to_name($) { return &IPVLAN_MODE_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -752,7 +773,8 @@ my @names = (qw(
 ), (undef) x 3, qw(
     fan_map
 ));
-sub IFLA_VXLAN_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VXLAN_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VXLAN_to_name($) { return &IFLA_VXLAN_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -774,7 +796,8 @@ use constant {
 
 {
 my @names = qw( unset set inherit );
-sub VXLAN_DF_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub VXLAN_DF_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub VXLAN_DF_to_name($) { return &VXLAN_DF_to_label // "code#$_[0]" }
 }
 
 # GENEVE section
@@ -801,7 +824,8 @@ my @names = qw(
     unspec id remote ttl tos port collect_metadata remote6 udp_csum
     udp_zero_csum6_tx udp_zero_csum6_rx label ttl_inherit df
 );
-sub IFLA_GENEVE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_GENEVE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_GENEVE_to_name($) { return &IFLA_GENEVE_to_label // "code#$_[0]" }
 }
 
 # enum ifla_geneve_df
@@ -814,7 +838,8 @@ use constant {
 
 {
 my @names = qw( unset set inherit );
-sub GENEVE_DF_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub GENEVE_DF_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub GENEVE_DF_to_name($) { return &GENEVE_DF_to_label // "code#$_[0]" }
 }
 
 # Bareudp section
@@ -831,7 +856,8 @@ use constant {
 my @names = qw(
     unspec port ethertype srcport_min multiproto_mode
 );
-sub IFLA_BAREUDP_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_BAREUDP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_BAREUDP_to_name($) { return &IFLA_BAREUDP_to_label // "code#$_[0]" }
 }
 
 # PPP section
@@ -843,7 +869,8 @@ use constant {
 
 {
 my @names = qw( unspec dev_fd );
-sub IFLA_PPP_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_PPP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_PPP_to_name($) { return &IFLA_PPP_to_label // "code#$_[0]" }
 }
 
 # GTP section
@@ -856,7 +883,8 @@ use constant {
 
 {
 my @names = qw( ggsn sgsn );
-sub GTP_ROLE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub GTP_ROLE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub GTP_ROLE_to_name($) { return &GTP_ROLE_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -870,7 +898,8 @@ use constant {
 
 {
 my @names = qw( unspec fd0 fd1 pdp_hashsize role );
-sub IFLA_GTP_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_GTP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_GTP_to_name($) { return &IFLA_GTP_to_label // "code#$_[0]" }
 }
 
 # Bonding section
@@ -918,7 +947,8 @@ my @names = qw(
     ad_actor_sys_prio ad_user_port_key ad_actor_system tlb_dynamic_lb
     peer_notif_delay ad_lacp_active
 );
-sub IFLA_BOND_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_BOND_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_BOND_to_name($) { return &IFLA_BOND_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -935,7 +965,8 @@ use constant {
 my @names = qw(
     unspec aggregator num_ports actor_key partner_key partner_mac
 );
-sub IFLA_BOND_AD_INFO_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_BOND_AD_INFO_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_BOND_AD_INFO_to_name($) { return &IFLA_BOND_AD_INFO_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -956,7 +987,8 @@ my @names = qw(
     unspec state mii_status link_failure_count perm_hwaddr queue_id
     ad_aggregator_id ad_actor_oper_port_state ad_partner_oper_port_state
 );
-sub IFLA_BOND_SLAVE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_BOND_SLAVE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_BOND_SLAVE_to_name($) { return &IFLA_BOND_SLAVE_to_label // "code#$_[0]" }
 }
 
 # SR-IOV virtual function management section
@@ -969,7 +1001,8 @@ use constant {
 
 {
 my @names = qw( unspec info );
-sub IFLA_VF_INFO_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VF_INFO_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VF_INFO_to_name($) { return &IFLA_VF_INFO_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -995,7 +1028,8 @@ my @names = qw(
     unspec mac vlan tx_rate spoofchk link_state rate rss_query_en stats trust
     ib_node_guid ib_port_guid vlan_list broadcast
 );
-sub IFLA_VF_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VF_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VF_to_name($) { return &IFLA_VF_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1033,7 +1067,8 @@ use constant {
 
 {
 my @names = qw( unspec info );
-sub IFLA_VF_VLAN_INFO_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VF_VLAN_INFO_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VF_VLAN_INFO_to_name($) { return &IFLA_VF_VLAN_INFO_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1102,7 +1137,8 @@ use constant {
 
 {
 my @names = qw( auto enable disable );
-sub IFLA_VF_LINK_STATE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VF_LINK_STATE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VF_LINK_STATE_to_name($) { return &IFLA_VF_LINK_STATE_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1143,7 +1179,8 @@ my @names = qw(
     rx_packets tx_packets rx_bytes tx_bytes broadcast multicast pad rx_dropped
     tx_dropped
 );
-sub IFLA_VF_STATS_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VF_STATS_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VF_STATS_to_name($) { return &IFLA_VF_STATS_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1180,7 +1217,8 @@ use constant {
 
 {
 my @names = qw( unspec port );
-sub IFLA_VF_PORT_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_VF_PORT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_VF_PORT_to_name($) { return &IFLA_VF_PORT_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1199,7 +1237,8 @@ use constant {
 my @names = qw(
     unspec vf profile vsi_type instance_uuid host_uuid request response
 );
-sub IFLA_PORT_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_PORT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_PORT_to_name($) { return &IFLA_PORT_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1219,7 +1258,8 @@ use constant {
 my @names = qw(
     preassociate preassociate_rr associate disassociate
 );
-sub PORT_REQUEST_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub PORT_REQUEST_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub PORT_REQUEST_to_name($) { return &PORT_REQUEST_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1247,7 +1287,8 @@ my @names = (qw(
     profile_success profile_inprogress profile_invalid profile_badstate
     profile_insufficient_resources profile_error
 ));
-sub PORT_RESPONSE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub PORT_RESPONSE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub PORT_RESPONSE_to_name($) { return &PORT_RESPONSE_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1274,7 +1315,8 @@ use constant {
 
 {
 my @names = qw( unspec pkey mode umcast );
-sub IFLA_IPOIB_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_IPOIB_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_IPOIB_to_name($) { return &IFLA_IPOIB_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1284,7 +1326,8 @@ use constant {
 
 {
 my @names = qw( datagram connected );
-sub IPOIB_MODE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IPOIB_MODE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IPOIB_MODE_to_name($) { return &IPOIB_MODE_to_label // "code#$_[0]" }
 }
 
 # HSR/PRP section, both uses same interface
@@ -1298,7 +1341,8 @@ use constant {
 
 {
 my @names = qw( hsr prp max );
-sub HSR_PROTOCOL_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub HSR_PROTOCOL_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub HSR_PROTOCOL_to_name($) { return &HSR_PROTOCOL_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1318,7 +1362,8 @@ my @names = qw(
     unspec slave1 slave2 multicast_spec supervision_addr seq_nr version
     protocol
 );
-sub IFLA_HSR_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_HSR_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_HSR_to_name($) { return &IFLA_HSR_to_label // "code#$_[0]" }
 }
 
 # STATS section
@@ -1353,7 +1398,8 @@ use constant {
 my @names = qw(
     unspec link_64 link_xstats link_xstats_slave link_offload_xstats af_spec
 );
-sub IFLA_STATS_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_STATS_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_STATS_to_name($) { return &IFLA_STATS_to_label // "code#$_[0]" }
 }
 
 sub IFLA_STATS_FILTER_BIT($) { my ($attr) = @_; 1 << $attr - 1 }
@@ -1372,7 +1418,8 @@ use constant {
 
 {
 my @names = qw( unspec bridge bond );
-sub LINK_XSTATS_TYPE_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub LINK_XSTATS_TYPE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub LINK_XSTATS_TYPE_to_name($) { return &LINK_XSTATS_TYPE_to_label // "code#$_[0]" }
 }
 
 # These are stats embedded into IFLA_STATS_LINK_OFFLOAD_XSTATS
@@ -1386,7 +1433,8 @@ use constant {
 my @names = qw(
     unspec cpu_hit
 );
-sub IFLA_OFFLOAD_XSTATS_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_OFFLOAD_XSTATS_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_OFFLOAD_XSTATS_to_name($) { return &IFLA_OFFLOAD_XSTATS_to_label // "code#$_[0]" }
 }
 
 # XDP section
@@ -1417,7 +1465,8 @@ use constant {
 
 {
 my @names = qw( none drv skb hw multi );
-sub XDP_ATTACHED_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub XDP_ATTACHED_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub XDP_ATTACHED_to_name($) { return &XDP_ATTACHED_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1438,7 +1487,8 @@ my @names = qw(
     unspec fd attached flags prog_id drv_prog_id skb_prog_id hw_prog_id
     expected_fd
 );
-sub IFLA_XDP_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_XDP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_XDP_to_name($) { return &IFLA_XDP_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1456,7 +1506,8 @@ my @names = qw(
     none reboot features bonding_failover notify_peers igmp_resend
     bonding_options
 );
-sub IFLA_EVENT_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_EVENT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_EVENT_to_name($) { return &IFLA_EVENT_to_label // "code#$_[0]" }
 }
 
 # tun section
@@ -1480,7 +1531,8 @@ my @names = qw(
     unspec owner group type pi vnet_hdr persist multi_queue num_queues
     num_disabled_queues
 );
-sub IFLA_TUN_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_TUN_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_TUN_to_name($) { return &IFLA_TUN_to_label // "code#$_[0]" }
 }
 
 # rmnet section
@@ -1511,7 +1563,8 @@ use constant {
 
 {
 my @names = qw( unspec mux_id flags );
-sub IFLA_RMNET_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_RMNET_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_RMNET_to_name($) { return &IFLA_RMNET_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1533,7 +1586,8 @@ use constant {
 
 {
 my @names = qw( unspec net );
-sub IFLA_MCTP_to_name($) { my $c = $_[0]; my $n = $names[$c] if $c >= 0; return $n // "code#$c"; }
+sub IFLA_MCTP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_MCTP_to_name($) { return &IFLA_MCTP_to_label // "code#$_[0]" }
 }
 
 our %EXPORT_TAGS = (
@@ -1596,6 +1650,7 @@ our %EXPORT_TAGS = (
         IFLA_WEIGHT
         IFLA_WIRELESS
         IFLA_XDP
+        IFLA_to_label
         IFLA_to_name
     ]],
 
@@ -1603,12 +1658,14 @@ our %EXPORT_TAGS = (
         IFLA_PROTO_DOWN_REASON_MASK
         IFLA_PROTO_DOWN_REASON_UNSPEC
         IFLA_PROTO_DOWN_REASON_VALUE
+        IFLA_PROTO_DOWN_REASON_to_label
         IFLA_PROTO_DOWN_REASON_to_name
     ]],
 
     ifla_inet => [qw[
         IFLA_INET_CONF
         IFLA_INET_UNSPEC
+        IFLA_INET_to_label
         IFLA_INET_to_name
     ]],
 
@@ -1623,6 +1680,7 @@ our %EXPORT_TAGS = (
         IFLA_INET6_STATS
         IFLA_INET6_TOKEN
         IFLA_INET6_UNSPEC
+        IFLA_INET6_to_label
         IFLA_INET6_to_name
     ]],
 
@@ -1631,6 +1689,7 @@ our %EXPORT_TAGS = (
         IN6_ADDR_GEN_MODE_NONE
         IN6_ADDR_GEN_MODE_RANDOM
         IN6_ADDR_GEN_MODE_STABLE_PRIVACY
+        IN6_ADDR_GEN_MODE_to_label
         IN6_ADDR_GEN_MODE_to_name
     ]],
 
@@ -1684,12 +1743,14 @@ our %EXPORT_TAGS = (
         IFLA_BR_VLAN_PROTOCOL
         IFLA_BR_VLAN_STATS_ENABLED
         IFLA_BR_VLAN_STATS_PER_PORT
+        IFLA_BR_to_label
         IFLA_BR_to_name
     ]],
 
     bridge_mode => [qw[
         BRIDGE_MODE_HAIRPIN
         BRIDGE_MODE_UNSPEC
+        BRIDGE_MODE_to_label
         BRIDGE_MODE_to_name
     ]],
 
@@ -1733,6 +1794,7 @@ our %EXPORT_TAGS = (
         IFLA_BRPORT_UNICAST_FLOOD
         IFLA_BRPORT_UNSPEC
         IFLA_BRPORT_VLAN_TUNNEL
+        IFLA_BRPORT_to_label
         IFLA_BRPORT_to_name
     ]],
 
@@ -1743,6 +1805,7 @@ our %EXPORT_TAGS = (
         IFLA_INFO_SLAVE_KIND
         IFLA_INFO_UNSPEC
         IFLA_INFO_XSTATS
+        IFLA_INFO_to_label
         IFLA_INFO_to_name
     ]],
 
@@ -1753,12 +1816,14 @@ our %EXPORT_TAGS = (
         IFLA_VLAN_INGRESS_QOS
         IFLA_VLAN_PROTOCOL
         IFLA_VLAN_UNSPEC
+        IFLA_VLAN_to_label
         IFLA_VLAN_to_name
     ]],
 
     ifla_vlq => [qw[
         IFLA_VLAN_QOS_MAPPING
         IFLA_VLAN_QOS_UNSPEC
+        IFLA_VLQ_to_label
         IFLA_VLQ_to_name
     ]],
 
@@ -1772,6 +1837,7 @@ our %EXPORT_TAGS = (
         IFLA_MACVLAN_MACADDR_MODE
         IFLA_MACVLAN_MODE
         IFLA_MACVLAN_UNSPEC
+        IFLA_MACVLAN_to_label
         IFLA_MACVLAN_to_name
     ]],
 
@@ -1789,6 +1855,7 @@ our %EXPORT_TAGS = (
         MACVLAN_MACADDR_DEL
         MACVLAN_MACADDR_FLUSH
         MACVLAN_MACADDR_SET
+        MACVLAN_MACADDR_to_label
         MACVLAN_MACADDR_to_name
     ]],
 
@@ -1801,12 +1868,14 @@ our %EXPORT_TAGS = (
     ifla_vrf => [qw[
         IFLA_VRF_TABLE
         IFLA_VRF_UNSPEC
+        IFLA_VRF_to_label
         IFLA_VRF_to_name
     ]],
 
     ifla_vrf_port => [qw[
         IFLA_VRF_PORT_TABLE
         IFLA_VRF_PORT_UNSPEC
+        IFLA_VRF_PORT_to_label
         IFLA_VRF_PORT_to_name
     ]],
 
@@ -1827,6 +1896,7 @@ our %EXPORT_TAGS = (
         IFLA_MACSEC_UNSPEC
         IFLA_MACSEC_VALIDATION
         IFLA_MACSEC_WINDOW
+        IFLA_MACSEC_to_label
         IFLA_MACSEC_to_name
     ]],
 
@@ -1834,6 +1904,7 @@ our %EXPORT_TAGS = (
         IFLA_XFRM_IF_ID
         IFLA_XFRM_LINK
         IFLA_XFRM_UNSPEC
+        IFLA_XFRM_to_label
         IFLA_XFRM_to_name
     ]],
 
@@ -1841,6 +1912,7 @@ our %EXPORT_TAGS = (
         MACSEC_VALIDATE_CHECK
         MACSEC_VALIDATE_DISABLED
         MACSEC_VALIDATE_STRICT
+        MACSEC_VALIDATE_to_label
         MACSEC_VALIDATE_to_name
     ]],
 
@@ -1848,6 +1920,7 @@ our %EXPORT_TAGS = (
         MACSEC_OFFLOAD_MAC
         MACSEC_OFFLOAD_OFF
         MACSEC_OFFLOAD_PHY
+        MACSEC_OFFLOAD_to_label
         MACSEC_OFFLOAD_to_name
     ]],
 
@@ -1855,6 +1928,7 @@ our %EXPORT_TAGS = (
         IFLA_IPVLAN_FLAGS
         IFLA_IPVLAN_MODE
         IFLA_IPVLAN_UNSPEC
+        IFLA_IPVLAN_to_label
         IFLA_IPVLAN_to_name
     ]],
 
@@ -1862,6 +1936,7 @@ our %EXPORT_TAGS = (
         IPVLAN_MODE_L2
         IPVLAN_MODE_L3
         IPVLAN_MODE_L3S
+        IPVLAN_MODE_to_label
         IPVLAN_MODE_to_name
     ]],
 
@@ -1904,6 +1979,7 @@ our %EXPORT_TAGS = (
         IFLA_VXLAN_UDP_ZERO_CSUM6_RX
         IFLA_VXLAN_UDP_ZERO_CSUM6_TX
         IFLA_VXLAN_UNSPEC
+        IFLA_VXLAN_to_label
         IFLA_VXLAN_to_name
     ]],
 
@@ -1911,6 +1987,7 @@ our %EXPORT_TAGS = (
         VXLAN_DF_INHERIT
         VXLAN_DF_SET
         VXLAN_DF_UNSET
+        VXLAN_DF_to_label
         VXLAN_DF_to_name
     ]],
 
@@ -1929,6 +2006,7 @@ our %EXPORT_TAGS = (
         IFLA_GENEVE_UDP_ZERO_CSUM6_RX
         IFLA_GENEVE_UDP_ZERO_CSUM6_TX
         IFLA_GENEVE_UNSPEC
+        IFLA_GENEVE_to_label
         IFLA_GENEVE_to_name
     ]],
 
@@ -1936,6 +2014,7 @@ our %EXPORT_TAGS = (
         GENEVE_DF_INHERIT
         GENEVE_DF_SET
         GENEVE_DF_UNSET
+        GENEVE_DF_to_label
         GENEVE_DF_to_name
     ]],
 
@@ -1945,18 +2024,21 @@ our %EXPORT_TAGS = (
         IFLA_BAREUDP_PORT
         IFLA_BAREUDP_SRCPORT_MIN
         IFLA_BAREUDP_UNSPEC
+        IFLA_BAREUDP_to_label
         IFLA_BAREUDP_to_name
     ]],
 
     ifla_ppp => [qw[
         IFLA_PPP_DEV_FD
         IFLA_PPP_UNSPEC
+        IFLA_PPP_to_label
         IFLA_PPP_to_name
     ]],
 
     gtp_role => [qw[
         GTP_ROLE_GGSN
         GTP_ROLE_SGSN
+        GTP_ROLE_to_label
         GTP_ROLE_to_name
     ]],
 
@@ -1966,6 +2048,7 @@ our %EXPORT_TAGS = (
         IFLA_GTP_PDP_HASHSIZE
         IFLA_GTP_ROLE
         IFLA_GTP_UNSPEC
+        IFLA_GTP_to_label
         IFLA_GTP_to_name
     ]],
 
@@ -2000,6 +2083,7 @@ our %EXPORT_TAGS = (
         IFLA_BOND_UPDELAY
         IFLA_BOND_USE_CARRIER
         IFLA_BOND_XMIT_HASH_POLICY
+        IFLA_BOND_to_label
         IFLA_BOND_to_name
     ]],
 
@@ -2010,6 +2094,7 @@ our %EXPORT_TAGS = (
         IFLA_BOND_AD_INFO_PARTNER_KEY
         IFLA_BOND_AD_INFO_PARTNER_MAC
         IFLA_BOND_AD_INFO_UNSPEC
+        IFLA_BOND_AD_INFO_to_label
         IFLA_BOND_AD_INFO_to_name
     ]],
 
@@ -2023,12 +2108,14 @@ our %EXPORT_TAGS = (
         IFLA_BOND_SLAVE_QUEUE_ID
         IFLA_BOND_SLAVE_STATE
         IFLA_BOND_SLAVE_UNSPEC
+        IFLA_BOND_SLAVE_to_label
         IFLA_BOND_SLAVE_to_name
     ]],
 
     ifla_vf_info => [qw[
         IFLA_VF_INFO
         IFLA_VF_INFO_UNSPEC
+        IFLA_VF_INFO_to_label
         IFLA_VF_INFO_to_name
     ]],
 
@@ -2047,12 +2134,14 @@ our %EXPORT_TAGS = (
         IFLA_VF_UNSPEC
         IFLA_VF_VLAN
         IFLA_VF_VLAN_LIST
+        IFLA_VF_to_label
         IFLA_VF_to_name
     ]],
 
     ifla_vf_vlan_info => [qw[
         IFLA_VF_VLAN_INFO
         IFLA_VF_VLAN_INFO_UNSPEC
+        IFLA_VF_VLAN_INFO_to_label
         IFLA_VF_VLAN_INFO_to_name
     ]],
 
@@ -2060,6 +2149,7 @@ our %EXPORT_TAGS = (
         IFLA_VF_LINK_STATE_AUTO
         IFLA_VF_LINK_STATE_DISABLE
         IFLA_VF_LINK_STATE_ENABLE
+        IFLA_VF_LINK_STATE_to_label
         IFLA_VF_LINK_STATE_to_name
     ]],
 
@@ -2073,12 +2163,14 @@ our %EXPORT_TAGS = (
         IFLA_VF_STATS_TX_BYTES
         IFLA_VF_STATS_TX_DROPPED
         IFLA_VF_STATS_TX_PACKETS
+        IFLA_VF_STATS_to_label
         IFLA_VF_STATS_to_name
     ]],
 
     ifla_vf_port => [qw[
         IFLA_VF_PORT
         IFLA_VF_PORT_UNSPEC
+        IFLA_VF_PORT_to_label
         IFLA_VF_PORT_to_name
     ]],
 
@@ -2091,6 +2183,7 @@ our %EXPORT_TAGS = (
         IFLA_PORT_UNSPEC
         IFLA_PORT_VF
         IFLA_PORT_VSI_TYPE
+        IFLA_PORT_to_label
         IFLA_PORT_to_name
     ]],
 
@@ -2105,6 +2198,7 @@ our %EXPORT_TAGS = (
         PORT_REQUEST_DISASSOCIATE
         PORT_REQUEST_PREASSOCIATE
         PORT_REQUEST_PREASSOCIATE_RR
+        PORT_REQUEST_to_label
         PORT_REQUEST_to_name
     ]],
 
@@ -2122,6 +2216,7 @@ our %EXPORT_TAGS = (
         PORT_VDP_RESPONSE_UNUSED_VTID
         PORT_VDP_RESPONSE_VTID_VERSION_VIOALTION
         PORT_VDP_RESPONSE_VTID_VIOLATION
+        PORT_RESPONSE_to_label
         PORT_RESPONSE_to_name
     ]],
 
@@ -2132,6 +2227,7 @@ our %EXPORT_TAGS = (
         PORT_PROFILE_RESPONSE_INSUFFICIENT_RESOURCES
         PORT_PROFILE_RESPONSE_INVALID
         PORT_PROFILE_RESPONSE_SUCCESS
+        PORT_RESPONSE_to_label
         PORT_RESPONSE_to_name
     ]],
 
@@ -2143,6 +2239,7 @@ our %EXPORT_TAGS = (
         PORT_VDP_RESPONSE_UNUSED_VTID
         PORT_VDP_RESPONSE_VTID_VERSION_VIOALTION
         PORT_VDP_RESPONSE_VTID_VIOLATION
+        PORT_RESPONSE_to_label
         PORT_RESPONSE_to_name
     ]],
 
@@ -2151,12 +2248,14 @@ our %EXPORT_TAGS = (
         IFLA_IPOIB_PKEY
         IFLA_IPOIB_UMCAST
         IFLA_IPOIB_UNSPEC
+        IFLA_IPOIB_to_label
         IFLA_IPOIB_to_name
     ]],
 
     ipoib_mode => [qw[
         IPOIB_MODE_CONNECTED
         IPOIB_MODE_DATAGRAM
+        IPOIB_MODE_to_label
         IPOIB_MODE_to_name
     ]],
 
@@ -2164,6 +2263,7 @@ our %EXPORT_TAGS = (
         HSR_PROTOCOL_HSR
         HSR_PROTOCOL_MAX
         HSR_PROTOCOL_PRP
+        HSR_PROTOCOL_to_label
         HSR_PROTOCOL_to_name
     ]],
 
@@ -2176,6 +2276,7 @@ our %EXPORT_TAGS = (
         IFLA_HSR_SUPERVISION_ADDR
         IFLA_HSR_UNSPEC
         IFLA_HSR_VERSION
+        IFLA_HSR_to_label
         IFLA_HSR_to_name
     ]],
 
@@ -2186,6 +2287,7 @@ our %EXPORT_TAGS = (
         IFLA_STATS_LINK_XSTATS
         IFLA_STATS_LINK_XSTATS_SLAVE
         IFLA_STATS_UNSPEC
+        IFLA_STATS_to_label
         IFLA_STATS_to_name
         IFLA_STATS_FILTER_BIT
     ]],
@@ -2194,12 +2296,14 @@ our %EXPORT_TAGS = (
         LINK_XSTATS_TYPE_BOND
         LINK_XSTATS_TYPE_BRIDGE
         LINK_XSTATS_TYPE_UNSPEC
+        LINK_XSTATS_TYPE_to_label
         LINK_XSTATS_TYPE_to_name
     ]],
 
     ifla_offload_xstats => [qw[
         IFLA_OFFLOAD_XSTATS_CPU_HIT
         IFLA_OFFLOAD_XSTATS_UNSPEC
+        IFLA_OFFLOAD_XSTATS_to_label
         IFLA_OFFLOAD_XSTATS_to_name
     ]],
 
@@ -2220,6 +2324,7 @@ our %EXPORT_TAGS = (
         XDP_ATTACHED_MULTI
         XDP_ATTACHED_NONE
         XDP_ATTACHED_SKB
+        XDP_ATTACHED_to_label
         XDP_ATTACHED_to_name
     ]],
 
@@ -2233,6 +2338,7 @@ our %EXPORT_TAGS = (
         IFLA_XDP_PROG_ID
         IFLA_XDP_SKB_PROG_ID
         IFLA_XDP_UNSPEC
+        IFLA_XDP_to_label
         IFLA_XDP_to_name
     ]],
 
@@ -2244,6 +2350,7 @@ our %EXPORT_TAGS = (
         IFLA_EVENT_NONE
         IFLA_EVENT_NOTIFY_PEERS
         IFLA_EVENT_REBOOT
+        IFLA_EVENT_to_label
         IFLA_EVENT_to_name
     ]],
 
@@ -2258,6 +2365,7 @@ our %EXPORT_TAGS = (
         IFLA_TUN_TYPE
         IFLA_TUN_UNSPEC
         IFLA_TUN_VNET_HDR
+        IFLA_TUN_to_label
         IFLA_TUN_to_name
     ]],
 
@@ -2275,12 +2383,14 @@ our %EXPORT_TAGS = (
         IFLA_RMNET_FLAGS
         IFLA_RMNET_MUX_ID
         IFLA_RMNET_UNSPEC
+        IFLA_RMNET_to_label
         IFLA_RMNET_to_name
     ]],
 
     ifla_mctp => [qw[
         IFLA_MCTP_NET
         IFLA_MCTP_UNSPEC
+        IFLA_MCTP_to_label
         IFLA_MCTP_to_name
     ]],
 

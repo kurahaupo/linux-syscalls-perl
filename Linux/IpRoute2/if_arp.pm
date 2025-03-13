@@ -97,8 +97,8 @@ use constant {
 };
 
 {
-my @arphrd_names;
-$arphrd_names[eval 'ARPHRD_'.uc $_] = $_ for qw(
+my @names;
+$names[eval 'ARPHRD_'.uc $_] = $_ for qw(
     netrom ether eether ax25 pronet chaos ieee802 arcnet appletlk dlci atm
     metricom ieee1394 eui64 infiniband slip cslip slip6 cslip6 rsrvd adapt rose
     x25 hwx25 can mctp ppp hdlc lapb ddcmp rawhdlc rawip tunnel tunnel6 frad
@@ -107,7 +107,8 @@ $arphrd_names[eval 'ARPHRD_'.uc $_] = $_ for qw(
     ieee80211_radiotap ieee802154 ieee802154_monitor phonet phonet_pipe caif
     ip6gre netlink 6lowpan vsockmon none void
 );
-sub ARPHRD_to_name($) { my $c = $_[0]; my $n = $arphrd_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub ARPHRD_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub ARPHRD_to_name($) { return &ARPHRD_to_label // "code#$_[0]" }
 }
 
 ## ARP protocol opcodes.
@@ -122,11 +123,17 @@ use constant {
 };
 
 {
-my @arpop_names = (
-    undef, qw( request reply rrequest rreply ),
-    undef, undef, undef, qw( inrequest inreply nak )
+my @names = (undef, qw(
+    request
+    reply
+    rrequest
+    rreply ), (undef) x 3, qw(
+    inrequest
+    inreply
+    nak )
 );
-sub ARPOP_to_name($) { my $c = $_[0]; my $n = $arpop_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub ARPOP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub ARPOP_to_name($) { return &ARPOP_to_label // "code#$_[0]" }
 }
 
     ## ARP ioctl request.
@@ -157,9 +164,9 @@ use constant {
 };
 
 {
-my @atf_names = (undef, qw( com perm publ usetrailers netmask dontpub ));
+my @names = (undef, qw( com perm publ usetrailers netmask dontpub ));
 sub ATF_to_desc($) {
-    splice @_, 1, 0, \@atf_names;
+    splice @_, 1, 0, \@names;
     goto &Linux::Syscalls::_bits_to_desc;
 }
 }
@@ -287,6 +294,7 @@ our %EXPORT_TAGS = (
         ARPHRD_VOID
         ARPHRD_VSOCKMON
         ARPHRD_X25
+        ARPHRD_to_label
         ARPHRD_to_name
     ]],
     arpop => [qw[
@@ -297,6 +305,7 @@ our %EXPORT_TAGS = (
         ARPOP_REQUEST
         ARPOP_RREPLY
         ARPOP_RREQUEST
+        ARPOP_to_label
         ARPOP_to_name
     ]],
     atf => [qw[
@@ -334,6 +343,6 @@ our @EXPORT_OK = grep { ! $seen{$_}++ }
                     @export_compat,
                     map { @$_ } values %EXPORT_TAGS;
 
-$EXPORT_TAGS{everything} = \@EXPORT_OK;
+$EXPORT_TAGS{ALL} = \@EXPORT_OK;
 
 1;

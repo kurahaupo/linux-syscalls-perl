@@ -35,6 +35,9 @@ use warnings;
 #          ⎪ message ⎪                     ⎪ message ⎪
 #          ╰─────────╯                     ╰─────────╯
 #
+# There are corresponding diamond hierachies for each message type.
+#
+#
 # Note that the (generic) "request" and "response" classes cannot override
 # methods in the (generic) "message" class because they are to the right of
 # their peer, so they can only add new methods. This is not an obstacle in
@@ -56,27 +59,24 @@ use warnings;
 #     - a method to add attributes
 #     - a method to send to a socket (or file)
 #
-# are used in two ways:
-#   messages    - can
+# These are used in two ways:
+#   messages    - can be sent and received
 #   attributes  - attached to a message or another attribute
 #
 #
-# They provide polymorphic instantiation:
-#   new_by_code
-#   unpack_new  - builds a new object
-#
-#   unpack_new - provide the type-code and the binary data
+# They provide polymorphic instantiation to build a new object:
+#   new_by_code - based on provided code
+#   unpack_new  - based on code unpacked from bytestream
+#   unpack_new  - provide the type-code and the binary data
 
 #
-BEGIN {
-    use Data::Dumper;
-    $Data::Dumper::Useqq = 1;
+
+{
+$Linux::IpRoute2::ShowComposition = 1;
+$Linux::IpRoute2::ShowWithDump = 1;
 }
 
 #   package importable {
-#       # C<use parent I<packagename>;> implicitly does C<use I<packagename> ();>
-#       # to make sure the parent package is actually loaded.
-#       #
 #       # Normally when you “use” a package, it first checks to see if it's already
 #       # loaded, and if not, looks for a filename that's related to its package
 #       # name. If it can't find that file, it simply fails.
@@ -89,7 +89,12 @@ BEGIN {
 #       #
 #       # This mini package makes it easy to work around this obstacle, by simply
 #       # writing
+#       #   use importable;
 #       # at the top of your package.
+#       #
+#       # In the specific case where C<use parent I<packagename>;> implicitly does
+#       # C<use I<packagename> ();> C<use parent -norequire => I<packagename>;>.
+#
 #       use Carp 'carp', 'croak';
 #
 #       sub import {
@@ -116,7 +121,6 @@ package Linux::IpRoute2::message {
     # Base class for all NETLINK messages
 
     use Carp qw( confess cluck );
-    use Data::Dumper;
 
     use Linux::Syscalls qw( MSG_to_desc );
     use Linux::IpRoute2::rtnetlink qw( struct_nlmsghdr_len );
@@ -160,7 +164,11 @@ package Linux::IpRoute2::message {
         printf "   data [%s]\n",                          defined $data ? unpack("H*", $data) : "(none)";
         printf "   ctrl [%s]\n",                          defined $ctrl ? unpack("H*", $ctrl) : "(none)";
         printf " %6s [%s]\n", $dirn ? "from" : "to", defined $name ? unpack("H*", $name) : "(unspecified)";
-        printf "%s\n", Dumper($self);
+        if ($Linux::IpRoute2::ShowWithDump) {
+            require Data::Dumper;
+            my $d = Data::Dumper->new([$self]);
+            print $d->Useqq(1)->Dump, "\n";
+        }
         printf "  EXTRA ARG: %s = %s\n", $_, $args{$_} // '(undef)' for sort keys %args;
         printf "\e[m\n";
     }
@@ -185,8 +193,6 @@ package Linux::IpRoute2::message {
 
         use Carp qw( confess cluck );
 
-        use Data::Dumper;
-
         use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
 
         my @attr_pkg_map;
@@ -198,11 +204,11 @@ package Linux::IpRoute2::message {
             package Linux::IpRoute2::fragment::link::_unknown {}
 
             use Carp 'croak';
-            use Linux::IpRoute2::if_link qw( IFLA_to_name IFLA_MAX );
+            use Linux::IpRoute2::if_link qw( IFLA_to_label IFLA_to_name IFLA_MAX );
 
             BEGIN {
                 for my $ifla ( 0 .. IFLA_MAX ) {
-                    my $cnam = IFLA_to_name($ifla) // next;
+                    my $cnam = IFLA_to_label($ifla) // next;
                     next unless $cnam && $cnam =~ /^\w+$/;
 
                     my $rpkg = 'Linux::IpRoute2::fragment::link::'.$cnam;
@@ -245,6 +251,7 @@ package Linux::IpRoute2::message {
                 my ($self) = @_;
                 my $res = pack 'x![S]S' . $self->packpat, $self->code, @$self;
                 substr($res, 0, 2) = pack 'S', length $res;
+                warn __PACKAGE__."::getpack(@_) => ".unpack "H*", $res;
                 return $res;
             }
             package Linux::IpRoute2::fragment::link::_unknown {
@@ -314,11 +321,11 @@ package Linux::IpRoute2::message {
                 use constant packpat => '(S2)*';
                 my @xdp_attr_pkg_map;
                 package Linux::IpRoute2::fragment::link::xdp::_base {
-                    use  Linux::IpRoute2::if_link qw( IFLA_XDP_MAX IFLA_XDP_to_name );
+                    use  Linux::IpRoute2::if_link qw( IFLA_XDP_MAX IFLA_XDP_to_label );
 
                     BEGIN {
                         for my $xdp ( 0 .. IFLA_XDP_MAX ) {
-                            my $cnam = IFLA_XDP_to_name($xdp) // next;
+                            my $cnam = IFLA_XDP_to_label($xdp) // next;
                             next unless $cnam && $cnam =~ /^\w+$/;
 
                             my $rpkg = 'Linux::IpRoute2::fragment::link::xdp::'.$cnam;
@@ -349,6 +356,7 @@ package Linux::IpRoute2::message {
                         my ($self) = @_;
                         my $res = pack 'x![S]S' . $self->packpat, @$self;
                         substr($res, 0, 2) = pack 'S', length $res;
+                        warn __PACKAGE__."::getpack(@_) => ".unpack "H*", $res;
                         return $res;
                     }
                 }
@@ -379,6 +387,7 @@ package Linux::IpRoute2::message {
                 }
 
                 sub getpack {
+                    die __PACKAGE__."::getpack(@_) => UNIMPLEMENTED "; #.unpack "H*", $res;
                 }
 
                 sub xdp {
@@ -454,60 +463,32 @@ package Linux::IpRoute2::message {
     use Linux::IpRoute2::rtnetlink qw( :rtm );
 
     my @unpack_director;
-    $unpack_director[RTM_NEWLINK]       = Linux::IpRoute2::message::link::;
-    $unpack_director[RTM_DELLINK]       = Linux::IpRoute2::message::link::;
-    $unpack_director[RTM_GETLINK]       = Linux::IpRoute2::message::link::;
-    $unpack_director[RTM_SETLINK]       = Linux::IpRoute2::message::link::;
-    $unpack_director[RTM_NEWADDR]       = Linux::IpRoute2::message::addr::;
-    $unpack_director[RTM_DELADDR]       = Linux::IpRoute2::message::addr::;
-    $unpack_director[RTM_GETADDR]       = Linux::IpRoute2::message::addr::;
-    $unpack_director[RTM_NEWROUTE]      = Linux::IpRoute2::message::route::;
-    $unpack_director[RTM_DELROUTE]      = Linux::IpRoute2::message::route::;
-    $unpack_director[RTM_GETROUTE]      = Linux::IpRoute2::message::route::;
-    $unpack_director[RTM_NEWNEIGH]      = Linux::IpRoute2::message::neigh::;
-    $unpack_director[RTM_DELNEIGH]      = Linux::IpRoute2::message::neigh::;
-    $unpack_director[RTM_GETNEIGH]      = Linux::IpRoute2::message::neigh::;
-    $unpack_director[RTM_NEWRULE]       = Linux::IpRoute2::message::rule::;
-    $unpack_director[RTM_DELRULE]       = Linux::IpRoute2::message::rule::;
-    $unpack_director[RTM_GETRULE]       = Linux::IpRoute2::message::rule::;
-    $unpack_director[RTM_NEWQDISC]      = Linux::IpRoute2::message::qdisc::;
-    $unpack_director[RTM_DELQDISC]      = Linux::IpRoute2::message::qdisc::;
-    $unpack_director[RTM_GETQDISC]      = Linux::IpRoute2::message::qdisc::;
-    $unpack_director[RTM_NEWTCLASS]     = Linux::IpRoute2::message::tclass::;
-    $unpack_director[RTM_DELTCLASS]     = Linux::IpRoute2::message::tclass::;
-    $unpack_director[RTM_GETTCLASS]     = Linux::IpRoute2::message::tclass::;
-    $unpack_director[RTM_NEWTFILTER]    = Linux::IpRoute2::message::tfilter::;
-    $unpack_director[RTM_DELTFILTER]    = Linux::IpRoute2::message::tfilter::;
-    $unpack_director[RTM_GETTFILTER]    = Linux::IpRoute2::message::tfilter::;
-    $unpack_director[RTM_NEWACTION]     = Linux::IpRoute2::message::action::;
-    $unpack_director[RTM_DELACTION]     = Linux::IpRoute2::message::action::;
-    $unpack_director[RTM_GETACTION]     = Linux::IpRoute2::message::action::;
-    $unpack_director[RTM_NEWPREFIX]     = Linux::IpRoute2::message::prefix::;
-    $unpack_director[RTM_GETMULTICAST]  = Linux::IpRoute2::message::multicast::;
-    $unpack_director[RTM_GETANYCAST]    = Linux::IpRoute2::message::anycast::;
-    $unpack_director[RTM_NEWNEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
-    $unpack_director[RTM_GETNEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
-    $unpack_director[RTM_SETNEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
-    $unpack_director[RTM_NEWNDUSEROPT]  = Linux::IpRoute2::message::nduseropt::;
-    $unpack_director[RTM_NEWADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
-    $unpack_director[RTM_DELADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
-    $unpack_director[RTM_GETADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
-    $unpack_director[RTM_GETDCB]        = Linux::IpRoute2::message::dcb::;
-    $unpack_director[RTM_SETDCB]        = Linux::IpRoute2::message::dcb::;
-    $unpack_director[RTM_NEWNETCONF]    = Linux::IpRoute2::message::netconf::;
-    $unpack_director[RTM_GETNETCONF]    = Linux::IpRoute2::message::netconf::;
-    $unpack_director[RTM_NEWMDB]        = Linux::IpRoute2::message::mdb::;
-    $unpack_director[RTM_DELMDB]        = Linux::IpRoute2::message::mdb::;
-    $unpack_director[RTM_GETMDB]        = Linux::IpRoute2::message::mdb::;
-    $unpack_director[RTM_NEWNSID]       = Linux::IpRoute2::message::nsid::;
-    $unpack_director[RTM_DELNSID]       = Linux::IpRoute2::message::nsid::;
-    $unpack_director[RTM_GETNSID]       = Linux::IpRoute2::message::nsid::;
+    $unpack_director[RTM_LINK]       = Linux::IpRoute2::message::link::;
+    $unpack_director[RTM_ADDR]       = Linux::IpRoute2::message::addr::;
+    $unpack_director[RTM_ROUTE]      = Linux::IpRoute2::message::route::;
+    $unpack_director[RTM_NEIGH]      = Linux::IpRoute2::message::neigh::;
+    $unpack_director[RTM_RULE]       = Linux::IpRoute2::message::rule::;
+    $unpack_director[RTM_QDISC]      = Linux::IpRoute2::message::qdisc::;
+    $unpack_director[RTM_TCLASS]     = Linux::IpRoute2::message::tclass::;
+    $unpack_director[RTM_TFILTER]    = Linux::IpRoute2::message::tfilter::;
+    $unpack_director[RTM_ACTION]     = Linux::IpRoute2::message::action::;
+    $unpack_director[RTM_PREFIX]     = Linux::IpRoute2::message::prefix::;
+    $unpack_director[RTM_MULTICAST]  = Linux::IpRoute2::message::multicast::;
+    $unpack_director[RTM_ANYCAST]    = Linux::IpRoute2::message::anycast::;
+    $unpack_director[RTM_NEIGHTBL]   = Linux::IpRoute2::message::neightbl::;
+    $unpack_director[RTM_NDUSEROPT]  = Linux::IpRoute2::message::nduseropt::;
+    $unpack_director[RTM_ADDRLABEL]  = Linux::IpRoute2::message::addrlabel::;
+    $unpack_director[RTM_DCB]        = Linux::IpRoute2::message::dcb::;
+    $unpack_director[RTM_NETCONF]    = Linux::IpRoute2::message::netconf::;
+    $unpack_director[RTM_MDB]        = Linux::IpRoute2::message::mdb::;
+    $unpack_director[RTM_NSID]       = Linux::IpRoute2::message::nsid::;
 
     sub _rebless {
         my $self = shift;
         my $code = shift // $self->{code} // return;
-        my $class = $unpack_director[$code] || return;
-        warn "Changing object class from ".ref($self)." to $class";
+        my $type = $code >> RTM_TSHIFT;
+        $type >= RTM_TMIN && $type <= RTM_TMAX || return;
+        my $class = $unpack_director[$type] || return;
         bless $self, $class;
     }
 }
@@ -516,7 +497,6 @@ package Linux::IpRoute2::request {
     use parent -norequire, Linux::IpRoute2::message::;
 
     use Carp 'confess';
-    use Data::Dumper;
     use POSIX 'EMSGSIZE';
 
     sub start {
@@ -552,7 +532,7 @@ package Linux::IpRoute2::request {
                 errno   => ($! = EMSGSIZE), # 90 - message too long
                 mlen    => $mlen,
                 rlen    => $rlen,
-                reason  => 'returned value does not match requested messages size',
+                reason  => 'returned value does not match requested message size',
             };
             return;
         }
@@ -564,7 +544,6 @@ package Linux::IpRoute2::request {
                    Linux::IpRoute2::message::link::,
                    Linux::IpRoute2::request::;
         use Carp 'confess';
-        use Data::Dumper;
         use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST
                                            struct_ifinfomsg_pack
                                            struct_nlmsghdr_pack );
@@ -579,8 +558,12 @@ package Linux::IpRoute2::request {
         sub add_ifla {
             my $self = shift;
             my $opt = Linux::IpRoute2::fragment::link::->new_by_code(@_);
-            warn "Adding option $opt\n"
-                ."\t".Dumper($opt)."";
+            if ($Linux::IpRoute2::ShowComposition) {
+                require Data::Dumper;
+                my $d = Data::Dumper->new([$opt]);
+                warn "Adding option $opt\n"
+                   . "\t" . $d->Dump;
+            }
             push @{ $self->{options} }, $opt;
           # my ($opt_type, @args) = @_;
           # @@@FIXUP
@@ -592,7 +575,8 @@ package Linux::IpRoute2::request {
         sub getpack($;$$) {
             my ($self, $seq, $pid) = @_;
             my ($code, $flags) = @{ $self->{header} };
-            warn "_pack($self):\t". Dumper($self);
+            my $d = Data::Dumper->new([$self]);
+            warn "getpack($self):\t". $d->Dump;
             my $request = pack struct_nlmsghdr_pack,
                                 0,              # length, to be filled in...
                                 $code,
@@ -607,11 +591,12 @@ package Linux::IpRoute2::request {
             $request = pack '(a*x![L])*',
                             $request,
                             $ifinfomsg,
-                            map { $_->_pack }
+                            map { $_->getpack }
                                 @{ $self->{options} };
 
             # ... now fill in length;  4 == sizeof(uint32_t), where uint32_t is the result of pack 'L'
             substr $request, 0, 4, pack L => length $request;
+            warn __PACKAGE__."::getpack(@_) => ".unpack "H*", $request;
             return $self->{data} = $request;
         }
     }
@@ -622,6 +607,31 @@ package Linux::IpRoute2::response {
 
     use Carp qw( cluck confess );
     use Data::Dumper;
+
+    # Process an in-coming NLM message
+
+    use Linux::IpRoute2::rtnetlink qw( :rtm );
+
+    my @unpack_director;
+    BEGIN {
+        for my $type (qw( link addr route neigh rule qdisc tclass tfilter
+                          action prefix multicast anycast neightbl nduseropt
+                          addrlabel dcb netconf mdb nsid )) {
+            my $tsym = 'RTM_'.uc $type;
+            eval qq{
+                package Linux::IpRoute2::response::$type {
+                    use parent -norequire,
+                                Linux::IpRoute2::message::${type}::,
+                                Linux::IpRoute2::response::;
+                }
+                \$unpack_director[$tsym] = Linux::IpRoute2::response::${type}::;
+            };
+        }
+    };
+
+
+
+
 
     package Linux::IpRoute2::response::link      { use parent -norequire, Linux::IpRoute2::message::link::,      Linux::IpRoute2::response::; }
     package Linux::IpRoute2::response::addr      { use parent -norequire, Linux::IpRoute2::message::addr::,      Linux::IpRoute2::response::; }
@@ -642,65 +652,32 @@ package Linux::IpRoute2::response {
     package Linux::IpRoute2::response::netconf   { use parent -norequire, Linux::IpRoute2::message::netconf::,   Linux::IpRoute2::response::; }
     package Linux::IpRoute2::response::mdb       { use parent -norequire, Linux::IpRoute2::message::mdb::,       Linux::IpRoute2::response::; }
     package Linux::IpRoute2::response::nsid      { use parent -norequire, Linux::IpRoute2::message::nsid::,      Linux::IpRoute2::response::; }
-
-    # Process an in-coming NLM message
-
-    use Linux::IpRoute2::rtnetlink qw( :rtm );
-
-    my @unpack_director;
-    $unpack_director[RTM_NEWLINK]       = Linux::IpRoute2::response::link::;
-    $unpack_director[RTM_DELLINK]       = Linux::IpRoute2::response::link::;
-    $unpack_director[RTM_GETLINK]       = Linux::IpRoute2::response::link::;
-    $unpack_director[RTM_SETLINK]       = Linux::IpRoute2::response::link::;
-    $unpack_director[RTM_NEWADDR]       = Linux::IpRoute2::response::addr::;
-    $unpack_director[RTM_DELADDR]       = Linux::IpRoute2::response::addr::;
-    $unpack_director[RTM_GETADDR]       = Linux::IpRoute2::response::addr::;
-    $unpack_director[RTM_NEWROUTE]      = Linux::IpRoute2::response::route::;
-    $unpack_director[RTM_DELROUTE]      = Linux::IpRoute2::response::route::;
-    $unpack_director[RTM_GETROUTE]      = Linux::IpRoute2::response::route::;
-    $unpack_director[RTM_NEWNEIGH]      = Linux::IpRoute2::response::neigh::;
-    $unpack_director[RTM_DELNEIGH]      = Linux::IpRoute2::response::neigh::;
-    $unpack_director[RTM_GETNEIGH]      = Linux::IpRoute2::response::neigh::;
-    $unpack_director[RTM_NEWRULE]       = Linux::IpRoute2::response::rule::;
-    $unpack_director[RTM_DELRULE]       = Linux::IpRoute2::response::rule::;
-    $unpack_director[RTM_GETRULE]       = Linux::IpRoute2::response::rule::;
-    $unpack_director[RTM_NEWQDISC]      = Linux::IpRoute2::response::qdisc::;
-    $unpack_director[RTM_DELQDISC]      = Linux::IpRoute2::response::qdisc::;
-    $unpack_director[RTM_GETQDISC]      = Linux::IpRoute2::response::qdisc::;
-    $unpack_director[RTM_NEWTCLASS]     = Linux::IpRoute2::response::tclass::;
-    $unpack_director[RTM_DELTCLASS]     = Linux::IpRoute2::response::tclass::;
-    $unpack_director[RTM_GETTCLASS]     = Linux::IpRoute2::response::tclass::;
-    $unpack_director[RTM_NEWTFILTER]    = Linux::IpRoute2::response::tfilter::;
-    $unpack_director[RTM_DELTFILTER]    = Linux::IpRoute2::response::tfilter::;
-    $unpack_director[RTM_GETTFILTER]    = Linux::IpRoute2::response::tfilter::;
-    $unpack_director[RTM_NEWACTION]     = Linux::IpRoute2::response::action::;
-    $unpack_director[RTM_DELACTION]     = Linux::IpRoute2::response::action::;
-    $unpack_director[RTM_GETACTION]     = Linux::IpRoute2::response::action::;
-    $unpack_director[RTM_NEWPREFIX]     = Linux::IpRoute2::response::prefix::;
-    $unpack_director[RTM_GETMULTICAST]  = Linux::IpRoute2::response::multicast::;
-    $unpack_director[RTM_GETANYCAST]    = Linux::IpRoute2::response::anycast::;
-    $unpack_director[RTM_NEWNEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
-    $unpack_director[RTM_GETNEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
-    $unpack_director[RTM_SETNEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
-    $unpack_director[RTM_NEWNDUSEROPT]  = Linux::IpRoute2::response::nduseropt::;
-    $unpack_director[RTM_NEWADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
-    $unpack_director[RTM_DELADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
-    $unpack_director[RTM_GETADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
-    $unpack_director[RTM_GETDCB]        = Linux::IpRoute2::response::dcb::;
-    $unpack_director[RTM_SETDCB]        = Linux::IpRoute2::response::dcb::;
-    $unpack_director[RTM_NEWNETCONF]    = Linux::IpRoute2::response::netconf::;
-    $unpack_director[RTM_GETNETCONF]    = Linux::IpRoute2::response::netconf::;
-    $unpack_director[RTM_NEWMDB]        = Linux::IpRoute2::response::mdb::;
-    $unpack_director[RTM_DELMDB]        = Linux::IpRoute2::response::mdb::;
-    $unpack_director[RTM_GETMDB]        = Linux::IpRoute2::response::mdb::;
-    $unpack_director[RTM_NEWNSID]       = Linux::IpRoute2::response::nsid::;
-    $unpack_director[RTM_DELNSID]       = Linux::IpRoute2::response::nsid::;
-    $unpack_director[RTM_GETNSID]       = Linux::IpRoute2::response::nsid::;
+    $unpack_director[RTM_LINK]       = Linux::IpRoute2::response::link::;
+    $unpack_director[RTM_ADDR]       = Linux::IpRoute2::response::addr::;
+    $unpack_director[RTM_ROUTE]      = Linux::IpRoute2::response::route::;
+    $unpack_director[RTM_NEIGH]      = Linux::IpRoute2::response::neigh::;
+    $unpack_director[RTM_RULE]       = Linux::IpRoute2::response::rule::;
+    $unpack_director[RTM_QDISC]      = Linux::IpRoute2::response::qdisc::;
+    $unpack_director[RTM_TCLASS]     = Linux::IpRoute2::response::tclass::;
+    $unpack_director[RTM_TFILTER]    = Linux::IpRoute2::response::tfilter::;
+    $unpack_director[RTM_ACTION]     = Linux::IpRoute2::response::action::;
+    $unpack_director[RTM_PREFIX]     = Linux::IpRoute2::response::prefix::;
+    $unpack_director[RTM_MULTICAST]  = Linux::IpRoute2::response::multicast::;
+    $unpack_director[RTM_ANYCAST]    = Linux::IpRoute2::response::anycast::;
+    $unpack_director[RTM_NEIGHTBL]   = Linux::IpRoute2::response::neightbl::;
+    $unpack_director[RTM_NDUSEROPT]  = Linux::IpRoute2::response::nduseropt::;
+    $unpack_director[RTM_ADDRLABEL]  = Linux::IpRoute2::response::addrlabel::;
+    $unpack_director[RTM_DCB]        = Linux::IpRoute2::response::dcb::;
+    $unpack_director[RTM_NETCONF]    = Linux::IpRoute2::response::netconf::;
+    $unpack_director[RTM_MDB]        = Linux::IpRoute2::response::mdb::;
+    $unpack_director[RTM_NSID]       = Linux::IpRoute2::response::nsid::;
 
     sub _rebless {
         my $self = shift;
         my $code = shift // $self->{code} // return;
-        my $class = $unpack_director[$code] || return;
+        my $type = $code >> RTM_TSHIFT;
+        $type >= RTM_TMIN && $type <= RTM_TMAX || return;
+        my $class = $unpack_director[$type] || return;
         bless $self, $class;
     }
 
@@ -1092,7 +1069,7 @@ use Exporter 'import';
 our @EXPORT = qw( iprt2_connect );
 
 our %EXPORT_TAGS;
-$EXPORT_TAGS{everything} = \@EXPORT;
+$EXPORT_TAGS{ALL} = \@EXPORT;
 }
 
 1;

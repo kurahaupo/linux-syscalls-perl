@@ -25,7 +25,7 @@ use Exporter 'import';
 
 use constant {
     AF_NETLINK              =>  16,
-    PF_NETLINK              =>  16,
+    PF_NETLINK              =>  16, # synonym
 
     SO_SNDBUF               =>   7,
     SO_RCVBUF               =>   8,
@@ -41,6 +41,7 @@ my @af_names = qw(
     ieee802154 caif alg nfc vsock max
 );
 sub AF_to_name($) { my ($c) = @_; my $n = $af_names[$c] if $c >= 0; return $n // "code#$c"; }
+sub PF_to_name($);
 
 *PF_to_name = \&AF_to_name;     # same map, same code
 
@@ -67,6 +68,6 @@ my %seen;
 our @EXPORT_OK = grep { ! $seen{$_} }
                     map { @$_ } values %EXPORT_TAGS;
 
-$EXPORT_TAGS{everything} = \@EXPORT_OK;
+$EXPORT_TAGS{ALL} = \@EXPORT_OK;
 
 1;
