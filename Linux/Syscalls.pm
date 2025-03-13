@@ -1664,6 +1664,8 @@ use constant {
 # _bits_to_desc should only be used by custom SOMETYPE_to_desc functions, which
 # should each supply the list of names describing the bits in a SOMETYPE value.
 #
+# (This is also used by Linux::IpRoute2)
+#
 sub _bits_to_desc($\@;$) {
     my ($flags, $names, $sep) = @_;
     $flags or return 'none';

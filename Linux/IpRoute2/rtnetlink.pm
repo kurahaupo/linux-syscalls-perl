@@ -35,25 +35,25 @@ use constant {
 my @RTM_types;
 BEGIN {
 @RTM_types = ((undef) x RTM_TMIN, qw(
-                    LINK
-                    ADDR
-                    ROUTE
-                    NEIGH
-                    RULE
-                    QDISC
-                    TCLASS
-                    TFILTER
-                    ACTION
-                    PREFIX
-                    MULTICAST
-                    ANYCAST
-                    NEIGHTBL
-                    NDUSEROPT
-                    ADDRLABEL
-                    DCB
-                    NETCONF
-                    MDB
-                    NSID
+                    link
+                    addr
+                    route
+                    neigh
+                    rule
+                    qdisc
+                    tclass
+                    tfilter
+                    action
+                    prefix
+                    multicast
+                    anycast
+                    neightbl
+                    nduseropt
+                    addrlabel
+                    dcb
+                    netconf
+                    mdb
+                    nsid
                 ));
 }
 
@@ -68,10 +68,10 @@ use constant {
 my @RTM_ops;
 BEGIN {
 @RTM_ops = qw(
-                    NEW
-                    DEL
-                    GET
-                    SET
+                    new
+                    del
+                    get
+                    set
                 );
 }
 
@@ -87,6 +87,7 @@ use constant {
 
 # Define composite symbols like RTM_{NEW,DEL,GET,SET}{LINK,ADDR,ROUTE...NSID}
 my @RTM_op_types;
+my @RTM_symbols;
 {
     # The following magic string limits the list of exported composites to only
     # those defined in /usr/include/linux/rtnetlink.h
@@ -99,21 +100,22 @@ my @RTM_op_types;
             vec($q, $code, 1) || next;
             my $sym = $RTM_ops[$op].$tsym;
             $RTM_op_types[$code] = $sym;
-            $n{'RTM_'.$sym} = $code;
+            $n{'RTM_'.uc $sym} = $code;
         }
-        $n{'RTM_'.$tsym} = $type;
+        $n{'RTM_'.uc $tsym} = $type;
     }
     for my $op (0..$#RTM_ops) {
-        $n{'RTM_'.$RTM_ops[$op]} = $op;
+        $n{'RTM_'.uc $RTM_ops[$op]} = $op;
     }
     constant::->import(\%n);
+    @RTM_symbols = keys %n;
 }
-my @RTM_symbols =
-        grep { no strict 'refs'; $_ && defined &$_ }
-        map { $_ ? "RTM_$_" : () }
-            @RTM_op_types,
-            @RTM_types,
-            @RTM_ops;
+
+sub RTM_op_to_label($) { return $_[0] >= 0 ? $RTM_ops[$_[0]] : () }
+sub RTM_op_to_name($) { return &RTM_op_to_label // "op#$_[0]" }
+
+sub RTM_type_to_label($) { return $_[0] >= 0 ? $RTM_types[$_[0]] : () }
+sub RTM_type_to_name($) { return &RTM_type_to_label // "type#$_[0]" }
 
 sub RTM_to_name($) {
     my ($c) = @_;
@@ -1135,6 +1137,10 @@ our %EXPORT_TAGS = (
         RTM_TMIN
         RTM_TSHIFT
         RTM_to_name
+        RTM_op_to_label
+        RTM_op_to_name
+        RTM_type_to_label
+        RTM_type_to_name
         ],
         @RTM_symbols,
         ],
