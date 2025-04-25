@@ -21,6 +21,9 @@ clean::
 linux-exit-status-test-c: linux-exit-status-test-c.o
 	$(CC) $(CFLAGS) linux-exit-status-test-c.o $(LDFLAGS) -o $@
 
+show_blkdiscard:        show_blkdiscard.o
+	$(CC) $(CFLAGS) show_blkdiscard.o $(LDFLAGS) -o $@
+
 show_dirent_struct:     show_dirent_struct.o
 	$(CC) $(CFLAGS) show_dirent_struct.o $(LDFLAGS) -o $@
 
@@ -50,6 +53,7 @@ getlink.o: getlink.h
 linux-exit-status-test-c.o: linux-exit-status-test-c.c
 log2ceil.o: log2ceil.c
 log2ceil.o: log2ceil.h
+show_blkdiscard.o: show_blkdiscard.c
 show_dirent_struct.o: show_dirent_struct.c
 show_oldkstat_struct.o: die.h
 show_oldkstat_struct.o: getlink.h
