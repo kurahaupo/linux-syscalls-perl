@@ -292,7 +292,7 @@ SCOPE  inline void EndStruct(TK *tr) {
             sxpeek(tr->fieldnames),
             sxpeek(tr->packfmt),
             tr->struct_name,
-            (size_t) tr->struct_size,
+            tr->struct_size,
             sxpeek(tr->extra_perl));
     char const * env = Pbuildenv("\n#   ");
     if (env) {
@@ -336,7 +336,6 @@ SCOPE  inline void EndStruct(TK *tr) {
 # define Fptr(X,E)      Field(Fcommon(X), 0, FM_pointer, #X, E)
 
 /* If all else fails */
-# define Fdefault(X,E)  Fblob2(X,E)
 # define Fblob2(X,E)    Field(Fcommon(X), 1, FM_blob, #X, E)
 # define Fblob(X)       Fblob2(X, "")
 
