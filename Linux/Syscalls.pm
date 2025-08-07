@@ -1409,6 +1409,90 @@ sub fstatat($$;$) {
 
 ################################################################################
 
+use constant {
+    STATX_TYPE              => 0x0001,
+    STATX_MODE              => 0x0002,
+    STATX_NLINK             => 0x0004,
+    STATX_UID               => 0x0008,
+    STATX_GID               => 0x0010,
+    STATX_ATIME             => 0x0020,
+    STATX_MTIME             => 0x0040,
+    STATX_CTIME             => 0x0080,
+    STATX_INO               => 0x0100,
+    STATX_SIZE              => 0x0200,
+    STATX_BLOCKS            => 0x0400,
+    STATX_BASIC_STATS       => 0x07ff,
+    STATX_BTIME             => 0x0800,
+    STATX_ALL               => 0x0fff,
+    STATX_MNT_ID            => 0x1000,
+    STATX_DIOALIGN          => 0x2000,
+};
+
+use constant {
+    STATX_ATTR_COMPRESSED   => 0x000004,
+    STATX_ATTR_IMMUTABLE    => 0x000010,
+    STATX_ATTR_APPEND       => 0x000020,
+    STATX_ATTR_NODUMP       => 0x000040,
+    STATX_ATTR_ENCRYPTED    => 0x000800,
+    STATX_ATTR_AUTOMOUNT    => 0x001000,
+    STATX_ATTR_MOUNT_ROOT   => 0x002000,
+    STATX_ATTR_VERITY       => 0x100000,
+    STATX_ATTR_DAX          => 0x200000,
+};
+
+sub statx($$$$) {
+    my ($dir_fd, $path, $flags, $mask) = @_;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
+    $mask += 0;
+    my $buffer = '\xa5' x 256;  # struct statx
+    state $syscall_id = _get_syscall_id 'statx';
+    my $r = syscall $syscall_id, $dir_fd, $path, $flags, $mask, $buffer;
+    return if $r < 0;
+
+    my ($stx_mask, $stx_blksize, $stx_attributes, $stx_nlink, $stx_uid,
+        $stx_gid, $stx_mode, $stx_ino, $stx_size, $stx_blocks,
+        $stx_attributes_mask, $stx_atime, $stx_atime_nsec,
+        $stx_btime, $stx_btime_nsec, $stx_ctime, $stx_ctime_nsec,
+        $stx_mtime, $stx_mtime_nsec,
+        $stx_rdev_major, $stx_rdev_minor, $stx_dev_major, $stx_dev_minor,
+        $stx_mnt_id, $stx_dio_mem_align, $stx_dio_offset_align) = unpack
+            'LLQLLLSx2QQQQqLx4qLx4qLx4qLx4LLLLQLLx96',
+            $buffer;
+
+    my %res;
+    $res{mode}   = $stx_mode & ~CHMOD_MASK,
+    $res{type}   = $stx_mode >> S_IF_shift if $stx_mask & STATX_TYPE;
+    $res{perms}  = $stx_mode & CHMOD_MASK  if $stx_mask & STATX_MODE;
+    $res{nlink}  = $stx_nlink           if $stx_mask & STATX_NLINK;
+    $res{uid}    = $stx_uid             if $stx_mask & STATX_UID;
+    $res{gid}    = $stx_gid             if $stx_mask & STATX_GID;
+    $res{ino}    = $stx_ino             if $stx_mask & STATX_INO;
+    $res{size}   = $stx_size            if $stx_mask & STATX_SIZE;
+    $res{blocks} = $stx_blocks          if $stx_mask & STATX_BLOCKS;
+    $res{mnt_id} = $stx_mnt_id          if $stx_mask & STATX_MNT_ID;
+    $res{atime}  = _timespec_to_seconds($stx_atime, $stx_atime_nsec) if $stx_mask & STATX_ATIME;
+    $res{mtime}  = _timespec_to_seconds($stx_mtime, $stx_mtime_nsec) if $stx_mask & STATX_MTIME;
+    $res{ctime}  = _timespec_to_seconds($stx_ctime, $stx_ctime_nsec) if $stx_mask & STATX_CTIME;
+    $res{btime}  = _timespec_to_seconds($stx_btime, $stx_btime_nsec) if $stx_mask & STATX_BTIME;
+    $res{dio_mem_align}     = $stx_dio_mem_align,
+    $res{dio_offset_align}  = $stx_dio_offset_align if $stx_mask & STATX_DIOALIGN;
+
+    return \%res;
+}
+_export_ok 'statx';
+_export_tag qw{ statx => statx };
+_export_tag qw{ STATX_MASK_ statx =>
+    STATX_TYPE STATX_MODE STATX_NLINK STATX_UID STATX_GID STATX_ATIME
+    STATX_MTIME STATX_CTIME STATX_INO STATX_SIZE STATX_BLOCKS STATX_BTIME
+    STATX_MNT_ID STATX_DIOALIGN STATX_BASIC_STATS STATX_ALL };
+_export_tag qw{ STATX_ATTR_ statx =>
+    STATX_ATTR_COMPRESSED STATX_ATTR_IMMUTABLE STATX_ATTR_APPEND
+    STATX_ATTR_NODUMP STATX_ATTR_ENCRYPTED STATX_ATTR_AUTOMOUNT
+    STATX_ATTR_MOUNT_ROOT STATX_ATTR_VERITY
+    STATX_ATTR_DAX };
+
+################################################################################
+
 #
 # mkdir but relative to an open dir_fd
 #  pass undef for mode to use 0777

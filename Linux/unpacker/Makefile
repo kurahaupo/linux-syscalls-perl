@@ -30,6 +30,9 @@ show_oldkstat_struct:   show_oldkstat_struct.o getlink.o log2ceil.o show_struct.
 show_stat_struct:       show_stat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_stat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
+show_statx_struct:      show_statx_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
+	$(CC) $(CFLAGS) show_statx_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
+
 show_statvfs_struct:    show_statvfs_struct.o
 	$(CC) $(CFLAGS) show_statvfs_struct.o $(LDFLAGS) -o $@
 
@@ -61,6 +64,12 @@ show_stat_struct.o: show_stat_struct.c
 show_stat_struct.o: show_struct.h
 show_stat_struct.o: sxbuf.h
 show_statvfs_struct.o: show_statvfs_struct.c
+show_statx_struct.o: die.h
+show_statx_struct.o: getlink.h
+show_statx_struct.o: log2ceil.h
+show_statx_struct.o: show_statx_struct.c
+show_statx_struct.o: show_struct.h
+show_statx_struct.o: sxbuf.h
 show_struct.o: die.h
 show_struct.o: log2ceil.h
 show_struct.o: show_struct.c
