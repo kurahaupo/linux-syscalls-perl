@@ -1019,7 +1019,7 @@ sub fchmodat($$$;$) {
 _export_tag qw{ l_ => lchmod };
 sub lchmod($$) {
     my ($path, $perm) = @_;
-    return 0 == fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
+    return fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
@@ -1366,7 +1366,7 @@ sub lstatns($) {
 _export_ok qw{ fstatns };
 sub fstatns($) {
     my ($fd) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'fstat';
     0 == syscall $syscall_id, $fd, $buffer or return;
@@ -1709,7 +1709,7 @@ use constant {
 
 sub recvmsg($;$$$$) {
     my ($fd, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     $flags //= 0;
     $maxmsglen //= 0;   # Useful for PEEK
     my $msg_buf = 'A' x $maxmsglen if $maxmsglen;   # pass NULL if unwanted
@@ -1734,7 +1734,7 @@ sub recvmsg($;$$$$) {
 
 sub sendmsg($$$;$$) {
     my ($fd, $flags, $msg, $ctrl, $name) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     $flags //= 0;
     my $iov = pack iovec_pack, $msg, length($msg);
     my $msghdr = pack msghdr_pack, $name, length($name//''), $iov, 1, $ctrl, length($ctrl//''), $flags;
@@ -1826,7 +1826,7 @@ sub utimensat($$$$;$$) {
 _export_tag qw{ _at => futimesat utimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
-    return 0 == utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
+    return utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1836,8 +1836,8 @@ sub futimesat($$$$) {
 _export_ok qw{ futimens };
 sub futimens($$$) {
     my ($fd, $atime, $mtime) = @_;
-    _map_fd($fd);
-    return 0 == utimensat $fd, undef, $atime, $mtime;
+    _map_fd $fd;
+    return utimensat $fd, undef, $atime, $mtime;
 }
 
 #
@@ -1852,8 +1852,8 @@ sub futimens($$$) {
 _export_ok qw{ futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
-    _map_fd($fd);
-    return 0 == utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
+    _map_fd $fd;
+    return utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
 }
 
 #
@@ -1866,7 +1866,7 @@ sub futimes($$$) {
 _export_ok qw{ utimes };
 sub utimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
+    return utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1879,7 +1879,7 @@ sub utimes($$$) {
 _export_ok qw{ utimens };
 sub utimens($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, 0;
+    return utimensat undef, $path, $atime, $mtime, 0;
 }
 
 #
@@ -1892,7 +1892,7 @@ sub utimens($$$) {
 _export_tag qw{ l_ => lutime };
 sub lutime($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
 }
 
 #
@@ -1905,7 +1905,7 @@ sub lutime($$$) {
 _export_tag qw{ l_ => lutimes };
 sub lutimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
 }
 
 #
@@ -1918,7 +1918,7 @@ sub lutimes($$$) {
 _export_tag qw{ l_ => lutimens };
 sub lutimens($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
@@ -2052,7 +2052,7 @@ package Linux::Syscalls::bless::dirent {
 
 sub getdents($;$$) {
     my ($fd, $bufsize, $options) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     $bufsize ||= getdents_default_bufsize;
     $options //= GDE_DEFAULT;
 
@@ -2119,7 +2119,7 @@ BEGIN { $^C and eval q{
 
 sub old_getdents_do_not_use_this($;$) {
     my ($fd, $bufsize) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     state $syscall_id = _get_syscall_id 'getdents32';   # does not exist in x86_64
     $syscall_id or $! = ENOSYS, return undef;
     $bufsize ||= getdents_default_bufsize;
@@ -2302,7 +2302,7 @@ sub fiemap($;$$) {
     my $buffer = pack( $packfmt, $fm_start, $fm_length, $in_flags, 0xeeeeeeee, $bufcount ) . (  "\xee" x ( $bufcount * fiemap_extent_size ) );
     my $res = ioctl $fd, FS_IOC_FIEMAP, $buffer;
     #my $res = syscall $syscall_id, $fd, $buffer;
-    _map_fd($fd);
+    _map_fd $fd;
     printf STDERR "ioctl(%d, FS_IOC_FIEMAP, [%s]) -> %s\n", $fd, unpack("H*",$buffer), $res // '(undef)';
     $res >= 0 or return;
     my (undef, undef, $out_flags, $fm_mapped_extents ) = unpack fiemap_header_packfmt, $buffer;
