@@ -202,10 +202,11 @@ package Time::Nanosecond::ts {
         return $t->[0] || $t->[1];
     }
 
+    # Use methods rather than direct functions
     use overload
-        'bool'  => \&boolify,
-        '0+'    => \&seconds,   # use base method
-        'int'   => \&_sec,
+        'bool'  => 'boolify',
+        '0+'    => 'seconds',
+        'int'   => '_sec',
         ;
 
 }
