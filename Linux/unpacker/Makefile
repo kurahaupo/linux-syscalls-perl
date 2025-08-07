@@ -33,9 +33,6 @@ show_stat_struct:       show_stat_struct.o getlink.o log2ceil.o show_struct.o sx
 show_statvfs_struct:    show_statvfs_struct.o
 	$(CC) $(CFLAGS) show_statvfs_struct.o $(LDFLAGS) -o $@
 
-show_struct:            show_struct.o
-	$(CC) $(CFLAGS) show_struct.o $(LDFLAGS) -o $@
-
 show_timex_struct:      show_timex_struct.o log2ceil.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_timex_struct.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
