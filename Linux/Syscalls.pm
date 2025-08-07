@@ -96,11 +96,10 @@ package Linux::Syscalls v0.8.0;
 use base 'Exporter';
 
 use Config;
-use Scalar::Util qw( looks_like_number blessed );
-
-use Fcntl qw( S_IFMT );
-use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor uname );
 # Avoid «use Errno qw( E... );» as it results in dup import warnings with perl -Wc
+use Fcntl qw( S_IFMT );
+use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor frexp uname );
+use Scalar::Util qw( looks_like_number blessed );
 
 use constant {
     zero_but_true => '0 but true',
@@ -116,6 +115,8 @@ BEGIN {
     # something that it provides.)
     POSIX->import() if $^C;
 }
+
+# Forward declarations for packages that will be defined later.
 
 package Linux::Syscalls::bless::dirent          { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 package Linux::Syscalls::bless::fiemap_extent   { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
@@ -350,10 +351,18 @@ use constant {
 };
 
 use constant {
-    CHMOD_MASK  => 0xffff & ~( S_IFMT | - S_IFMT ),
+    S_IF_div    => (S_IFMT) &- (S_IFMT),
 };
 
-BEGIN { CHMOD_MASK == 07777 or die "Internal Error; for details read source code" };
+use constant {
+    S_IF_shift  => (frexp(S_IF_div))[1]-1,
+    CHMOD_MASK  => (S_IF_div)-1,
+};
+
+BEGIN {
+    CHMOD_MASK == 07777         or die "Internal error, CHMOD_MASK ≠ 07777"     ."; for details read source ";
+    S_IF_div == 1 << S_IF_shift or die "Internal error, S_IF_div ≠ 1 << S_IF_shift; for details read source ";
+};
 
 ################################################################################
 #
@@ -1214,23 +1223,23 @@ package Linux::Syscalls::bless::stat {
     sub blksize         { $_[0]->[11] }
     sub blocks          { $_[0]->[12] }
 
-    sub _dtype          { $_[0]->[2] >> 12   }  # same as stmode_to_dt
-    sub _perms          { $_[0]->[2] & 07777 }
+    sub _dtype          { $_[0]->[2] >> Linux::Syscalls::S_IF_shift }  # same as stmode_to_dt
+    sub _perms          { $_[0]->[2] &  Linux::Syscalls::CHMOD_MASK }
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
 
     sub _mutable        { my ($st, $in_place) = @_; $st = [ @$st ] if ! $in_place; return bless $st, Linux::Syscalls::bless::stat::mutable::; }
 
     use constant {
-      # DT_UNKNOWN  => 0,
-        DT_FIFO     => 1,   # S_IFIFO  >> 12
-        DT_CHR      => 2,   # S_IFCHR  >> 12
-        DT_DIR      => 4,   # S_IFDIR  >> 12
-      # DT_NAM      => 5,   # S_IFNAM  >> 12
-        DT_BLK      => 6,   # S_IFBLK  >> 12
-        DT_REG      => 8,   # S_IFREG  >> 12
-        DT_LNK      => 10,  # S_IFLNK  >> 12
-        DT_SOCK     => 12,  # S_IFSOCK >> 12
-      # DT_WHT      => 14,  # whiteout; you should never see these entries
+        DT_UNKNOWN  => 0,
+        DT_FIFO     => 1,   # S_IFIFO  >> S_IF_shift,
+        DT_CHR      => 2,   # S_IFCHR  >> S_IF_shift,
+        DT_DIR      => 4,   # S_IFDIR  >> S_IF_shift,
+        DT_NAM      => 5,   # S_IFNAM  >> S_IF_shift,
+        DT_BLK      => 6,   # S_IFBLK  >> S_IF_shift,
+        DT_REG      => 8,   # S_IFREG  >> S_IF_shift,
+        DT_LNK      => 10,  # S_IFLNK  >> S_IF_shift,
+        DT_SOCK     => 12,  # S_IFSOCK >> S_IF_shift,
+        DT_WHT      => 14,  # whiteout; you should never see these entries
     };
 
     sub _is_er { 0444 & $_[0]->_is_eugo_perms } # File is readable by effective uid/gid.
@@ -1338,7 +1347,7 @@ package Linux::Syscalls::bless::stat::mutable {
     sub ctime   :lvalue { $_[0]->[10] }
     sub blocks  :lvalue { $_[0]->[12] }
 
-    sub _setperms       { ($_[0]->[2] &= ~07777) |= ($_[1] & 07777); }
+    sub _setperms       { $_[0]->[2] ^= ($_[0]->[2] ^ $_[1]) & Linux::Syscalls::CHMOD_MASK; }
 
     sub _immutable      { my ($st, $in_place) = @_; $st = [ @$st ] if ! $in_place; return bless $st, Linux::Syscalls::bless::stat::; }
 }
@@ -1982,14 +1991,14 @@ sub lutimens($$$) {
 
 use constant {
     DT_UNKNOWN  => 0,
-    DT_FIFO     => 1,   # S_IFIFO  >> 12
-    DT_CHR      => 2,   # S_IFCHR  >> 12
-    DT_DIR      => 4,   # S_IFDIR  >> 12
-    DT_NAM      => 5,   # S_IFNAM  >> 12
-    DT_BLK      => 6,   # S_IFBLK  >> 12
-    DT_REG      => 8,   # S_IFREG  >> 12
-    DT_LNK      => 10,  # S_IFLNK  >> 12
-    DT_SOCK     => 12,  # S_IFSOCK >> 12
+    DT_FIFO     => 1,   # S_IFIFO  >> S_IF_shift,
+    DT_CHR      => 2,   # S_IFCHR  >> S_IF_shift,
+    DT_DIR      => 4,   # S_IFDIR  >> S_IF_shift,
+    DT_NAM      => 5,   # S_IFNAM  >> S_IF_shift,
+    DT_BLK      => 6,   # S_IFBLK  >> S_IF_shift,
+    DT_REG      => 8,   # S_IFREG  >> S_IF_shift,
+    DT_LNK      => 10,  # S_IFLNK  >> S_IF_shift,
+    DT_SOCK     => 12,  # S_IFSOCK >> S_IF_shift,
     DT_WHT      => 14,  # whiteout; you should never see these entries
 };
 
@@ -2100,8 +2109,8 @@ sub getdents($;$$) {
     return undef;
 }
 
-sub dt_to_stmode($) { $_[0] << 12 }
-sub stmode_to_dt($) { $_[0] >> 12 }
+sub dt_to_stmode($) { $_[0] << S_IF_shift }
+sub stmode_to_dt($) { $_[0] >> S_IF_shift }
 
 _export_tag qw( DT_ dirent  =>  getdents
                                 dt_to_stmode stmode_to_dt
