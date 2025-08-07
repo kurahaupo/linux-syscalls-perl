@@ -24,6 +24,9 @@ linux-exit-status-test-c: linux-exit-status-test-c.o
 show_dirent_struct:     show_dirent_struct.o
 	$(CC) $(CFLAGS) show_dirent_struct.o $(LDFLAGS) -o $@
 
+show_oldkstat_struct:   show_oldkstat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
+	$(CC) $(CFLAGS) show_oldkstat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
+
 show_stat_struct:       show_stat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_stat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
@@ -48,6 +51,12 @@ linux-exit-status-test-c.o: linux-exit-status-test-c.c
 log2ceil.o: log2ceil.c
 log2ceil.o: log2ceil.h
 show_dirent_struct.o: show_dirent_struct.c
+show_oldkstat_struct.o: die.h
+show_oldkstat_struct.o: getlink.h
+show_oldkstat_struct.o: log2ceil.h
+show_oldkstat_struct.o: show_oldkstat_struct.c
+show_oldkstat_struct.o: show_struct.h
+show_oldkstat_struct.o: sxbuf.h
 show_stat_struct.o: die.h
 show_stat_struct.o: getlink.h
 show_stat_struct.o: log2ceil.h
