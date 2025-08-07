@@ -143,27 +143,6 @@ void Pstat64() {
   #endif
 }
 
-void Poldkstat() {
-  #if defined USE_ASM_STAT
-    puts("");
-    #define T struct __old_kernel_stat
-    Begin();
-    F(st_dev);
-    F(st_ino);
-    F(st_mode);
-    F(st_nlink);
-    F(st_uid);
-    F(st_gid);
-    F(st_rdev);
-    F(st_size);
-    F(st_atime);
-    F(st_mtime);
-    F(st_ctime);
-    End();
-    #undef T
-  #endif
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 int main() {
@@ -172,7 +151,6 @@ int main() {
 
     Pstat();
     Pstat64();
-    Poldkstat();
 
     return 0;
 }

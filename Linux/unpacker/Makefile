@@ -24,6 +24,9 @@ clean::
 linux-exit-status-test-c: linux-exit-status-test-c.o
 	$(CC) $(CFLAGS) linux-exit-status-test-c.o $(LDFLAGS) -o $@
 
+show_blkdiscard:        show_blkdiscard.o
+	$(CC) $(CFLAGS) show_blkdiscard.o $(LDFLAGS) -o $@
+
 show_dirent_struct:     show_dirent_struct.o
 	$(CC) $(CFLAGS) show_dirent_struct.o $(LDFLAGS) -o $@
 
@@ -42,14 +45,17 @@ show_ipv6:  show_ipv6.o die.o
 show_msghdr_struct:     show_msghdr_struct.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_msghdr_struct.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
+show_oldkstat_struct:   show_oldkstat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
+	$(CC) $(CFLAGS) show_oldkstat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
+
 show_stat_struct:       show_stat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_stat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
+show_statx_struct:      show_statx_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
+	$(CC) $(CFLAGS) show_statx_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
+
 show_statvfs_struct:    show_statvfs_struct.o
 	$(CC) $(CFLAGS) show_statvfs_struct.o $(LDFLAGS) -o $@
-
-show_struct:            show_struct.o
-	$(CC) $(CFLAGS) show_struct.o $(LDFLAGS) -o $@
 
 show_timex_struct:      show_timex_struct.o log2ceil.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_timex_struct.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
@@ -65,6 +71,7 @@ getlink.o: getlink.h
 linux-exit-status-test-c.o: linux-exit-status-test-c.c
 log2ceil.o: log2ceil.c
 log2ceil.o: log2ceil.h
+show_blkdiscard.o: show_blkdiscard.c
 show_dirent_struct.o: show_dirent_struct.c
 show_if_link.o: die.h
 show_if_link.o: log2ceil.h
@@ -91,6 +98,12 @@ show_msghdr_struct.o: log2ceil.h
 show_msghdr_struct.o: show_msghdr_struct.c
 show_msghdr_struct.o: show_struct.h
 show_msghdr_struct.o: sxbuf.h
+show_oldkstat_struct.o: die.h
+show_oldkstat_struct.o: getlink.h
+show_oldkstat_struct.o: log2ceil.h
+show_oldkstat_struct.o: show_oldkstat_struct.c
+show_oldkstat_struct.o: show_struct.h
+show_oldkstat_struct.o: sxbuf.h
 show_stat_struct.o: die.h
 show_stat_struct.o: getlink.h
 show_stat_struct.o: log2ceil.h
@@ -98,6 +111,12 @@ show_stat_struct.o: show_stat_struct.c
 show_stat_struct.o: show_struct.h
 show_stat_struct.o: sxbuf.h
 show_statvfs_struct.o: show_statvfs_struct.c
+show_statx_struct.o: die.h
+show_statx_struct.o: getlink.h
+show_statx_struct.o: log2ceil.h
+show_statx_struct.o: show_statx_struct.c
+show_statx_struct.o: show_struct.h
+show_statx_struct.o: sxbuf.h
 show_struct.o: die.h
 show_struct.o: log2ceil.h
 show_struct.o: show_struct.c

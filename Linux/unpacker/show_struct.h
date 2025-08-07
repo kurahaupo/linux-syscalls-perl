@@ -1,6 +1,7 @@
 #ifndef DEFINED_show_struct_h
 #define DEFINED_show_struct_h
 
+#include <ctype.h>      /* tolower */
 #include <stdint.h>     /* the [u]int[n]_t types used as selectors for _Generic */
 #include <string.h>     /* strlen */
 
@@ -23,7 +24,7 @@ typedef struct tracking {
     size_t prev_off;
     SX packfmt;
     SX fieldnames;
-    size_t fnw;
+    size_t fnw; /* control line wrapping */
     SX extra_perl;
 } TK;
 
@@ -186,8 +187,8 @@ SCOPE  inline void StartStruct(TK *tr, void *example_record, size_t struct_size,
 
 // perl_unpack_fmt - show Perl's "unpack" formatter
 
-EXTERN inline char const * perl_unpack_fmt(int sz, int pad, int *countp) __attribute__((always_inline)) ;
-SCOPE  inline char const * perl_unpack_fmt(int sz, int pad, int *countp) {
+EXTERN inline char const * perl_unpack_fmt(int sz, int pad, int *countp, bool is_signed) __attribute__((always_inline)) ;
+SCOPE  inline char const * perl_unpack_fmt(int sz, int pad, int *countp, bool is_signed) {
     static char b[10];
     char *p = b;
 
@@ -195,7 +196,6 @@ SCOPE  inline char const * perl_unpack_fmt(int sz, int pad, int *countp) {
     if (sz == 0)
         return "";
 
-    char const cv[4] = "CSLQ";
     char cc;
     if (pad || sz < 0)
         if (sz < 0)
@@ -203,10 +203,13 @@ SCOPE  inline char const * perl_unpack_fmt(int sz, int pad, int *countp) {
         else
             cc = 'x';
     else {
+        static char const cv[4] = "CSLQ";
         int scale = log2ceil(sz, sizeof cv-1);
         sz >>= scale;
         if (countp) *countp = sz;
         cc = cv[scale];
+        if (is_signed)
+            cc = tolower(cc);
     }
     *p++ = cc;
     if (sz > 1)
@@ -219,11 +222,15 @@ SCOPE  inline char const * perl_unpack_fmt(int sz, int pad, int *countp) {
 
 enum { UnlimitedRepeat = (size_t)-1U };
 
-EXTERN inline void Field(TK *tr, size_t off, size_t sz, size_t isz, FMode mode, char const *name, char const * extra) ;
-SCOPE  inline void Field(TK *tr, size_t off, size_t sz, size_t isz, FMode mode, char const *name, char const * extra) {
+EXTERN inline void Field(TK *tr, size_t off, size_t sz,
+                         size_t isz, FMode mode,
+                         char const *name, char const * extra) ;
+SCOPE  inline void Field(TK *tr, size_t off, size_t sz,
+                         size_t isz, FMode mode,
+                         char const *name, char const * extra) {
     if (off != tr->prev_off) {
         int d = (int)off-(int)tr->prev_off;
-        char const * pfmt = perl_unpack_fmt(d, 1, NULL);
+        char const * pfmt = perl_unpack_fmt(d, 1, NULL, false);
         printf("   %+3d   %s\n", d, pfmt);
         sxprintf(tr->packfmt, "%s", pfmt);
     }
@@ -236,7 +243,7 @@ SCOPE  inline void Field(TK *tr, size_t off, size_t sz, size_t isz, FMode mode, 
 
     tr->prev_off = off+sz;
     int count;
-    char const * pfmt = perl_unpack_fmt(isz, 0, &count);
+    char const * pfmt = perl_unpack_fmt(isz, 0, &count, mode == FM_signed);
 
     if (repeat != 1 && strlen(pfmt) != 1)
         sxprintf(tr->packfmt, "(%s)", pfmt);
@@ -264,15 +271,14 @@ SCOPE  inline void Field(TK *tr, size_t off, size_t sz, size_t isz, FMode mode, 
 
     if (count == 2 && mode == FM_struct_timespec) {
         /* atime, mtime, ctime, & variants */
-        tr->fnw += sxprintf(tr->fieldnames, "$%s.sec,$%s.nsec, ", name, name); /**/
+        tr->fnw += sxprintf(tr->fieldnames, "$%1$s,$%1$s_nsec, ", name); /**/
         sxprintf(tr->extra_perl, "my $%1$s = new_timespec($%1$s_1, $%1$1_2);\n", name);
     } else if (count == 2 && mode == FM_struct_timeval) {
         /* atime, mtime, ctime, & variants */
-        tr->fnw += sxprintf(tr->fieldnames, "$%s.sec,$%s.nsec, ", name, name); /**/
+        tr->fnw += sxprintf(tr->fieldnames, "$%1$s,$%1$s_nsec, ", name); /**/
         sxprintf(tr->extra_perl, "my $%1$s = new_timeval($%1$s_1, $%1$s_2);\n", name);
     } else if (count > 1) {
-        int i;
-        for (i = 1 ; i<= count ; ++i)
+        for (int i = 1 ; i<= count ; ++i)
             tr->fnw += sxprintf(tr->fieldnames, "$%s_%d, ", name, i);
     }
     else
@@ -283,17 +289,24 @@ EXTERN inline void EndStruct(TK *tr) ;
 SCOPE  inline void EndStruct(TK *tr) {
     if (tr->struct_size != tr->prev_off) {
         int d = (int)tr->struct_size - (int)tr->prev_off;
-        char const * pfmt = perl_unpack_fmt(d, 1, NULL);
+        char const * pfmt = perl_unpack_fmt(d, 1, NULL, false);
         printf("   %+3d   %s\n", d, pfmt);
         sxprintf(tr->packfmt, "%s", pfmt);
     }
     printf("%6zu }\n", tr->struct_size);
-    printf("BEGIN PERL:\n\nmy (%s) = unpack\n            '%s',\n            $in; \t# %s (%zu bytes)\n%s\n",
-            sxpeek(tr->fieldnames),
-            sxpeek(tr->packfmt),
-            tr->struct_name,
-            tr->struct_size,
-            sxpeek(tr->extra_perl));
+    printf("\n"
+           "# BEGIN PERL:\n\n"
+           "my $buf = '\x55' x %u;  # %s\n"
+           "# ... syscall NR_xxx, ... \\$buf ...\n"
+           "my (%s) = unpack\n"
+           "            '%s',\n"
+           "            $buf;\n"
+           "%s\n",
+           tr->struct_size,
+           tr->struct_name,
+           sxpeek(tr->fieldnames),
+           sxpeek(tr->packfmt),
+           sxpeek(tr->extra_perl));
     char const * env = Pbuildenv("\n#   ");
     if (env) {
         printf("# Build Env:%s\n", env);
@@ -351,6 +364,7 @@ SCOPE  inline void EndStruct(TK *tr) {
                          uint32_t : Fint(X,E),   \
                           int64_t : Fint(X,E),   \
                          uint64_t : Fint(X,E),   \
+                    long long int : Fint(X,E),   \
            long long unsigned int : Fint(X,E),   \
                        __int128_t : Fint(X,E),   \
                       __uint128_t : Fint(X,E),   \
@@ -373,6 +387,7 @@ SCOPE  inline void EndStruct(TK *tr) {
                          uint32_t* : FAint(X,E),   \
                           int64_t* : FAint(X,E),   \
                          uint64_t* : FAint(X,E),   \
+                    long long int* : FAint(X,E),   \
            long long unsigned int* : FAint(X,E),   \
                        __int128_t* : FAint(X,E),   \
                       __uint128_t* : FAint(X,E),   \
@@ -386,5 +401,7 @@ SCOPE  inline void EndStruct(TK *tr) {
  # define FA(X)   FA2(X,"")
 
 //#define field_before(x, y) (offsetof(T,x) < offsetof(T,y))
+
+#define C(K) printf("    %-28s => %#8x,\n", #K, K)
 
 #endif

@@ -96,11 +96,10 @@ package Linux::Syscalls v0.8.0;
 use base 'Exporter';
 
 use Config;
-use Scalar::Util qw( looks_like_number blessed );
-
-use Fcntl qw( S_IFMT );
-use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor uname );
 # Avoid «use Errno qw( E... );» as it results in dup import warnings with perl -Wc
+use Fcntl qw( S_IFMT );
+use POSIX qw( EBADF EFAULT EINVAL ENOSYS floor frexp uname );
+use Scalar::Util qw( looks_like_number blessed );
 
 use constant {
     zero_but_true => '0 but true',
@@ -116,6 +115,8 @@ BEGIN {
     # something that it provides.)
     POSIX->import() if $^C;
 }
+
+# Forward declarations for packages that will be defined later.
 
 package Linux::Syscalls::bless::dirent          { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
 package Linux::Syscalls::bless::fiemap_extent   { BEGIN { $INC{(__PACKAGE__ =~ s#::#/#gr).'.pm'} = __FILE__ } }
@@ -350,10 +351,18 @@ use constant {
 };
 
 use constant {
-    CHMOD_MASK  => 0xffff & ~( S_IFMT | - S_IFMT ),
+    S_IF_div    => (S_IFMT) &- (S_IFMT),
 };
 
-BEGIN { CHMOD_MASK == 07777 or die "Internal Error; for details read source code" };
+use constant {
+    S_IF_shift  => (frexp(S_IF_div))[1]-1,
+    CHMOD_MASK  => (S_IF_div)-1,
+};
+
+BEGIN {
+    CHMOD_MASK == 07777         or die "Internal error, CHMOD_MASK ≠ 07777"     ."; for details read source ";
+    S_IF_div == 1 << S_IF_shift or die "Internal error, S_IF_div ≠ 1 << S_IF_shift; for details read source ";
+};
 
 ################################################################################
 #
@@ -1019,7 +1028,7 @@ sub fchmodat($$$;$) {
 _export_tag qw{ l_ => lchmod };
 sub lchmod($$) {
     my ($path, $perm) = @_;
-    return 0 == fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
+    return fchmodat undef, $path, $perm, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
@@ -1214,23 +1223,23 @@ package Linux::Syscalls::bless::stat {
     sub blksize         { $_[0]->[11] }
     sub blocks          { $_[0]->[12] }
 
-    sub _dtype          { $_[0]->[2] >> 12   }  # same as stmode_to_dt
-    sub _perms          { $_[0]->[2] & 07777 }
+    sub _dtype          { $_[0]->[2] >> Linux::Syscalls::S_IF_shift }  # same as stmode_to_dt
+    sub _perms          { $_[0]->[2] &  Linux::Syscalls::CHMOD_MASK }
     sub _time_res       { $_[0]->[13] }     # returns one of the TIMERES_* values, or undef if unknown
 
     sub _mutable        { my ($st, $in_place) = @_; $st = [ @$st ] if ! $in_place; return bless $st, Linux::Syscalls::bless::stat::mutable::; }
 
     use constant {
-      # DT_UNKNOWN  => 0,
-        DT_FIFO     => 1,   # S_IFIFO  >> 12
-        DT_CHR      => 2,   # S_IFCHR  >> 12
-        DT_DIR      => 4,   # S_IFDIR  >> 12
-      # DT_NAM      => 5,   # S_IFNAM  >> 12
-        DT_BLK      => 6,   # S_IFBLK  >> 12
-        DT_REG      => 8,   # S_IFREG  >> 12
-        DT_LNK      => 10,  # S_IFLNK  >> 12
-        DT_SOCK     => 12,  # S_IFSOCK >> 12
-      # DT_WHT      => 14,  # whiteout; you should never see these entries
+        DT_UNKNOWN  => 0,
+        DT_FIFO     => 1,   # S_IFIFO  >> S_IF_shift,
+        DT_CHR      => 2,   # S_IFCHR  >> S_IF_shift,
+        DT_DIR      => 4,   # S_IFDIR  >> S_IF_shift,
+        DT_NAM      => 5,   # S_IFNAM  >> S_IF_shift,
+        DT_BLK      => 6,   # S_IFBLK  >> S_IF_shift,
+        DT_REG      => 8,   # S_IFREG  >> S_IF_shift,
+        DT_LNK      => 10,  # S_IFLNK  >> S_IF_shift,
+        DT_SOCK     => 12,  # S_IFSOCK >> S_IF_shift,
+        DT_WHT      => 14,  # whiteout; you should never see these entries
     };
 
     sub _is_er { 0444 & $_[0]->_is_eugo_perms } # File is readable by effective uid/gid.
@@ -1338,7 +1347,7 @@ package Linux::Syscalls::bless::stat::mutable {
     sub ctime   :lvalue { $_[0]->[10] }
     sub blocks  :lvalue { $_[0]->[12] }
 
-    sub _setperms       { ($_[0]->[2] &= ~07777) |= ($_[1] & 07777); }
+    sub _setperms       { $_[0]->[2] ^= ($_[0]->[2] ^ $_[1]) & Linux::Syscalls::CHMOD_MASK; }
 
     sub _immutable      { my ($st, $in_place) = @_; $st = [ @$st ] if ! $in_place; return bless $st, Linux::Syscalls::bless::stat::; }
 }
@@ -1366,7 +1375,7 @@ sub lstatns($) {
 _export_ok qw{ fstatns };
 sub fstatns($) {
     my ($fd) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     my $buffer = "\xa5" x 160;
     state $syscall_id = _get_syscall_id 'fstat';
     0 == syscall $syscall_id, $fd, $buffer or return;
@@ -1397,6 +1406,90 @@ sub fstatat($$;$) {
     0 == $r or return;
     return _unpack_stat($buffer);
 }
+
+################################################################################
+
+use constant {
+    STATX_TYPE              => 0x0001,
+    STATX_MODE              => 0x0002,
+    STATX_NLINK             => 0x0004,
+    STATX_UID               => 0x0008,
+    STATX_GID               => 0x0010,
+    STATX_ATIME             => 0x0020,
+    STATX_MTIME             => 0x0040,
+    STATX_CTIME             => 0x0080,
+    STATX_INO               => 0x0100,
+    STATX_SIZE              => 0x0200,
+    STATX_BLOCKS            => 0x0400,
+    STATX_BASIC_STATS       => 0x07ff,
+    STATX_BTIME             => 0x0800,
+    STATX_ALL               => 0x0fff,
+    STATX_MNT_ID            => 0x1000,
+    STATX_DIOALIGN          => 0x2000,
+};
+
+use constant {
+    STATX_ATTR_COMPRESSED   => 0x000004,
+    STATX_ATTR_IMMUTABLE    => 0x000010,
+    STATX_ATTR_APPEND       => 0x000020,
+    STATX_ATTR_NODUMP       => 0x000040,
+    STATX_ATTR_ENCRYPTED    => 0x000800,
+    STATX_ATTR_AUTOMOUNT    => 0x001000,
+    STATX_ATTR_MOUNT_ROOT   => 0x002000,
+    STATX_ATTR_VERITY       => 0x100000,
+    STATX_ATTR_DAX          => 0x200000,
+};
+
+sub statx($$$$) {
+    my ($dir_fd, $path, $flags, $mask) = @_;
+    _resolve_dir_fd_path $dir_fd, $path, $flags or return;
+    $mask += 0;
+    my $buffer = '\xa5' x 256;  # struct statx
+    state $syscall_id = _get_syscall_id 'statx';
+    my $r = syscall $syscall_id, $dir_fd, $path, $flags, $mask, $buffer;
+    return if $r < 0;
+
+    my ($stx_mask, $stx_blksize, $stx_attributes, $stx_nlink, $stx_uid,
+        $stx_gid, $stx_mode, $stx_ino, $stx_size, $stx_blocks,
+        $stx_attributes_mask, $stx_atime, $stx_atime_nsec,
+        $stx_btime, $stx_btime_nsec, $stx_ctime, $stx_ctime_nsec,
+        $stx_mtime, $stx_mtime_nsec,
+        $stx_rdev_major, $stx_rdev_minor, $stx_dev_major, $stx_dev_minor,
+        $stx_mnt_id, $stx_dio_mem_align, $stx_dio_offset_align) = unpack
+            'LLQLLLSx2QQQQqLx4qLx4qLx4qLx4LLLLQLLx96',
+            $buffer;
+
+    my %res;
+    $res{mode}   = $stx_mode & ~CHMOD_MASK,
+    $res{type}   = $stx_mode >> S_IF_shift if $stx_mask & STATX_TYPE;
+    $res{perms}  = $stx_mode & CHMOD_MASK  if $stx_mask & STATX_MODE;
+    $res{nlink}  = $stx_nlink           if $stx_mask & STATX_NLINK;
+    $res{uid}    = $stx_uid             if $stx_mask & STATX_UID;
+    $res{gid}    = $stx_gid             if $stx_mask & STATX_GID;
+    $res{ino}    = $stx_ino             if $stx_mask & STATX_INO;
+    $res{size}   = $stx_size            if $stx_mask & STATX_SIZE;
+    $res{blocks} = $stx_blocks          if $stx_mask & STATX_BLOCKS;
+    $res{mnt_id} = $stx_mnt_id          if $stx_mask & STATX_MNT_ID;
+    $res{atime}  = _timespec_to_seconds($stx_atime, $stx_atime_nsec) if $stx_mask & STATX_ATIME;
+    $res{mtime}  = _timespec_to_seconds($stx_mtime, $stx_mtime_nsec) if $stx_mask & STATX_MTIME;
+    $res{ctime}  = _timespec_to_seconds($stx_ctime, $stx_ctime_nsec) if $stx_mask & STATX_CTIME;
+    $res{btime}  = _timespec_to_seconds($stx_btime, $stx_btime_nsec) if $stx_mask & STATX_BTIME;
+    $res{dio_mem_align}     = $stx_dio_mem_align,
+    $res{dio_offset_align}  = $stx_dio_offset_align if $stx_mask & STATX_DIOALIGN;
+
+    return \%res;
+}
+_export_ok 'statx';
+_export_tag qw{ statx => statx };
+_export_tag qw{ STATX_MASK_ statx =>
+    STATX_TYPE STATX_MODE STATX_NLINK STATX_UID STATX_GID STATX_ATIME
+    STATX_MTIME STATX_CTIME STATX_INO STATX_SIZE STATX_BLOCKS STATX_BTIME
+    STATX_MNT_ID STATX_DIOALIGN STATX_BASIC_STATS STATX_ALL };
+_export_tag qw{ STATX_ATTR_ statx =>
+    STATX_ATTR_COMPRESSED STATX_ATTR_IMMUTABLE STATX_ATTR_APPEND
+    STATX_ATTR_NODUMP STATX_ATTR_ENCRYPTED STATX_ATTR_AUTOMOUNT
+    STATX_ATTR_MOUNT_ROOT STATX_ATTR_VERITY
+    STATX_ATTR_DAX };
 
 ################################################################################
 
@@ -1711,7 +1804,7 @@ use constant {
 
 sub recvmsg($;$$$$) {
     my ($fd, $flags, $maxmsglen, $maxctrllen, $maxnamelen) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     $flags //= 0;
     $maxmsglen //= 0;   # Useful for PEEK
     my $msg_buf = 'A' x $maxmsglen if $maxmsglen;   # pass NULL if unwanted
@@ -1736,7 +1829,7 @@ sub recvmsg($;$$$$) {
 
 sub sendmsg($$$;$$) {
     my ($fd, $flags, $msg, $ctrl, $name) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     $flags //= 0;
     my $iov = pack iovec_pack, $msg, length($msg);
     my $msghdr = pack msghdr_pack, $name, length($name//''), $iov, 1, $ctrl, length($ctrl//''), $flags;
@@ -1828,7 +1921,7 @@ sub utimensat($$$$;$$) {
 _export_tag qw{ _at => futimesat utimesat };
 sub futimesat($$$$) {
     my ($dir_fd, $path, $atime, $mtime) = @_;
-    return 0 == utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
+    return utimensat $dir_fd, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1838,8 +1931,8 @@ sub futimesat($$$$) {
 _export_ok qw{ futimens };
 sub futimens($$$) {
     my ($fd, $atime, $mtime) = @_;
-    _map_fd($fd);
-    return 0 == utimensat $fd, undef, $atime, $mtime;
+    _map_fd $fd;
+    return utimensat $fd, undef, $atime, $mtime;
 }
 
 #
@@ -1854,8 +1947,8 @@ sub futimens($$$) {
 _export_ok qw{ futimes };
 sub futimes($$$) {
     my ($fd, $atime, $mtime) = @_;
-    _map_fd($fd);
-    return 0 == utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
+    _map_fd $fd;
+    return utimensat $fd, undef, $atime, $mtime, undef, TIMERES_MICROSECOND;
 }
 
 #
@@ -1868,7 +1961,7 @@ sub futimes($$$) {
 _export_ok qw{ utimes };
 sub utimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
+    return utimensat undef, $path, $atime, $mtime, 0, TIMERES_MICROSECOND;
 }
 
 #
@@ -1881,7 +1974,7 @@ sub utimes($$$) {
 _export_ok qw{ utimens };
 sub utimens($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, 0;
+    return utimensat undef, $path, $atime, $mtime, 0;
 }
 
 #
@@ -1894,7 +1987,7 @@ sub utimens($$$) {
 _export_tag qw{ l_ => lutime };
 sub lutime($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_SECOND;
 }
 
 #
@@ -1907,7 +2000,7 @@ sub lutime($$$) {
 _export_tag qw{ l_ => lutimes };
 sub lutimes($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW, TIMERES_MICROSECOND;
 }
 
 #
@@ -1920,7 +2013,7 @@ sub lutimes($$$) {
 _export_tag qw{ l_ => lutimens };
 sub lutimens($$$) {
     my ($path, $atime, $mtime) = @_;
-    return 0 == utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
+    return utimensat undef, $path, $atime, $mtime, AT_SYMLINK_NOFOLLOW;
 }
 
 ################################################################################
@@ -1984,14 +2077,14 @@ sub lutimens($$$) {
 
 use constant {
     DT_UNKNOWN  => 0,
-    DT_FIFO     => 1,   # S_IFIFO  >> 12
-    DT_CHR      => 2,   # S_IFCHR  >> 12
-    DT_DIR      => 4,   # S_IFDIR  >> 12
-    DT_NAM      => 5,   # S_IFNAM  >> 12
-    DT_BLK      => 6,   # S_IFBLK  >> 12
-    DT_REG      => 8,   # S_IFREG  >> 12
-    DT_LNK      => 10,  # S_IFLNK  >> 12
-    DT_SOCK     => 12,  # S_IFSOCK >> 12
+    DT_FIFO     => 1,   # S_IFIFO  >> S_IF_shift,
+    DT_CHR      => 2,   # S_IFCHR  >> S_IF_shift,
+    DT_DIR      => 4,   # S_IFDIR  >> S_IF_shift,
+    DT_NAM      => 5,   # S_IFNAM  >> S_IF_shift,
+    DT_BLK      => 6,   # S_IFBLK  >> S_IF_shift,
+    DT_REG      => 8,   # S_IFREG  >> S_IF_shift,
+    DT_LNK      => 10,  # S_IFLNK  >> S_IF_shift,
+    DT_SOCK     => 12,  # S_IFSOCK >> S_IF_shift,
     DT_WHT      => 14,  # whiteout; you should never see these entries
 };
 
@@ -2054,7 +2147,7 @@ package Linux::Syscalls::bless::dirent {
 
 sub getdents($;$$) {
     my ($fd, $bufsize, $options) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     $bufsize ||= getdents_default_bufsize;
     $options //= GDE_DEFAULT;
 
@@ -2102,8 +2195,8 @@ sub getdents($;$$) {
     return undef;
 }
 
-sub dt_to_stmode($) { $_[0] << 12 }
-sub stmode_to_dt($) { $_[0] >> 12 }
+sub dt_to_stmode($) { $_[0] << S_IF_shift }
+sub stmode_to_dt($) { $_[0] >> S_IF_shift }
 
 _export_tag qw( DT_ dirent  =>  getdents
                                 dt_to_stmode stmode_to_dt
@@ -2121,7 +2214,7 @@ BEGIN { $^C and eval q{
 
 sub old_getdents_do_not_use_this($;$) {
     my ($fd, $bufsize) = @_;
-    _map_fd($fd);
+    _map_fd $fd;
     state $syscall_id = _get_syscall_id 'getdents32';   # does not exist in x86_64
     $syscall_id or $! = ENOSYS, return undef;
     $bufsize ||= getdents_default_bufsize;
@@ -2304,7 +2397,7 @@ sub fiemap($;$$) {
     my $buffer = pack( $packfmt, $fm_start, $fm_length, $in_flags, 0xeeeeeeee, $bufcount ) . (  "\xee" x ( $bufcount * fiemap_extent_size ) );
     my $res = ioctl $fd, FS_IOC_FIEMAP, $buffer;
     #my $res = syscall $syscall_id, $fd, $buffer;
-    _map_fd($fd);
+    _map_fd $fd;
     printf STDERR "ioctl(%d, FS_IOC_FIEMAP, [%s]) -> %s\n", $fd, unpack("H*",$buffer), $res // '(undef)';
     $res >= 0 or return;
     my (undef, undef, $out_flags, $fm_mapped_extents ) = unpack fiemap_header_packfmt, $buffer;
