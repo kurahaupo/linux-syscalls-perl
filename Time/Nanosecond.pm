@@ -524,14 +524,14 @@ package Time::Nanosecond::base {
     sub timespec($) {
         my ($t) = @_;
         return $t->_sec, $t->_nsec if wantarray;
-        cluck 'timespec called in non-array context';
+        return [ $t->_sec, $t->_nsec ] if defined wantarray && $t->boolify;
         return;
     }
 
     sub timeval($) {
         my ($t) = @_;
         return $t->_sec, $t->_µsec if wantarray;
-        cluck 'timeval called in non-array context';
+        return [ $t->_sec, $t->_µsec ] if defined wantarray && $t->boolify;
         return;
     }
 
