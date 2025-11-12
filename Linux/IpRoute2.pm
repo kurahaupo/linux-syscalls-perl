@@ -721,9 +721,7 @@ package Linux::IpRoute2::response {
         $self->{port_id}    = $port_id;
 
         _rebless($self, $code);
-        my $how = $self->can('unpack_new');
-        warn "\e[1;41mAttempting unpack\e[m of $self";
-        #warn " using ".(*$how{NAME});
+        warn "\e[1;41mAttempting to unpack\e[m $self";
         $self->unpack_new($body);
         warn " ... \e[1;46mafter unpack\e[m to ".Dumper($self);
 
