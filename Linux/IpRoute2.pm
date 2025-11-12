@@ -461,7 +461,10 @@ package Linux::IpRoute2::message {
             }
 
             sub getpack {
-                die __PACKAGE__."::getpack(@_) => UNIMPLEMENTED "; #.unpack "H*", $res;
+                state %once;
+                my $pkg = __PACKAGE__;
+                warn "${pkg}::getpack(@_) is missing, using fallback 'H*'" if ! $once{$pkg}++;
+                return 'H*';
             }
 
             sub xdp {
