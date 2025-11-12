@@ -25,8 +25,8 @@ use POSIX();
 #
 # * replacements for localtime & gmtime
 #
-# * a replacement for POSIX::strftime that understands additional conversions:
-
+# * a replacement for POSIX::strftime that understands a new %N conversion,
+#   plus fractional precision with the %s, %S, & %T conversions.
 #
 # Values are notionally fixed-point epoch seconds, but with multiple
 # implementations.
@@ -412,6 +412,13 @@ package Time::Nanosecond::ns0 {
 }
 }}}
 
+BEGIN {
+    use Class::Struct qw(struct);
+    struct('Time::Nanosecond::tm' => [
+         map { $_ => '$' } qw{ sec min hour mday mon year wday yday isdst _prec }
+    ]);
+}
+
 package Time::Nanosecond::base {
 
     use Carp qw(cluck);
@@ -524,31 +531,25 @@ package Time::Nanosecond::base {
     sub timespec($) {
         my ($t) = @_;
         return $t->_sec, $t->_nsec if wantarray;
-        cluck 'timespec called in non-array context';
+        return [ $t->_sec, $t->_nsec ] if defined wantarray && $t->boolify;
         return;
-        if (blessed $t && $t->isa(Time::Nanosecond::ts::)) { return $t }
-        return Time::Nanosecond::ts->from_timespec($t->_sec, $t->_nsec);
     }
 
     sub timeval($) {
         my ($t) = @_;
         return $t->_sec, $t->_µsec if wantarray;
-        cluck 'timeval called in non-array context';
+        return [ $t->_sec, $t->_µsec ] if defined wantarray && $t->boolify;
         return;
-        if (blessed $t && $t->isa(Time::Nanosecond::ts::) && $t->_nsec % 1000 == 0) { return $t }
-        return Time::Nanosecond::ts->from_timeval($t->_sec, $t->_µsec);
     }
 
     sub to_timespec($) {
-        my ($t) = @_;
-        return $t->timespec if ! wantarray;
-        return $t->_sec, $t->_nsec;
+        cluck 'Use timespec instead of to_timespec';
+        return $_[0]->timespec;
     }
 
     sub to_timeval($) {
-        my ($t) = @_;
-        return $t->timeval if ! wantarray;
-        return $t->_sec, $t->_µsec;
+        cluck 'Use timeval instead of to_timeval';
+        return $_[0]->timeval;
     }
 
     sub withprecision($$) {
@@ -597,7 +598,7 @@ package Time::Nanosecond::base {
         $r[9] = $t->_prec;
         return @r if wantarray;
         # This bit of magic copied from Time::localtime::populate
-        my $r = Time::tm->new();
+        my $r = Time::Nanosecond::tm->new();
         @$r = @r;
         return $r;
     }
@@ -609,7 +610,7 @@ package Time::Nanosecond::base {
         $r[9] = $t->_prec;
         return @r if wantarray;
         # This bit of magic copied from Time::gmtime::populate
-        my $r = Time::tm->new();
+        my $r = Time::Nanosecond::tm->new();
         @$r = @r;
         return $r;
     }
@@ -628,7 +629,7 @@ package Time::Nanosecond::base {
 
 }
 
-package Time::Nanosecond v0.1.1 {
+package Time::Nanosecond v0.2.0 {
 
     use Scalar::Util qw( blessed );
 
@@ -883,6 +884,13 @@ package Time::Nanosecond v0.1.1 {
     $EXPORT_TAGS{everything} = \@EXPORT_OK;
 }
 
+package Time::Nanosecond::tm {
+    sub strftime {
+        my ($tm, $fmt) = @_;
+        return Time::Nanosecond::strftime($fmt, @$tm);
+    }
+}
+
 1;
 
 =encoding utf8
@@ -899,7 +907,7 @@ however it is difficult to deal with them reliably.
 It might be tempting to express time as a floating-point number of seconds,
 effectively treating time_t as the basic function type. From a functional
 perspective that works quite well, but you discover that the round trip from
-struct timespec to float and back is not lossless:
+struct timespec to float and back is not lossless.
 
 Between 2004 and 2038, time_t values will in the range 1<<30..1<<31 which means
 that to accurately represent nanoseconds, a numeric type with at least 60 bits
@@ -961,7 +969,7 @@ manipulalating the values other than checking for equality. On big-endian CPUs
 you can also do ordering comparisons.
 
 This is not currently implemented, but a future version will provide a
-Time::Nanosecond::ll class (named for the pack format specifier).
+Time::Nanosecond::tl class (named for the pack format specifier L).
 
 =item 6
 Use packed 64-bit struct timespec
@@ -974,7 +982,7 @@ manipulalating the values other than checking for equality. On big-endian CPUs
 you can also do ordering comparisons.
 
 This is not currently implemented, but a future version will provide a
-Time::Nanosecond::qq class (named for the pack format specifier).
+Time::Nanosecond::tq class (named for the pack format specifier Q).
 
 =back
 
@@ -1025,7 +1033,7 @@ NOTE
 
 =pod
 
-Note that the nanoseconds component is always positive, even if the
+Note that the nanoseconds component is always positive or zero, even if the
 whole-seconds component is negative; so values between -1 and 0 are represented
 with seconds==-1.
 
