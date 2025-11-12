@@ -412,6 +412,13 @@ package Time::Nanosecond::ns0 {
 }
 }}}
 
+BEGIN {
+    use Class::Struct qw(struct);
+    struct('Time::Nanosecond::tm' => [
+         map { $_ => '$' } qw{ sec min hour mday mon year wday yday isdst _prec }
+    ]);
+}
+
 package Time::Nanosecond::base {
 
     use Carp qw(cluck);
@@ -591,7 +598,7 @@ package Time::Nanosecond::base {
         $r[9] = $t->_prec;
         return @r if wantarray;
         # This bit of magic copied from Time::localtime::populate
-        my $r = Time::tm->new();
+        my $r = Time::Nanosecond::tm->new();
         @$r = @r;
         return $r;
     }
@@ -603,7 +610,7 @@ package Time::Nanosecond::base {
         $r[9] = $t->_prec;
         return @r if wantarray;
         # This bit of magic copied from Time::gmtime::populate
-        my $r = Time::tm->new();
+        my $r = Time::Nanosecond::tm->new();
         @$r = @r;
         return $r;
     }
@@ -875,6 +882,13 @@ package Time::Nanosecond v0.1.1 {
 
     our %EXPORT_TAGS;
     $EXPORT_TAGS{everything} = \@EXPORT_OK;
+}
+
+package Time::Nanosecond::tm {
+    sub strftime {
+        my ($tm, $fmt) = @_;
+        return Time::Nanosecond::strftime($fmt, @$tm);
+    }
 }
 
 1;
