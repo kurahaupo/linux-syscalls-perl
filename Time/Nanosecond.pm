@@ -526,8 +526,6 @@ package Time::Nanosecond::base {
         return $t->_sec, $t->_nsec if wantarray;
         cluck 'timespec called in non-array context';
         return;
-        if (blessed $t && $t->isa(Time::Nanosecond::ts::)) { return $t }
-        return Time::Nanosecond::ts->from_timespec($t->_sec, $t->_nsec);
     }
 
     sub timeval($) {
@@ -535,20 +533,16 @@ package Time::Nanosecond::base {
         return $t->_sec, $t->_µsec if wantarray;
         cluck 'timeval called in non-array context';
         return;
-        if (blessed $t && $t->isa(Time::Nanosecond::ts::) && $t->_nsec % 1000 == 0) { return $t }
-        return Time::Nanosecond::ts->from_timeval($t->_sec, $t->_µsec);
     }
 
     sub to_timespec($) {
-        my ($t) = @_;
-        return $t->timespec if ! wantarray;
-        return $t->_sec, $t->_nsec;
+        cluck 'Use timespec instead of to_timespec';
+        return $_[0]->timespec;
     }
 
     sub to_timeval($) {
-        my ($t) = @_;
-        return $t->timeval if ! wantarray;
-        return $t->_sec, $t->_µsec;
+        cluck 'Use timeval instead of to_timeval';
+        return $_[0]->timeval;
     }
 
     sub withprecision($$) {
