@@ -950,6 +950,7 @@ sub iprt2_connect_route {
 use Carp qw( confess );
 
 sub TEST {
+    my ($this, $iface_name) = @_;
     use Data::Dumper;
     use Carp qw( confess cluck );
 #   $SIG{__WARN__} = \&cluck;
@@ -959,7 +960,6 @@ sub TEST {
     warn Dumper($self);
 
     my $sendmsg_flags = 0;
-    my $iface_name  = 'eth0';
 
     my $ifi_family  = 0;    # AF_UNSPEC
     my $ifi_type    = 0;    # ARPHRD_*
