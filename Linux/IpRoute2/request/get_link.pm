@@ -46,7 +46,7 @@ sub getpack($;$$) {
         $seq, $pid,
         Data::Dumper->new([$self],['self'])->Indent(0)->Useqq(1)->Dump,
         $code, $flags,
-        ;
+        if $Linux::IpRoute2::ShowComposition;
     my $request = pack struct_nlmsghdr_pack,
                         0,              # length, to be filled in...
                         $code,
@@ -66,7 +66,8 @@ sub getpack($;$$) {
 
     # ... now fill in length;  4 == sizeof(uint32_t), where uint32_t is the result of pack 'L'
     substr $request, 0, 4, pack L => length $request;
-    warn __PACKAGE__."::getpack(@_) => ".unpack "H*", $request;
+    warn __PACKAGE__."::getpack(@_) => ".unpack "H*", $request
+        if $Linux::IpRoute2::ShowComposition;
     return $self->{data} = $request;
 }
 

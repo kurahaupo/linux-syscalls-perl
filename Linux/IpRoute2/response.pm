@@ -5,6 +5,10 @@ use strict;
 use warnings;
 use integer;
 
+no warnings 'once';
+
+use Data::Dumper;
+
 package Linux::IpRoute2::response;
 
 use parent 'Linux::IpRoute2::message::_base';
@@ -40,13 +44,15 @@ sub recv_new {
         ($rlen, $recv_flags, $reply, $recv_ctrl, $recv_from) = $sock->mrecv(MSG_PEEK|MSG_TRUNC, $accept_reply_size, ctrl_size, name_size);
         last if $rlen > 0;
         sleep 0.005;
-        warn "Retrying recvmsg...";
+        warn "Retrying recvmsg..."
+            if $Linux::IpRoute2::ShowConnection;
     }
 
     if (my $expect_reply_from = $opts{sent_to}) {
         $recv_from eq $expect_reply_from
             or warn "recvmsg(PEEK) returned from=[".(unpack 'H*', $recv_from)."]"
-                . " when expecting [".(unpack 'H*', $expect_reply_from)."]";
+                . " when expecting [".(unpack 'H*', $expect_reply_from)."]"
+            if $Linux::IpRoute2::ShowDecomposition;
     }
 
     if ($recv_flags & MSG_TRUNC) {
@@ -60,12 +66,11 @@ sub recv_new {
     $recv_from eq $opts{expect_reply_from}
             or warn "recvmsg() returned from=[".(unpack 'H*', $recv_from)."]"
                  . " when expecting [".(unpack 'H*', $opts{expect_reply_from})."]"
-        if $opts{expect_reply_from};
+        if $opts{expect_reply_from} && $Linux::IpRoute2::ShowDecomposition;
 
     my @r = $sock->mrecv(MSG_TRUNC|MSG_DONTWAIT, 0, 0, 0x400);
     unless (!@r && $!{EAGAIN}) {
-        warn "unexpected response after message; $!";
-        die;
+        die "Unexpected response after message; $!\n";
     }
 
     my $msg = $self->unpack_new_msg($reply);
@@ -121,11 +126,11 @@ sub unpack_new_msg {
     }, $msg_class;
 
     warn sprintf "\nAttempting to unpack\n\t%s\n\t",
-            Data::Dumper->new([$packed_msg],[qw[ packed_msg ]])->Indent(0)->Useqq(1)->Dump;
+            Data::Dumper->new([$packed_msg],[qw[ packed_msg ]])->Indent(0)->Useqq(1)->Dump
+        if $Linux::IpRoute2::ShowDecomposition;
     $msg->unpack_msg_self($packed_msg);
-    warn " ... \e[1;46mafter unpack\e[m";
-
-    $msg->show( dirn => Linux::IpRoute2::message::_base::DirnRecv | Linux::IpRoute2::message::_base::DirnMesgMethod );
+    warn " ... \e[1;46mafter unpack\e[m"
+        if $Linux::IpRoute2::ShowDecomposition;
 
     return $msg;
 }

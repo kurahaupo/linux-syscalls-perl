@@ -5,6 +5,8 @@ use strict;
 use warnings;
 use integer;
 
+no warnings 'once';
+
 package Linux::IpRoute2::connector;
 
 use Carp qw( carp croak );
@@ -74,7 +76,8 @@ sub open_route {
                 ."\t    rta_type=%s rta_pid=%#x rta_groups=%s\n"
                 ."\t",
                     unpack( "H*", $rta =~ s/........(?=.)/$&./gr ),
-                    $rta_type, $rta_pid, $rta_groups;
+                    $rta_type, $rta_pid, $rta_groups
+        if $Linux::IpRoute2::ShowConnection;
 
     $self->{sockname_hex} = unpack "H*", $rta;
     $self->{sockname} = { type => $rta_type, pid => $rta_pid, groups => $rta_groups };
@@ -152,7 +155,8 @@ sub msend {
                         map {
                             unpack('H*', $_) =~ s/^.{16}\K......../--------/r
                                              =~ s/........(?=.)/$&./gr
-                        } $msg, $std, $wanted;
+                        } $msg, $std, $wanted
+                if $Linux::IpRoute2::ShowComposition;
         }
     }
 

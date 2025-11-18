@@ -5,6 +5,8 @@ use strict;
 use warnings;
 use integer;
 
+use Data::Dumper;
+
 package Linux::IpRoute2::message::link;
 
 use Carp qw( confess cluck croak carp );
@@ -109,7 +111,8 @@ sub round_up($) {
 sub unpack_self {
     my ($self, $body) = @_;
 
-    warn "\e[1;33m⇒Into " . __PACKAGE__ . "::unpack_self($self)\e[m";
+    printf STDERR "\e[1;33m⇒Into " . __PACKAGE__ . "::unpack_self($self)\e[m"
+        if $Linux::IpRoute2::ShowDecomposition;
 
     # splice the IFINFO header off
     my (
@@ -122,7 +125,8 @@ sub unpack_self {
     ) = my @resp_args = unpack struct_ifinfomsg_pack . 'x![L]a*', $body;
     @resp_args  == 6 or confess 'Unpack response failed!';
 
-    warn "\t\e[33m packfmt={" . struct_ifinfomsg_pack . 'x![L]a*' . "} packlen=" . struct_ifinfomsg_len . "\e[m\n";
+    printf STDERR "\t\e[33m packfmt={" . struct_ifinfomsg_pack . 'x![L]a*' . "} packlen=" . struct_ifinfomsg_len . "\e[m\n"
+        if $Linux::IpRoute2::ShowDecomposition;
 
     $self->{ifi_family} = $ifi_family;
     $self->{ifi_type}   = $ifi_type;
@@ -130,10 +134,17 @@ sub unpack_self {
     $self->{ifi_flags}  = $ifi_flags;
     $self->{ifi_change} = $ifi_change;
 
-    warn "\e[1;33m⇐From " . __PACKAGE__ . "::unpack_self\e[m returning " . Data::Dumper->new([$self],[qw[self]])->Indent(0)->Useqq(1)->Dump;
-    warn sprintf "\e[43;30munpack_self taking %d bytes and returning %d\e[m\n", length($body), length($data);
-    warn sprintf "\e[33m\t\tin={%s}\e[m\n", unpack("H*", $body);
-    warn sprintf "\e[33m\t\tback={%s}\e[m\n", unpack("H*", $data);
+    printf STDERR "\e[1;33m⇐From %s" . "::unpack_self\e[m returning %s\n"
+                . "\e[43;30munpack_self taking %d bytes and returning %d\e[m\n"
+                . "\e[33m\t\tin={%s}\e[m\n"
+                . "\e[33m\t\tback={%s}\e[m\n",
+                __PACKAGE__,
+                Data::Dumper->new([$self],[qw[self]])->Indent(0)->Useqq(1)->Dump,
+                length($body),
+                length($data),
+                unpack("H*", $body),
+                unpack("H*", $data)
+        if $Linux::IpRoute2::ShowDecomposition;
 
     return $data;
 }
@@ -428,7 +439,7 @@ package Linux::IpRoute2::attr::link::xdp {
     sub getpack {
         state %once;
         my $pkg = __PACKAGE__;
-        warn "${pkg}::getpack(@_) is missing, using fallback 'H*'" if ! $once{$pkg}++;
+        warn "${pkg}::getpack(@_) is missing, using fallback 'H*'\n" if ! $once{$pkg}++;
         return 'H*';
     }
 

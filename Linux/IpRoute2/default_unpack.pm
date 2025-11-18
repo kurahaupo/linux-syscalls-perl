@@ -56,7 +56,7 @@ sub unpack_self {
             @v = unpack $pp, $data;
             $data = undef;
             1;
-        } or die sprintf "\e[41mUnpack failure\e[m\n"
+        } or confess sprintf "\e[41mUnpack failure\e[m\n"
                         ."\tpattern=%s\n"
                         ."\tdata={%s}\n",
                         $pp . 'x![l]a*',
@@ -89,14 +89,15 @@ sub unpack_self {
                 printf STDERR "\t\e[36mUnpacking attr offset=%s len=%s type=%s\e[m\n",
                                 $offset,
                                 $len,
-                                $type;
+                                $type
+                    if $Linux::IpRoute2::ShowDecomposition;
                 push @$self, $attr;
             }
         }
         $self->unpack_residue($data) if $data ne '';
     }
 
-    carp sprintf "\e[35m%s::\e[1munpack_self\e[m(\e[36m%s\e[m, data={%s})\n"
+    printf STDERR "\e[35m%s::\e[1munpack_self\e[m(\e[36m%s\e[m, data={%s})\n"
                 . "\t packpat={SS%s}\n"
                 . "\t attr_type=%s\n"
                 . "\t result => {%s}\n"
@@ -106,7 +107,8 @@ sub unpack_self {
             _unpack_hex $data,
             eval { $self->packpat } // '',
             eval { $self->attr_type } // '(none)',
-            Data::Dumper->new([$self],[qw[self]])->Indent(0)->Dump;
+            Data::Dumper->new([$self],[qw[self]])->Indent(0)->Dump
+        if $Linux::IpRoute2::ShowDecomposition;
 
     return $self;   # allow chaining
 }
@@ -124,7 +126,7 @@ sub getpack {
 
     $res = pack 'SSa*x![L]', length($res)+4, $self->attr_type, $res;
 
-    carp sprintf "\e[33m%s::\e[1mgetpack\e[m(\e[36m%s\e[m)\n"
+    printf STDERR "\e[33m%s::\e[1mgetpack\e[m(\e[36m%s\e[m)\n"
                 . "\t packpat={SS%s}\n"
                 . "\t attr_type=%s\n"
                 . "\t self=%s\n"
@@ -135,7 +137,8 @@ sub getpack {
             $self->packpat,
             $self->attr_type,
             Data::Dumper->new([$self],[qw[self]])->Indent(0)->Dump,
-            _unpack_hex $res;
+            _unpack_hex $res
+        if $Linux::IpRoute2::ShowDecomposition;
     return $res;
 }
 

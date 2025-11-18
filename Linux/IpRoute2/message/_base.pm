@@ -50,13 +50,18 @@ sub round_up($) {
 
 sub unpack_msg_self {
     my ($self, $body) = @_;
-    warn "\e[1;33m⇒Into " . __PACKAGE__ . "::unpack_msg_self($self)\e[m";
+    warn "\e[1;33m⇒Into " . __PACKAGE__ . "::unpack_msg_self($self)\e[m"
+        if $Linux::IpRoute2::ShowDecomposition;
 
     my $data = $self->unpack_self($body);
 
-    warn sprintf "\e[43;30munpack_self took %d bytes and returned %d\e[m\n", length($body), length($data);
-    warn sprintf "\e[33m\t\tin={%s}\e[m\n", unpack("H*", $body);
-    warn sprintf "\e[33m\t\tback={%s}\e[m\n", unpack("H*", $data);
+    warn sprintf "\e[43;30munpack_self took %d bytes and returned %d\e[m\n"
+               . "\e[33m\t\tin={%s}\e[m\n"
+               . "\e[33m\t\tback={%s}\e[m\n",
+               length($body), length($data),
+               unpack("H*", $body),
+               unpack("H*", $data)
+        if $Linux::IpRoute2::ShowDecomposition;
 
     my @resp_opts;
     for ( my $len, my $offset = 0 ; $offset < length $data ; $offset += round_up $len ) {
@@ -75,7 +80,8 @@ sub unpack_msg_self {
 
     $self->_unpack_refine if $self->can('_unpack_refine');
 
-    warn "\e[1;33m⇐From " . __PACKAGE__ . "::unpack_msg_self\e[m returning " . Data::Dumper->new([$self],[qw[self]])->Indent(0)->Useqq(1)->Dump;
+    warn "\e[1;33m⇐From " . __PACKAGE__ . "::unpack_msg_self\e[m returning " . Data::Dumper->new([$self],[qw[self]])->Indent(0)->Useqq(1)->Dump
+        if $Linux::IpRoute2::ShowDecomposition;
 }
 
 sub _show_msg(@) {
@@ -117,12 +123,14 @@ sub show {
 #       my $self = shift;
 #     # $self = bless {}, $self if ! ref $self;
 #       my ($data) = @_;
-#       warn "\e[1;33m⇒Into " . __PACKAGE__ . "::unpack_self\e[J";
+#       warn "\e[1;33m⇒Into " . __PACKAGE__ . "::unpack_self\e[J"
+#           if $Linux::IpRoute2::ShowDecomposition;
 #       $self->{body} //= shift // do {
 #               my $data = $self->{data} // return;
 #               substr $data, struct_nlmsghdr_len;
 #           };
-#       warn "\e[1;33m⇐From " . __PACKAGE__ . "::unpack_self\e[m\[J returning " . Data::Dumper->new([$self],[qw[self]])->Indent(0)->Useqq(1)->Dump;
+#       warn "\e[1;33m⇐From " . __PACKAGE__ . "::unpack_self\e[m\[J returning " . Data::Dumper->new([$self],[qw[self]])->Indent(0)->Useqq(1)->Dump
+#           if $Linux::IpRoute2::ShowDecomposition;
 #       return $self;
 #   }
 
@@ -143,7 +151,7 @@ sub _msg_type_to_class {
     my $msg_type = pop;
     my $msg_class = $msg_type >= 0 ? $map_msg_type_to_class[$msg_type] : ();
     $msg_class
-        or warn sprintf "Missing class for type=%s\n\tdump-map=%s", $msg_type,
+        or croak sprintf "Missing class for type=%s\n\tdump-map=%s", $msg_type,
             Data::Dumper::->new([\@map_msg_type_to_class],
                                 [qw[map]])->Indent(0)->Useqq(1)->Dump;
     return $msg_class;
