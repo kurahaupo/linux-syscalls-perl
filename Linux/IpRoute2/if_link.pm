@@ -199,7 +199,7 @@ use constant {
     IFLA_PROTO_DOWN_REASON_UNSPEC       =>     0,
     IFLA_PROTO_DOWN_REASON_MASK         =>     1,   # u32, mask for reason bits
     IFLA_PROTO_DOWN_REASON_VALUE        =>     2,   # u32, reason bit value
-  # IFLA_PROTO_DOWN_REASON_MAX          =>     3 - 1 | 0,
+    IFLA_PROTO_DOWN_REASON_MAX          =>     3 - 1 | 0,
 };
 
 {
@@ -217,7 +217,7 @@ sub IFLA_PROTO_DOWN_REASON_to_name($) { return &IFLA_PROTO_DOWN_REASON_to_label 
 use constant {
     IFLA_INET_UNSPEC                    =>     0,
     IFLA_INET_CONF                      =>     1,
-  # IFLA_INET_MAX                       =>     2 - 1 | 0,
+    IFLA_INET_MAX                       =>     2 - 1 | 0,
 };
 
 {
@@ -268,7 +268,7 @@ use constant {
     IFLA_INET6_TOKEN                    =>     7,       # device token
     IFLA_INET6_ADDR_GEN_MODE            =>     8,       # implicit address generator mode
     IFLA_INET6_RA_MTU                   =>     9,       # mtu carried in the RA message
-  # IFLA_INET6_MAX                      =>    10 - 1 | 0,
+    IFLA_INET6_MAX                      =>    10 - 1 | 0,
 };
 
 {
@@ -345,7 +345,7 @@ use constant {
     IFLA_BR_VLAN_STATS_PER_PORT         =>    45,
     IFLA_BR_MULTI_BOOLOPT               =>    46,
     IFLA_BR_MCAST_QUERIER_STATE         =>    47,
-  # IFLA_BR_MAX                         =>    48 - 1 | 0,
+    IFLA_BR_MAX                         =>    48 - 1 | 0,
 };
 use constant {
     IFLA_BR_AGING_TIME                  =>     IFLA_BR_AGEING_TIME, # typo in standard
@@ -429,7 +429,7 @@ use constant {
     IFLA_BRPORT_MRP_IN_OPEN             =>    36,
     IFLA_BRPORT_MCAST_EHT_HOSTS_LIMIT   =>    37,
     IFLA_BRPORT_MCAST_EHT_HOSTS_CNT     =>    38,
-  # IFLA_BRPORT_MAX                     =>    39 - 1 | 0,
+    IFLA_BRPORT_MAX                     =>    39 - 1 | 0,
 };
 
 {
@@ -464,7 +464,7 @@ use constant {
     IFLA_INFO_XSTATS                    =>   3,
     IFLA_INFO_SLAVE_KIND                =>   4,
     IFLA_INFO_SLAVE_DATA                =>   5,
-  # IFLA_INFO_MAX                       =>   6 - 1 | 0,
+    IFLA_INFO_MAX                       =>   6 - 1 | 0,
 };
 
 {
@@ -484,7 +484,7 @@ use constant {
     IFLA_VLAN_EGRESS_QOS                =>     3,
     IFLA_VLAN_INGRESS_QOS               =>     4,
     IFLA_VLAN_PROTOCOL                  =>     5,
-  # IFLA_VLAN_MAX                       =>     6 - 1 | 0,
+    IFLA_VLAN_MAX                       =>     6 - 1 | 0,
 };
 
 {
@@ -507,7 +507,7 @@ use constant {
 use constant {
     IFLA_VLAN_QOS_UNSPEC                =>     0,
     IFLA_VLAN_QOS_MAPPING               =>     1,
-  # IFLA_VLAN_QOS_MAX                   =>     2 - 1 | 0,
+    IFLA_VLAN_QOS_MAX                   =>     2 - 1 | 0,
 };
 
 {
@@ -538,7 +538,7 @@ use constant {
     IFLA_MACVLAN_MACADDR_COUNT          =>     6,
     IFLA_MACVLAN_BC_QUEUE_LEN           =>     7,
     IFLA_MACVLAN_BC_QUEUE_LEN_USED      =>     8,
-  # IFLA_MACVLAN_MAX                    =>     9 - 1 | 0,
+    IFLA_MACVLAN_MAX                    =>     9 - 1 | 0,
 };
 
 {
@@ -591,7 +591,7 @@ sub MACVLAN_FLAG_to_desc($) { bits_to_desc $_[0], \@names; }
 use constant {
     IFLA_VRF_UNSPEC                     =>     0,
     IFLA_VRF_TABLE                      =>     1,
-  # IFLA_VRF_MAX                        =>     2 - 1 | 0,
+    IFLA_VRF_MAX                        =>     2 - 1 | 0,
 };
 
 {
@@ -603,7 +603,7 @@ sub IFLA_VRF_to_name($) { return &IFLA_VRF_to_label // "code#$_[0]" }
 use constant {
     IFLA_VRF_PORT_UNSPEC                =>     0,
     IFLA_VRF_PORT_TABLE                 =>     1,
-  # IFLA_VRF_PORT_MAX                   =>     2 - 1 | 0,
+    IFLA_VRF_PORT_MAX                   =>     2 - 1 | 0,
 };
 
 {
@@ -630,7 +630,7 @@ use constant {
     IFLA_MACSEC_VALIDATION              =>    13,
     IFLA_MACSEC_PAD                     =>    14,
     IFLA_MACSEC_OFFLOAD                 =>    15,
-  # IFLA_MACSEC_MAX                     =>    16 - 1 | 0,
+    IFLA_MACSEC_MAX                     =>    16 - 1 | 0,
 };
 
 {
@@ -647,7 +647,7 @@ use constant {
     IFLA_XFRM_UNSPEC                    =>     0,
     IFLA_XFRM_LINK                      =>     1,
     IFLA_XFRM_IF_ID                     =>     2,
-  # IFLA_XFRM_MAX                       =>     3 - 1 | 0,
+    IFLA_XFRM_MAX                       =>     3 - 1 | 0,
 };
 
 {
@@ -689,7 +689,7 @@ use constant {
     IFLA_IPVLAN_UNSPEC                  =>     0,
     IFLA_IPVLAN_MODE                    =>     1,
     IFLA_IPVLAN_FLAGS                   =>     2,
-  # IFLA_IPVLAN_MAX                     =>     3 - 1 | 0,
+    IFLA_IPVLAN_MAX                     =>     3 - 1 | 0,
 };
 
 {
@@ -703,7 +703,7 @@ use constant {
     IPVLAN_MODE_L2                      =>     0,
     IPVLAN_MODE_L3                      =>     1,
     IPVLAN_MODE_L3S                     =>     2,
-  # IPVLAN_MODE_MAX                     =>     3,   # ?? usually these "_MAX" values are N-1
+    IPVLAN_MODE_MAX                     =>     3,   # ?? usually these "_MAX" values are N-1
 };
 
 {
@@ -758,7 +758,7 @@ use constant {
                                         #     31,   # unused?
                                         #     32,   # unused?
     IFLA_VXLAN_FAN_MAP                  =>    33,
-  # IFLA_VXLAN_MAX                      =>    34 - 1 | 0,
+    IFLA_VXLAN_MAX                      =>    34 - 1 | 0,
 };
 use constant {
     IFLA_VXLAN_AGING                    => IFLA_VXLAN_AGEING,   # typo in standard
@@ -816,7 +816,7 @@ use constant {
     IFLA_GENEVE_LABEL                   =>    11,
     IFLA_GENEVE_TTL_INHERIT             =>    12,
     IFLA_GENEVE_DF                      =>    13,
-  # IFLA_GENEVE_MAX                     =>    14 - 1 | 0,
+    IFLA_GENEVE_MAX                     =>    14 - 1 | 0,
 };
 
 {
@@ -849,7 +849,7 @@ use constant {
     IFLA_BAREUDP_ETHERTYPE              =>     2,
     IFLA_BAREUDP_SRCPORT_MIN            =>     3,
     IFLA_BAREUDP_MULTIPROTO_MODE        =>     4,
-  # IFLA_BAREUDP_MAX                    =>     5 - 1 | 0,
+    IFLA_BAREUDP_MAX                    =>     5 - 1 | 0,
 };
 
 {
@@ -864,7 +864,7 @@ sub IFLA_BAREUDP_to_name($) { return &IFLA_BAREUDP_to_label // "code#$_[0]" }
 use constant {
     IFLA_PPP_UNSPEC                     =>     0,
     IFLA_PPP_DEV_FD                     =>     1,
-  # IFLA_PPP_MAX                        =>     2 - 1 | 0,
+    IFLA_PPP_MAX                        =>     2 - 1 | 0,
 };
 
 {
@@ -893,7 +893,7 @@ use constant {
     IFLA_GTP_FD1                        =>     2,
     IFLA_GTP_PDP_HASHSIZE               =>     3,
     IFLA_GTP_ROLE                       =>     4,
-  # IFLA_GTP_MAX                        =>     5 - 1 | 0,
+    IFLA_GTP_MAX                        =>     5 - 1 | 0,
 };
 
 {
@@ -935,7 +935,7 @@ use constant {
     IFLA_BOND_TLB_DYNAMIC_LB            =>    27,
     IFLA_BOND_PEER_NOTIF_DELAY          =>    28,
     IFLA_BOND_AD_LACP_ACTIVE            =>    29,
-  # IFLA_BOND_MAX                       =>    30 - 1 | 0,
+    IFLA_BOND_MAX                       =>    30 - 1 | 0,
 };
 
 {
@@ -958,7 +958,7 @@ use constant {
     IFLA_BOND_AD_INFO_ACTOR_KEY         =>     3,
     IFLA_BOND_AD_INFO_PARTNER_KEY       =>     4,
     IFLA_BOND_AD_INFO_PARTNER_MAC       =>     5,
-  # IFLA_BOND_AD_INFO_MAX               =>     6 - 1 | 0,
+    IFLA_BOND_AD_INFO_MAX               =>     6 - 1 | 0,
 };
 
 {
@@ -979,7 +979,7 @@ use constant {
     IFLA_BOND_SLAVE_AD_AGGREGATOR_ID            =>     6,
     IFLA_BOND_SLAVE_AD_ACTOR_OPER_PORT_STATE    =>     7,
     IFLA_BOND_SLAVE_AD_PARTNER_OPER_PORT_STATE  =>     8,
-  # IFLA_BOND_SLAVE_MAX                         =>     9 - 1 | 0,
+    IFLA_BOND_SLAVE_MAX                         =>     9 - 1 | 0,
 };
 
 {
@@ -996,7 +996,7 @@ sub IFLA_BOND_SLAVE_to_name($) { return &IFLA_BOND_SLAVE_to_label // "code#$_[0]
 use constant {
     IFLA_VF_INFO_UNSPEC                 =>     0,
     IFLA_VF_INFO                        =>     1,
-  # IFLA_VF_INFO_MAX                    =>     2 - 1 | 0,
+    IFLA_VF_INFO_MAX                    =>     2 - 1 | 0,
 };
 
 {
@@ -1020,7 +1020,7 @@ use constant {
     IFLA_VF_IB_PORT_GUID                =>    11,  # VF Infiniband port GUID
     IFLA_VF_VLAN_LIST                   =>    12,  # nested list of vlans, option for QinQ
     IFLA_VF_BROADCAST                   =>    13,  # VF broadcast
-  # IFLA_VF_MAX                         =>    14 - 1 | 0,
+    IFLA_VF_MAX                         =>    14 - 1 | 0,
 };
 
 {
@@ -1062,7 +1062,7 @@ use constant {
 use constant {
     IFLA_VF_VLAN_INFO_UNSPEC            =>     0,
     IFLA_VF_VLAN_INFO                   =>     1,   # VLAN ID, QoS and VLAN protocol
-  # IFLA_VF_VLAN_INFO_MAX               =>     2 - 1 | 0,
+    IFLA_VF_VLAN_INFO_MAX               =>     2 - 1 | 0,
 };
 
 {
@@ -1132,7 +1132,7 @@ use constant {
     IFLA_VF_LINK_STATE_AUTO             =>     0,   # link state of the uplink
     IFLA_VF_LINK_STATE_ENABLE           =>     1,   # link always up
     IFLA_VF_LINK_STATE_DISABLE          =>     2,   # link always down
-  # IFLA_VF_LINK_STATE_MAX              =>     3,   # ??? check this, normally N-1
+    IFLA_VF_LINK_STATE_MAX              =>     3,   # ??? check this, normally N-1
 };
 
 {
@@ -1171,7 +1171,7 @@ use constant {
     IFLA_VF_STATS_PAD                   =>     6,
     IFLA_VF_STATS_RX_DROPPED            =>     7,
     IFLA_VF_STATS_TX_DROPPED            =>     8,
-  # IFLA_VF_STATS_MAX                   =>     9 - 1 | 0,
+    IFLA_VF_STATS_MAX                   =>     9 - 1 | 0,
 };
 
 {
@@ -1212,7 +1212,7 @@ use constant {
 use constant {
     IFLA_VF_PORT_UNSPEC                 =>     0,
     IFLA_VF_PORT                        =>     1,   # nest
-  # IFLA_VF_PORT_MAX                    =>     2 - 1 | 0,
+    IFLA_VF_PORT_MAX                    =>     2 - 1 | 0,
 };
 
 {
@@ -1230,7 +1230,7 @@ use constant {
     IFLA_PORT_HOST_UUID                 =>     5,   # binary UUID
     IFLA_PORT_REQUEST                   =>     6,   # __u8
     IFLA_PORT_RESPONSE                  =>     7,   # __u16, output only
-  # IFLA_PORT_MAX                       =>     8 - 1 | 0,
+    IFLA_PORT_MAX                       =>     8 - 1 | 0,
 };
 
 {
@@ -1310,7 +1310,7 @@ use constant {
     IFLA_IPOIB_PKEY                     =>     1,
     IFLA_IPOIB_MODE                     =>     2,
     IFLA_IPOIB_UMCAST                   =>     3,
-  # IFLA_IPOIB_MAX                      =>     4 - 1 | 0,
+    IFLA_IPOIB_MAX                      =>     4 - 1 | 0,
 };
 
 {
@@ -1354,7 +1354,7 @@ use constant {
     IFLA_HSR_SEQ_NR                     =>     5,
     IFLA_HSR_VERSION                    =>     6,   # HSR version
     IFLA_HSR_PROTOCOL                   =>     7,   # Indicate different protocol than HSR. For example PRP.
-  # IFLA_HSR_MAX                        =>     8 - 1 | 0,
+    IFLA_HSR_MAX                        =>     8 - 1 | 0,
 };
 
 {
@@ -1391,7 +1391,7 @@ use constant {
     IFLA_STATS_LINK_XSTATS_SLAVE        =>     3,
     IFLA_STATS_LINK_OFFLOAD_XSTATS      =>     4,
     IFLA_STATS_AF_SPEC                  =>     5,
-  # IFLA_STATS_MAX                      =>     6 - 1 | 0,
+    IFLA_STATS_MAX                      =>     6 - 1 | 0,
 };
 
 {
@@ -1413,7 +1413,7 @@ use constant {
     LINK_XSTATS_TYPE_UNSPEC             =>     0,
     LINK_XSTATS_TYPE_BRIDGE             =>     1,
     LINK_XSTATS_TYPE_BOND               =>     2,
-  # LINK_XSTATS_TYPE_MAX                =>     3 - 1 | 0,
+    LINK_XSTATS_TYPE_MAX                =>     3 - 1 | 0,
 };
 
 {
@@ -1426,7 +1426,7 @@ sub LINK_XSTATS_TYPE_to_name($) { return &LINK_XSTATS_TYPE_to_label // "code#$_[
 use constant {
     IFLA_OFFLOAD_XSTATS_UNSPEC          =>     0,
     IFLA_OFFLOAD_XSTATS_CPU_HIT         =>     1,   # struct rtnl_link_stats64
-  # IFLA_OFFLOAD_XSTATS_MAX             =>     2 - 1 | 0,
+    IFLA_OFFLOAD_XSTATS_MAX             =>     2 - 1 | 0,
 };
 
 {
@@ -1438,6 +1438,28 @@ sub IFLA_OFFLOAD_XSTATS_to_name($) { return &IFLA_OFFLOAD_XSTATS_to_label // "co
 }
 
 # XDP section
+
+use constant {
+    IFLA_XDP_UNSPEC                     =>     0,
+    IFLA_XDP_FD                         =>     1,
+    IFLA_XDP_ATTACHED                   =>     2,
+    IFLA_XDP_FLAGS                      =>     3,
+    IFLA_XDP_PROG_ID                    =>     4,
+    IFLA_XDP_DRV_PROG_ID                =>     5,
+    IFLA_XDP_SKB_PROG_ID                =>     6,
+    IFLA_XDP_HW_PROG_ID                 =>     7,
+    IFLA_XDP_EXPECTED_FD                =>     8,
+    IFLA_XDP_MAX                        =>     9 - 1 | 0,
+};
+
+{
+my @names = qw(
+    unspec fd attached flags prog_id drv_prog_id skb_prog_id hw_prog_id
+    expected_fd
+);
+sub IFLA_XDP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IFLA_XDP_to_name($) { return &IFLA_XDP_to_label // "code#$_[0]" }
+}
 
 use constant {
     XDP_FLAGS_UPDATE_IF_NOEXIST         =>  _B 0,
@@ -1461,34 +1483,13 @@ use constant {
     XDP_ATTACHED_SKB                    =>     2,
     XDP_ATTACHED_HW                     =>     3,
     XDP_ATTACHED_MULTI                  =>     4,
+    XDP_ATTACHED_MAX                    =>     5 - 1 | 0,
 };
 
 {
 my @names = qw( none drv skb hw multi );
 sub XDP_ATTACHED_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
 sub XDP_ATTACHED_to_name($) { return &XDP_ATTACHED_to_label // "code#$_[0]" }
-}
-
-use constant {
-    IFLA_XDP_UNSPEC                     =>     0,
-    IFLA_XDP_FD                         =>     1,
-    IFLA_XDP_ATTACHED                   =>     2,
-    IFLA_XDP_FLAGS                      =>     3,
-    IFLA_XDP_PROG_ID                    =>     4,
-    IFLA_XDP_DRV_PROG_ID                =>     5,
-    IFLA_XDP_SKB_PROG_ID                =>     6,
-    IFLA_XDP_HW_PROG_ID                 =>     7,
-    IFLA_XDP_EXPECTED_FD                =>     8,
-    IFLA_XDP_MAX                        =>     9 - 1 | 0,
-};
-
-{
-my @names = qw(
-    unspec fd attached flags prog_id drv_prog_id skb_prog_id hw_prog_id
-    expected_fd
-);
-sub IFLA_XDP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
-sub IFLA_XDP_to_name($) { return &IFLA_XDP_to_label // "code#$_[0]" }
 }
 
 use constant {
@@ -1523,7 +1524,7 @@ use constant {
     IFLA_TUN_MULTI_QUEUE                =>     7,
     IFLA_TUN_NUM_QUEUES                 =>     8,
     IFLA_TUN_NUM_DISABLED_QUEUES        =>     9,
-  # IFLA_TUN_MAX                        =>    10 - 1 | 0,
+    IFLA_TUN_MAX                        =>    10 - 1 | 0,
 };
 
 {
@@ -1558,7 +1559,7 @@ use constant {
     IFLA_RMNET_UNSPEC                   =>     0,
     IFLA_RMNET_MUX_ID                   =>     1,
     IFLA_RMNET_FLAGS                    =>     2,
-  # IFLA_RMNET_MAX                      =>     3 - 1 | 0,
+    IFLA_RMNET_MAX                      =>     3 - 1 | 0,
 };
 
 {
@@ -1581,7 +1582,7 @@ use constant {
 use constant {
     IFLA_MCTP_UNSPEC                    =>     0,
     IFLA_MCTP_NET                       =>     1,
-  # IFLA_MCTP_MAX                       =>     2 - 1 | 0,
+    IFLA_MCTP_MAX                       =>     2 - 1 | 0,
 };
 
 {
@@ -1594,6 +1595,7 @@ our %EXPORT_TAGS = (
     ifla => [qw[
         IFLA_ADDRESS
         IFLA_AF_SPEC
+        IFLA_ALLMULTI
         IFLA_ALT_IFNAME
         IFLA_BROADCAST
         IFLA_CARRIER
@@ -1604,6 +1606,7 @@ our %EXPORT_TAGS = (
         IFLA_EVENT
         IFLA_EXT_MASK
         IFLA_GROUP
+        IFLA_GRO_MAX_SIZE
         IFLA_GSO_MAX_SEGS
         IFLA_GSO_MAX_SIZE
         IFLA_IFALIAS
@@ -1614,6 +1617,7 @@ our %EXPORT_TAGS = (
         IFLA_LINK_NETNSID
         IFLA_MAP
         IFLA_MASTER
+        IFLA_MAX
         IFLA_MAX_MTU
         IFLA_MIN_MTU
         IFLA_MTU
@@ -1643,6 +1647,8 @@ our %EXPORT_TAGS = (
         IFLA_STATS
         IFLA_STATS64
         IFLA_TARGET_NETNSID
+        IFLA_TSO_MAX_SEGS
+        IFLA_TSO_MAX_SIZE
         IFLA_TXQLEN
         IFLA_UNSPEC
         IFLA_VFINFO_LIST
@@ -1665,6 +1671,7 @@ our %EXPORT_TAGS = (
     ifla_inet => [qw[
         IFLA_INET_CONF
         IFLA_INET_UNSPEC
+        IFLA_INET_MAX
         IFLA_INET_to_label
         IFLA_INET_to_name
     ]],
@@ -1675,6 +1682,7 @@ our %EXPORT_TAGS = (
         IFLA_INET6_CONF
         IFLA_INET6_FLAGS
         IFLA_INET6_ICMP6STATS
+        IFLA_INET6_MAX
         IFLA_INET6_MCAST
         IFLA_INET6_RA_MTU
         IFLA_INET6_STATS
@@ -2394,6 +2402,164 @@ our %EXPORT_TAGS = (
         IFLA_MCTP_to_name
     ]],
 
+    labels => [qw[
+        BRIDGE_MODE_to_label
+        GENEVE_DF_to_label
+        GTP_ROLE_to_label
+        HSR_PROTOCOL_to_label
+        IFLA_BAREUDP_to_label
+        IFLA_BOND_AD_INFO_to_label
+        IFLA_BOND_SLAVE_to_label
+        IFLA_BOND_to_label
+        IFLA_BRPORT_to_label
+        IFLA_BR_to_label
+        IFLA_EVENT_to_label
+        IFLA_GENEVE_to_label
+        IFLA_GTP_to_label
+        IFLA_HSR_to_label
+        IFLA_INET6_to_label
+        IFLA_INET_to_label
+        IFLA_INFO_to_label
+        IFLA_IPOIB_to_label
+        IFLA_IPVLAN_to_label
+        IFLA_MACSEC_to_label
+        IFLA_MACVLAN_to_label
+        IFLA_MCTP_to_label
+        IFLA_OFFLOAD_XSTATS_to_label
+        IFLA_PORT_to_label
+        IFLA_PPP_to_label
+        IFLA_PROTO_DOWN_REASON_to_label
+        IFLA_RMNET_to_label
+        IFLA_STATS_to_label
+        IFLA_TUN_to_label
+        IFLA_VF_INFO_to_label
+        IFLA_VF_LINK_STATE_to_label
+        IFLA_VF_PORT_to_label
+        IFLA_VF_STATS_to_label
+        IFLA_VF_VLAN_INFO_to_label
+        IFLA_VF_to_label
+        IFLA_VLAN_to_label
+        IFLA_VLQ_to_label
+        IFLA_VRF_PORT_to_label
+        IFLA_VRF_to_label
+        IFLA_VXLAN_to_label
+        IFLA_XDP_to_label
+        IFLA_XFRM_to_label
+        IFLA_to_label
+        IN6_ADDR_GEN_MODE_to_label
+        IPOIB_MODE_to_label
+        IPVLAN_MODE_to_label
+        LINK_XSTATS_TYPE_to_label
+        MACSEC_OFFLOAD_to_label
+        MACSEC_VALIDATE_to_label
+        MACVLAN_MACADDR_to_label
+        PORT_REQUEST_to_label
+        PORT_RESPONSE_to_label
+        VXLAN_DF_to_label
+        XDP_ATTACHED_to_label
+    ]],
+
+    limits => [qw[
+        IFLA_BAREUDP_MAX
+        IFLA_BOND_AD_INFO_MAX
+        IFLA_BOND_MAX
+        IFLA_BOND_SLAVE_MAX
+        IFLA_BRPORT_MAX
+        IFLA_BR_MAX
+        IFLA_GENEVE_MAX
+        IFLA_GTP_MAX
+        IFLA_HSR_MAX
+        IFLA_INET6_MAX
+        IFLA_INET_MAX
+        IFLA_INFO_MAX
+        IFLA_IPOIB_MAX
+        IFLA_IPVLAN_MAX
+        IFLA_MACSEC_MAX
+        IFLA_MACVLAN_MAX
+        IFLA_MAX
+        IFLA_MCTP_MAX
+        IFLA_OFFLOAD_XSTATS_MAX
+        IFLA_PORT_MAX
+        IFLA_PPP_MAX
+        IFLA_PROTO_DOWN_REASON_MAX
+        IFLA_RMNET_MAX
+        IFLA_STATS_MAX
+        IFLA_TUN_MAX
+        IFLA_VF_INFO_MAX
+        IFLA_VF_LINK_STATE_MAX
+        IFLA_VF_MAX
+        IFLA_VF_PORT_MAX
+        IFLA_VF_STATS_MAX
+        IFLA_VF_VLAN_INFO_MAX
+        IFLA_VLAN_MAX
+        IFLA_VLAN_QOS_MAX
+        IFLA_VRF_MAX
+        IFLA_VRF_PORT_MAX
+        IFLA_VXLAN_MAX
+        IFLA_XDP_MAX
+        IFLA_XFRM_MAX
+        IPVLAN_MODE_MAX
+        LINK_XSTATS_TYPE_MAX
+        XDP_ATTACHED_MAX
+    ]],
+
+    names => [qw[
+        BRIDGE_MODE_to_name
+        GENEVE_DF_to_name
+        GTP_ROLE_to_name
+        HSR_PROTOCOL_to_name
+        IFLA_BAREUDP_to_name
+        IFLA_BOND_AD_INFO_to_name
+        IFLA_BOND_SLAVE_to_name
+        IFLA_BOND_to_name
+        IFLA_BRPORT_to_name
+        IFLA_BR_to_name
+        IFLA_EVENT_to_name
+        IFLA_GENEVE_to_name
+        IFLA_GTP_to_name
+        IFLA_HSR_to_name
+        IFLA_INET6_to_name
+        IFLA_INET_to_name
+        IFLA_INFO_to_name
+        IFLA_IPOIB_to_name
+        IFLA_IPVLAN_to_name
+        IFLA_MACSEC_to_name
+        IFLA_MACVLAN_to_name
+        IFLA_MCTP_to_name
+        IFLA_OFFLOAD_XSTATS_to_name
+        IFLA_PORT_to_name
+        IFLA_PPP_to_name
+        IFLA_PROTO_DOWN_REASON_to_name
+        IFLA_RMNET_to_name
+        IFLA_STATS_to_name
+        IFLA_TUN_to_name
+        IFLA_VF_INFO_to_name
+        IFLA_VF_LINK_STATE_to_name
+        IFLA_VF_PORT_to_name
+        IFLA_VF_STATS_to_name
+        IFLA_VF_VLAN_INFO_to_name
+        IFLA_VF_to_name
+        IFLA_VLAN_to_name
+        IFLA_VLQ_to_name
+        IFLA_VRF_PORT_to_name
+        IFLA_VRF_to_name
+        IFLA_VXLAN_to_name
+        IFLA_XDP_to_name
+        IFLA_XFRM_to_name
+        IFLA_to_name
+        IN6_ADDR_GEN_MODE_to_name
+        IPOIB_MODE_to_name
+        IPVLAN_MODE_to_name
+        LINK_XSTATS_TYPE_to_name
+        MACSEC_OFFLOAD_to_name
+        MACSEC_VALIDATE_to_name
+        MACVLAN_MACADDR_to_name
+        PORT_REQUEST_to_name
+        PORT_RESPONSE_to_name
+        VXLAN_DF_to_name
+        XDP_ATTACHED_to_name
+    ]],
+
     pack => [qw[
         struct_if_stats_msg_pack
         struct_if_stats_msg_len
@@ -2452,8 +2618,6 @@ our %EXPORT_TAGS = (
 );
 
 my @export_allowed = qw(
-                    IFLA_MAX
-                    IFLA_XDP_MAX
 );
 
 my @export_deprecated = qw(

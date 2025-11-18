@@ -4,9 +4,11 @@ use 5.010;
 use strict;
 use warnings;
 
-package Linux::IpRoute2::ip v0.0.1;
+package Linux::IpRoute2::ipv6 v0.0.1;
 
 use Exporter 'import';
+
+BEGIN { say "loading ".__PACKAGE__ }
 
 sub _B($) { 1 << pop }
 
@@ -55,7 +57,22 @@ use constant {
     IPV6_SRCRT_TYPE_0           =>     0,   # Deprecated; will be removed
     IPV6_SRCRT_STRICT           =>     1,   # Deprecated; will be removed
     IPV6_SRCRT_TYPE_2           =>     2,   # IPv6 type 2 Routing Header
+    IPV6_SRCRT_TYPE_3           =>     3,   # RPL Segment Routing with IPv6
+    IPV6_SRCRT_TYPE_4           =>     4,   # Segment Routing with IPv6
+    IPV6_SRCRT_MAX              =>     5 - 1 | 0,
 };
+
+{
+my @names = qw(
+    type_0
+    strict
+    type_2
+    type_3
+    type_4
+);
+sub IPV6_SRCRT_to_label($) { return $_[0] >= 0 && $names[$_[0]] || () }
+sub IPV6_SRCRT_to_name($) { return &IPV6_SRCRT_to_label || "code#$_[0]" }
+}
 
 #
 # routing header
@@ -92,8 +109,15 @@ use constant {
 
 # Router Alert option values (RFC2711)
 use constant {
-    IPV6_OPT_ROUTERALERT_MLD    => 0x0000,  # MLD(RFC2710)
+    IPV6_OPT_ROUTERALERT_MLD    =>     0,  # MLD(RFC2710)
+    IPV6_OPT_MAX                =>     1 - 1 | 0,
 };
+
+{
+my @names = qw( routeralert_mld );
+sub IPV6_OPT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IPV6_OPT_to_name($) { return &IPV6_OPT_to_label // "code#$_[0]" }
+}
 
 #
 # routing header type 0 (used in cmsghdr struct)
@@ -174,6 +198,7 @@ use constant {
 
 # index values for the variables in ipv6_devconf
 use constant {
+    DEVCONF_MIN                                 =>      0,
     DEVCONF_FORWARDING                          =>      0,
     DEVCONF_HOPLIMIT                            =>      1,
     DEVCONF_MTU6                                =>      2,
@@ -214,59 +239,142 @@ use constant {
     DEVCONF_USE_OIF_ADDRS_ONLY                  =>     37,
     DEVCONF_ACCEPT_RA_MIN_HOP_LIMIT             =>     38,
     DEVCONF_IGNORE_ROUTES_WITH_LINKDOWN         =>     39,
-    DEVCONF_MAX                                 =>     40,
+    DEVCONF_DROP_UNICAST_IN_L2_MULTICAST        =>     40,
+    DEVCONF_DROP_UNSOLICITED_NA                 =>     41,
+    DEVCONF_KEEP_ADDR_ON_DOWN                   =>     42,
+    DEVCONF_RTR_SOLICIT_MAX_INTERVAL            =>     43,
+    DEVCONF_SEG6_ENABLED                        =>     44,
+    DEVCONF_SEG6_REQUIRE_HMAC                   =>     45,
+    DEVCONF_ENHANCED_DAD                        =>     46,
+    DEVCONF_ADDR_GEN_MODE                       =>     47,
+    DEVCONF_DISABLE_POLICY                      =>     48,
+    DEVCONF_ACCEPT_RA_RT_INFO_MIN_PLEN          =>     49,
+    DEVCONF_NDISC_TCLASS                        =>     50,
+    DEVCONF_RPL_SEG_ENABLED                     =>     51,
+    DEVCONF_RA_DEFRTR_METRIC                    =>     52,
+    DEVCONF_IOAM6_ENABLED                       =>     53,
+    DEVCONF_IOAM6_ID                            =>     54,
+    DEVCONF_IOAM6_ID_WIDE                       =>     55,
+    DEVCONF_NDISC_EVICT_NOCARRIER               =>     56,
+    DEVCONF_ACCEPT_UNTRACKED_NA                 =>     57,
+    DEVCONF_ACCEPT_RA_MIN_LFT                   =>     58,
+    DEVCONF_MAX                                 =>     59 - 1 | 0,
 };
 
-
-
+{
+my @names = qw(
+    forwarding hoplimit mtu6 accept_ra accept_redirects autoconf dad_transmits
+    rtr_solicits rtr_solicit_interval rtr_solicit_delay use_tempaddr
+    temp_valid_lft temp_prefered_lft regen_max_retry max_desync_factor
+    max_addresses force_mld_version accept_ra_defrtr accept_ra_pinfo
+    accept_ra_rtr_pref rtr_probe_interval accept_ra_rt_info_max_plen proxy_ndp
+    optimistic_dad accept_source_route mc_forwarding disable_ipv6 accept_dad
+    force_tllao ndisc_notify mldv1_unsolicited_report_interval
+    mldv2_unsolicited_report_interval suppress_frag_ndisc accept_ra_from_local
+    use_optimistic accept_ra_mtu stable_secret use_oif_addrs_only
+    accept_ra_min_hop_limit ignore_routes_with_linkdown
+    drop_unicast_in_l2_multicast drop_unsolicited_na keep_addr_on_down
+    rtr_solicit_max_interval seg6_enabled seg6_require_hmac enhanced_dad
+    addr_gen_mode disable_policy accept_ra_rt_info_min_plen ndisc_tclass
+    rpl_seg_enabled ra_defrtr_metric ioam6_enabled ioam6_id ioam6_id_wide
+    ndisc_evict_nocarrier accept_untracked_na accept_ra_min_lft
+);
+sub DEVCONF_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub DEVCONF_to_name($) { return &DEVCONF_to_label // "code#$_[0]" }
+}
 
 our %EXPORT_TAGS = (
 
     devconf => [qw[
-        DEVCONF_FORWARDING
-        DEVCONF_HOPLIMIT
-        DEVCONF_MTU6
+        DEVCONF_ACCEPT_DAD
         DEVCONF_ACCEPT_RA
-        DEVCONF_ACCEPT_REDIRECTS
-        DEVCONF_AUTOCONF
-        DEVCONF_DAD_TRANSMITS
-        DEVCONF_RTR_SOLICITS
-        DEVCONF_RTR_SOLICIT_INTERVAL
-        DEVCONF_RTR_SOLICIT_DELAY
-        DEVCONF_USE_TEMPADDR
-        DEVCONF_TEMP_VALID_LFT
-        DEVCONF_TEMP_PREFERED_LFT
-        DEVCONF_REGEN_MAX_RETRY
-        DEVCONF_MAX_DESYNC_FACTOR
-        DEVCONF_MAX_ADDRESSES
-        DEVCONF_FORCE_MLD_VERSION
         DEVCONF_ACCEPT_RA_DEFRTR
+        DEVCONF_ACCEPT_RA_FROM_LOCAL
+        DEVCONF_ACCEPT_RA_MIN_HOP_LIMIT
+        DEVCONF_ACCEPT_RA_MIN_LFT
+        DEVCONF_ACCEPT_RA_MTU
         DEVCONF_ACCEPT_RA_PINFO
         DEVCONF_ACCEPT_RA_RTR_PREF
-        DEVCONF_RTR_PROBE_INTERVAL
         DEVCONF_ACCEPT_RA_RT_INFO_MAX_PLEN
-        DEVCONF_PROXY_NDP
-        DEVCONF_OPTIMISTIC_DAD
+        DEVCONF_ACCEPT_RA_RT_INFO_MIN_PLEN
+        DEVCONF_ACCEPT_REDIRECTS
         DEVCONF_ACCEPT_SOURCE_ROUTE
-        DEVCONF_MC_FORWARDING
+        DEVCONF_ACCEPT_UNTRACKED_NA
+        DEVCONF_ADDR_GEN_MODE
+        DEVCONF_AUTOCONF
+        DEVCONF_DAD_TRANSMITS
         DEVCONF_DISABLE_IPV6
-        DEVCONF_ACCEPT_DAD
+        DEVCONF_DISABLE_POLICY
+        DEVCONF_DROP_UNICAST_IN_L2_MULTICAST
+        DEVCONF_DROP_UNSOLICITED_NA
+        DEVCONF_ENHANCED_DAD
+        DEVCONF_FORCE_MLD_VERSION
         DEVCONF_FORCE_TLLAO
-        DEVCONF_NDISC_NOTIFY
+        DEVCONF_FORWARDING
+        DEVCONF_HOPLIMIT
+        DEVCONF_IGNORE_ROUTES_WITH_LINKDOWN
+        DEVCONF_IOAM6_ENABLED
+        DEVCONF_IOAM6_ID
+        DEVCONF_IOAM6_ID_WIDE
+        DEVCONF_KEEP_ADDR_ON_DOWN
+        DEVCONF_MAX
+        DEVCONF_MAX_ADDRESSES
+        DEVCONF_MAX_DESYNC_FACTOR
+        DEVCONF_MC_FORWARDING
+        DEVCONF_MIN
         DEVCONF_MLDV1_UNSOLICITED_REPORT_INTERVAL
         DEVCONF_MLDV2_UNSOLICITED_REPORT_INTERVAL
-        DEVCONF_SUPPRESS_FRAG_NDISC
-        DEVCONF_ACCEPT_RA_FROM_LOCAL
-        DEVCONF_USE_OPTIMISTIC
-        DEVCONF_ACCEPT_RA_MTU
+        DEVCONF_MTU6
+        DEVCONF_NDISC_EVICT_NOCARRIER
+        DEVCONF_NDISC_NOTIFY
+        DEVCONF_NDISC_TCLASS
+        DEVCONF_OPTIMISTIC_DAD
+        DEVCONF_PROXY_NDP
+        DEVCONF_RA_DEFRTR_METRIC
+        DEVCONF_REGEN_MAX_RETRY
+        DEVCONF_RPL_SEG_ENABLED
+        DEVCONF_RTR_PROBE_INTERVAL
+        DEVCONF_RTR_SOLICITS
+        DEVCONF_RTR_SOLICIT_DELAY
+        DEVCONF_RTR_SOLICIT_INTERVAL
+        DEVCONF_RTR_SOLICIT_MAX_INTERVAL
+        DEVCONF_SEG6_ENABLED
+        DEVCONF_SEG6_REQUIRE_HMAC
         DEVCONF_STABLE_SECRET
+        DEVCONF_SUPPRESS_FRAG_NDISC
+        DEVCONF_TEMP_PREFERED_LFT
+        DEVCONF_TEMP_VALID_LFT
         DEVCONF_USE_OIF_ADDRS_ONLY
-        DEVCONF_ACCEPT_RA_MIN_HOP_LIMIT
-        DEVCONF_IGNORE_ROUTES_WITH_LINKDOWN
+        DEVCONF_USE_OPTIMISTIC
+        DEVCONF_USE_TEMPADDR
+        DEVCONF_to_label
+        DEVCONF_to_name
+    ]],
+
+    ipv6_opt => [qw[
+        IPV6_OPT_MAX
+        IPV6_OPT_ROUTERALERT_MLD
+        IPV6_OPT_to_label
+        IPV6_OPT_to_name
+    ]],
+
+    labels => [qw[
+        DEVCONF_to_label
+        IPV6_OPT_to_label
+        IPV6_SRCRT_to_label
     ]],
 
     limits => [qw[
         DEVCONF_MAX
+        DEVCONF_MIN
+        IPV6_OPT_MAX
+        IPV6_SRCRT_MAX
+    ]],
+
+    names => [qw[
+        DEVCONF_to_name
+        IPV6_OPT_to_name
+        IPV6_SRCRT_to_name
     ]],
 
     pack => [qw[
@@ -289,13 +397,21 @@ our %EXPORT_TAGS = (
         struct_rt2_hdr_pack
     ]],
 
+    ipv6_srcrt => [qw[
+        IPV6_SRCRT_MAX
+        IPV6_SRCRT_TYPE_2
+        IPV6_SRCRT_TYPE_3
+        IPV6_SRCRT_TYPE_4
+        IPV6_SRCRT_to_label
+        IPV6_SRCRT_to_name
+    ]],
+
 );
 
 # Items that don't belong to any group
 my @export_allowed = qw(
     IPV6_MIN_MTU
     IPV6_OPT_ROUTERALERT_MLD
-    IPV6_SRCRT_TYPE_2
 );
 
 # Items that shouldn't be used in new code

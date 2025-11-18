@@ -123,19 +123,17 @@ use constant {
 # These appear to be only to help with marshalling the parts of each request &
 # response, which (being Perl) we do using clever 'pack' parameters instead.
 # Therefore they're not included as exported symbols.
-  # IPOPT_OPTVAL                =>     0,
-  # IPOPT_OLEN                  =>     1,
-  # IPOPT_OFFSET                =>     2,
-  # IPOPT_MINOFF                =>     4,
 
 use constant {
+    IPOPT_OPTVAL                =>     0,
+    IPOPT_OLEN                  =>     1,
+    IPOPT_OFFSET                =>     2,
+    IPOPT_MINOFF                =>     4,
 
     MAX_IPOPTLEN                =>    40,
-
 };
 
 use constant {
-
     IPOPT_TS_TSONLY             =>     0,   # timestamps only */
     IPOPT_TS_TSANDADDR          =>     1,   # timestamps and addresses */
     IPOPT_TS_PRESPEC            =>     3,   # specified modules only */
@@ -146,7 +144,7 @@ use constant {
 };
 
 use constant {
-    struct_iphdr_pack           =>  'CCnnnCCnNN',   # note that the first 'C' needs to be unpacked into (ihl:4, version:4)
+    struct_iphdr_pack           =>  'H2CnnnCCnNN',  # note that the 'H2' needs to be further unpacked into (version:4, ihl:4)
     struct_iphdr_len            =>    20,           # == length pack struct_iphdr_pack, (0) x 11;
 };
     #   struct iphdr {
@@ -229,7 +227,10 @@ use constant {
     #   };
 
 # index values for the variables in ipv4_devconf
-use constant {                                          #      0,
+# (these are indeces into the mapping list, but by accident of
+# history, they're off by one)
+use constant {
+    IPV4_DEVCONF_MIN                                    =>     1,
     IPV4_DEVCONF_FORWARDING                             =>     1,
     IPV4_DEVCONF_MC_FORWARDING                          =>     2,
     IPV4_DEVCONF_PROXY_ARP                              =>     3,
@@ -262,8 +263,24 @@ use constant {                                          #      0,
     IPV4_DEVCONF_DROP_UNICAST_IN_L2_MULTICAST           =>    40,
     IPV4_DEVCONF_DROP_GRATUITOUS_ARP                    =>    41,
     IPV4_DEVCONF_BC_FORWARDING                          =>    42,
-  # IPV4_DEVCONF_MAX                                    =>    43 - 1 | 0,
+    IPV4_DEVCONF_ARP_EVICT_NOCARRIER                    =>    43,
+    IPV4_DEVCONF_MAX                                    =>    44 - 1 | 0,
 };
+
+{
+my @names = (undef, qw(
+    forwarding mc_forwarding proxy_arp accept_redirects secure_redirects
+    send_redirects shared_media rp_filter accept_source_route bootp_relay
+    log_martians tag arpfilter medium_id noxfrm nopolicy force_igmp_version
+    arp_announce arp_ignore promote_secondaries arp_accept arp_notify
+    accept_local src_vmark proxy_arp_pvlan route_localnet
+    igmpv2_unsolicited_report_interval igmpv3_unsolicited_report_interval
+    ignore_routes_with_linkdown drop_unicast_in_l2_multicast
+    drop_gratuitous_arp bc_forwarding arp_evict_nocarrier
+));
+sub IPV4_DEVCONF_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub IPV4_DEVCONF_to_name($) { return &IFLA_XDP_to_label // "code#$_[0]" }
+}
 
 our %EXPORT_TAGS = (
 
@@ -331,11 +348,7 @@ our %EXPORT_TAGS = (
         IPOPT_EOL
         IPOPT_LSRR
         IPOPT_MEASUREMENT
-        IPOPT_MINOFF
         IPOPT_NOP
-        IPOPT_OFFSET
-        IPOPT_OLEN
-        IPOPT_OPTVAL
         IPOPT_RA
         IPOPT_RR
         IPOPT_SEC
@@ -400,7 +413,24 @@ our %EXPORT_TAGS = (
         IPV4_DEVCONF_SHARED_MEDIA
         IPV4_DEVCONF_SRC_VMARK
         IPV4_DEVCONF_TAG
+        IPV4_DEVCONF_MIN
+        IPV4_DEVCONF_MAX
+        IPV4_DEVCONF_to_label
+        IPV4_DEVCONF_to_name
 
+    ]],
+
+    labels => [qw[
+        IPV4_DEVCONF_to_label
+    ]],
+
+    limits => [qw[
+        IPV4_DEVCONF_MIN
+        IPV4_DEVCONF_MAX
+    ]],
+
+    names => [qw[
+        IPV4_DEVCONF_to_name
     ]],
 
     pack => [qw[
@@ -421,6 +451,10 @@ our %EXPORT_TAGS = (
 
 # Singletons that don't belong to any group
 my @export_allowed = qw(
+    IPOPT_OPTVAL
+    IPOPT_OLEN
+    IPOPT_OFFSET
+    IPOPT_MINOFF
     IPVERSION
 );
 
