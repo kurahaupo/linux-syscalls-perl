@@ -21,7 +21,8 @@ sub import {
     my $class = caller;
     my $symtab = do { no strict 'refs'; \%{$class.'::'} };
 
-    my $index = eval { $class->STRUCT_FIELD_INDEX } || 0;
+    my @existing_fields = eval { $class->STRUCT_FIELDS } || ();
+    my $index = scalar @existing_fields;
 
     my @opts = grep { defined && ! /^\w+$/ } @fields;
     @fields = grep { ! defined || /^\w+$/ } @fields;
@@ -70,6 +71,7 @@ sub import {
             1;
         } || die $@
             if defined $f && ! exists $symtab->{$f};
+        $existing_fields[$index] = $f;
         ++$index;
     }
 
@@ -188,9 +190,116 @@ sub import {
             $check_args
             return bless \\ \@list, \$class;
         }
-        use constant { STRUCT_FIELD_INDEX => $index };
         1;
     } || die $@;
+
+    my %field_map;
+    defined $existing_fields[$_] and $field_map{$existing_fields[$_]} = $_ for 0 .. $#existing_fields;
+
+    # Erase any older duplicates without compacting the resulting list
+    @existing_fields[ grep { ($field_map{$existing_fields[$_] // ''} // $_) != $_ } keys @existing_fields ] = ()
+        if %field_map < @existing_fields;
+
+    delete $symtab->{STRUCT_FIELDS};
+    eval qq{
+        package $class;
+        sub STRUCT_FIELDS{ return \@existing_fields }
+        1;
+    } or die $@;
+    *{$symtab->{STRUCT_FIELDS}} = \@existing_fields;
+    *{$symtab->{STRUCT_FIELDS}} = \%field_map;
+
+    delete $symtab->{STRUCT_FIELDS_HASH};
+    eval qq{
+        package $class;
+        sub STRUCT_FIELDS_HASH { return \\ \%field_map };
+        1;
+    } or die $@;
+
+    $quiet //= '()';
+    delete $symtab->{STRUCT_FIELDS_QUIET};
+    eval qq{
+        package $class;
+        sub STRUCT_FIELDS_QUIET { return $quiet };
+        1;
+    } or die $@;
+
+    $strict ||= $quiet ? '()' : 0;
+    delete $symtab->{STRUCT_FIELDS_STRICT};
+    eval qq{
+        package $class;
+        sub STRUCT_FIELDS_STRICT { return $strict };
+        1;
+    } or die $@;
 }
+
+package Linux::IpRoute2::struct::hash {
+    use Carp qw{ carp croak };
+
+    sub hashify {
+        tie my %t, __PACKAGE__, @_;
+        return \%t;
+    }
+
+    sub TIEHASH {
+        my ($class, $struct) = @_;
+        return bless [ $struct ], $class;
+    }
+
+    sub FETCH {
+        my ($self, $key) = @_;
+        my $struct = $self->[0];
+        my $i = $struct->STRUCT_FIELDS_HASH->{$key} // do {
+            croak 'Reading non-existent element of struct' if $self->STRUCT_FIELDS_STRICT;
+            carp 'Reading non-existent element of struct';
+            return ();
+        };
+        return $struct->[$i];
+    }
+
+    sub STORE {
+        my ($self, $key, $value) = @_;
+        my $struct = $self->[0];
+        my $i = $struct->STRUCT_FIELDS_HASH->{$key} // croak 'Setting non-existent element of struct';
+        $struct->[$i] = $value;
+    }
+
+    sub DELETE { croak 'Immutable hash'; }
+    sub CLEAR { croak 'Immutable hash'; }
+
+    sub EXISTS {
+        my ($self, $key) = @_;
+        exists $self->[0]->STRUCT_FIELDS_HASH->{$key};
+    }
+
+    sub FIRSTKEY {
+        my ($self) = @_;
+        $self->[1] = 0;
+        goto &NEXTKEY
+    }
+
+    sub NEXTKEY {
+        my ($self, $prevkey) = @_;
+        my $struct = $self->[0];
+        my $fields = $struct->STRUCT_FIELDS;
+        for (;$self->[1] < @$fields;) {
+            my $r = $fields->[$self->[1]++];
+            return $r if defined $r;
+        }
+        return ();
+    }
+
+    sub SCALAR {
+        my ($self) = @_;
+        return scalar @{$self->[0]->STRUCT_FIELDS};
+    }
+
+  # sub UNTIE { }
+  # sub DESTROY { }
+}
+
+use overload (
+    '%{}' => \&Linux::IpRoute2::struct::hash::hashify,
+);
 
 1;
