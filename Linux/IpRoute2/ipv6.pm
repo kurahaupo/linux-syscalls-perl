@@ -3,6 +3,7 @@
 use 5.010;
 use strict;
 use warnings;
+use integer;
 
 package Linux::IpRoute2::ipv6 v0.0.1;
 

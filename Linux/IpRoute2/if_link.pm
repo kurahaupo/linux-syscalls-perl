@@ -3,6 +3,7 @@
 use v5.10;
 use strict;
 use warnings;
+use integer;
 
 package Linux::IpRoute2::if_link v0.0.1;
 
@@ -171,7 +172,11 @@ use constant {
     IFLA_PROTO_DOWN_REASON              =>    55,
     IFLA_PARENT_DEV_NAME                =>    56,
     IFLA_PARENT_DEV_BUS_NAME            =>    57,
-    IFLA_MAX                            =>    58 - 1 | 0,
+    IFLA_GRO_MAX_SIZE                   =>    58,
+    IFLA_TSO_MAX_SIZE                   =>    59,
+    IFLA_TSO_MAX_SEGS                   =>    60,
+    IFLA_ALLMULTI                       =>    61,
+    IFLA_MAX                            =>    62 - 1 | 0,
 };
 
 use constant {
@@ -189,7 +194,7 @@ my @names = qw(
     proto_down gso_max_segs gso_max_size pad xdp event new_netnsid
     target_netnsid carrier_up_count carrier_down_count new_ifindex min_mtu
     max_mtu prop_list alt_ifname perm_address proto_down_reason parent_dev_name
-    parent_dev_bus_name
+    parent_dev_bus_name gro_max_size tso_max_size tso_max_segs allmulti
 );
 sub IFLA_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
 sub IFLA_to_name($) { return &IFLA_to_label // "code#$_[0]" }

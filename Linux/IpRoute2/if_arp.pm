@@ -3,6 +3,7 @@
 use v5.10;
 use strict;
 use warnings;
+use integer;
 
 package Linux::IpRoute2::if_arp v0.0.1;
 
@@ -136,6 +137,17 @@ sub ARPOP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
 sub ARPOP_to_name($) { return &ARPOP_to_label // "code#$_[0]" }
 }
 
+    #struct sockaddr
+    #  {
+    #    bigendian uint16_t sa_family;
+    #    char sa_data[14];
+    #  };
+
+use constant {
+    struct_sockaddr_pack                => 'SC14',
+    struct_sockaddr_len                 => 16,
+};
+
     ## ARP ioctl request.
     #   struct arpreq {
     #       struct sockaddr     arp_pa;         # protocol address
@@ -145,6 +157,11 @@ sub ARPOP_to_name($) { return &ARPOP_to_label // "code#$_[0]" }
     #       char                arp_dev[IFNAMSIZ];
     #   };
 
+use constant {
+    struct_arpreq_pack                  => '(SC14)2L(SC14)Z*',
+    struct_arpreq_len                   => undef,
+};
+
     ## old ARP ioctl request.
     #   struct arpreq_old {
     #       struct sockaddr     arp_pa;         # protocol address
@@ -152,6 +169,11 @@ sub ARPOP_to_name($) { return &ARPOP_to_label // "code#$_[0]" }
     #       int                 arp_flags;      # flags
     #       struct sockaddr     arp_netmask;    # netmask (only for proxy arps)
     #   };
+
+use constant {
+    struct_arpreq_old_pack              => '(SC14)2L(SC14)',
+    struct_arpreq_old_len               => 52,
+};
 
 ## ARP Flag values.
 use constant {
@@ -320,7 +342,6 @@ our %EXPORT_TAGS = (
     pack => [qw[
         struct_arphdr_pack
         struct_arphdr_len
-
         struct_arpdata16_len
         struct_arpdata16_pack
         struct_arpdata32_len
@@ -331,6 +352,8 @@ our %EXPORT_TAGS = (
         struct_arpdata64_pack
         struct_arpdata8_len
         struct_arpdata8_pack
+        struct_arpreq_pack
+        struct_arpreq_len
     ]],
 );
 
