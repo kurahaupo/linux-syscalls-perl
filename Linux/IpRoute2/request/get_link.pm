@@ -9,13 +9,11 @@ use Data::Dumper;
 
 package Linux::IpRoute2::request::get_link;
 
-use parent 'Linux::IpRoute2::message::link',
-           'Linux::IpRoute2::request::_base';
+use parent 'Linux::IpRoute2::request::_base',
+           'Linux::IpRoute2::message::link';
 use Carp 'confess';
-use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST
-                                   struct_ifinfomsg_pack
-                                   struct_nlmsghdr_pack );
-# From first half of "talk"
+use Linux::IpRoute2::rtnetlink qw( RTM_GETLINK NLM_F_REQUEST );
+
 sub compose {
     my $self = shift;
     $#_ == 4 or confess "Wrong args";
@@ -37,38 +35,12 @@ sub add_ifla {
     return $self;
 }
 
-sub getpack($;$$) {
-    my ($self, $seq, $pid) = @_;
-    my ($code, $flags) = @{ $self->{header} };
-    warn sprintf "getpack(seq=%s, pid=%s)\n"
-                ."\twith %s\n"
-                ."\t     code=%d, flags=%#x,\n",
-        $seq, $pid,
-        Data::Dumper->new([$self],['self'])->Indent(0)->Useqq(1)->Dump,
-        $code, $flags,
-        if $Linux::IpRoute2::ShowComposition;
-    my $request = pack struct_nlmsghdr_pack,
-                        0,              # length, to be filled in...
-                        $code,
-                        $flags,
-                        $seq // 0,      # sequence (dummy)
-                        $pid // 0;      # port-id
+use Linux::IpRoute2::rtnetlink qw( struct_ifinfomsg_pack );
 
-    my $ifinfomsg = pack struct_ifinfomsg_pack, @{$self->{ifinfomsg}};
-
-    # Concatenate the packed base request and all the packed attrs,
-    # inserting padding so that each has 4-byte alignment.
-    $request = pack '(a*x![L])*',
-                    $request,
-                    $ifinfomsg,
-                    map { $_->getpack }
-                        @{ $self->{attrs} };
-
-    # ... now fill in length;  4 == sizeof(uint32_t), where uint32_t is the result of pack 'L'
-    substr $request, 0, 4, pack L => length $request;
-    warn __PACKAGE__."::getpack(@_) => ".unpack "H*", $request
-        if $Linux::IpRoute2::ShowComposition;
-    return $self->{data} = $request;
+sub get_subhead_pack {
+    my ($self) = @_;
+    my $ifinfomsg = $self->{ifinfomsg};
+    return pack struct_ifinfomsg_pack, @$ifinfomsg;
 }
 
 1;

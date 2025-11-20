@@ -16,7 +16,7 @@ use parent 'Linux::IpRoute2::message::_base';
 use Carp qw( confess cluck );
 
 use Linux::IpRoute2::rtnetlink qw(
-                                   :rtm
+                                   :nlm_types :rtm
                                    struct_nlmsghdr_pack
                                    struct_sockaddr_nl_pack
                                  );

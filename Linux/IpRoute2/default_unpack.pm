@@ -118,15 +118,15 @@ sub unpack_residue {
     push @$self, unpack 'H*', $data;
 }
 
-sub getpack {
+sub get_pack {
     my ($self) = @_;
     my $res = pack $self->packpat, @$self;
 
-    $res .= join '', map { $_->getpack } $self->attrs if $self->can('attrs');
+    $res .= join '', map { $_->get_pack } $self->attrs if $self->can('attrs');
 
     $res = pack 'SSa*x![L]', length($res)+4, $self->attr_type, $res;
 
-    printf STDERR "\e[33m%s::\e[1mgetpack\e[m(\e[36m%s\e[m)\n"
+    printf STDERR "\e[33m%s::\e[1mget_pack\e[m(\e[36m%s\e[m)\n"
                 . "\t packpat={SS%s}\n"
                 . "\t attr_type=%s\n"
                 . "\t self=%s\n"

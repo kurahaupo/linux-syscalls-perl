@@ -154,7 +154,7 @@ package Linux::IpRoute2::attr::link::address {
     #   Linux::IpRoute2::attr::link::broadcast
     #   Linux::IpRoute2::attr::link::perm_address
     # Store as a string of 12 or 16 hex digits (without punctuation) so
-    # that we can use the inherited unpack_self and getpack.
+    # that we can use the inherited unpack_self and get_pack.
     use constant packpat => 'H*';
     use Linux::IpRoute2::struct qw( macaddr_compat );
     sub macaddr { return $_[0]->macaddr_compat =~ s/\w\w(?=\w)/$&:/gr }
@@ -436,10 +436,12 @@ package Linux::IpRoute2::attr::link::xdp {
         }
     }
 
-    sub getpack {
-        state %once;
+    sub get_pack {
+        my ($self) = @_;
+        my $class = ref $self;
         my $pkg = __PACKAGE__;
-        warn "${pkg}::getpack(@_) is missing, using fallback 'H*'\n" if ! $once{$pkg}++;
+        state %once;
+        warn "Missing specialisation method ${class}::get_pack, using fallback ${pkg}::get_pack returning 'H*'\n" if ! $once{$pkg}++;
         return 'H*';
     }
 

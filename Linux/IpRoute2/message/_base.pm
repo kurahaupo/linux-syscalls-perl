@@ -177,7 +177,7 @@ sub send {
     my ($self, $conx, $sendmsg_flags) = @_;
     $sendmsg_flags //= 0;   # optional
 
-    my $msg = $self->getpack(++$conx->{seq}, $conx->{port_id});
+    my $msg = $self->get_pack(++$conx->{seq}, $conx->{port_id});
 
     my $rlen = $conx->msend($sendmsg_flags, $msg, undef, $conx->FixedSocketName) or die "Could not send";;
 
