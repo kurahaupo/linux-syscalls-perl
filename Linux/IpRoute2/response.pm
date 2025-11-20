@@ -112,9 +112,25 @@ sub unpack_new_msg {
 
     $reply_len2 = length $packed_recv or die "Reply length mismatch got $reply_len2, expected ".length($packed_recv)."\n";
 
-    my $msg_type = $msg_code >> RTM_TSHIFT;
-    my $msg_class = Linux::IpRoute2::message::_base::_msg_type_to_class($msg_type)
-        // die "Cannot pick a type for code=$msg_code (".RTM_to_name($msg_code)."), msg_type=$msg_type (".RTM_type_to_name($msg_type).")";
+    my $msg_type;
+    my $msg_class;
+
+    if ($msg_code < NLMSG_MIN_TYPE) {
+        $msg_type = 0;
+        $msg_class = Linux::IpRoute2::nlmsg::_nlmsg_code_to_class($msg_code)
+            // die "Cannot pick a type for code=$msg_code (".RTM_to_name($msg_code)."), msg_type=$msg_type (".RTM_type_to_name($msg_type).")";
+        # One of:
+        #   NLMSG_DONE
+        #   NLMSG_ERROR
+        #   NLMSG_NOOP
+        #   NLMSG_OVERRUN
+
+    } else {
+
+        $msg_type = $msg_code >> RTM_TSHIFT;
+        $msg_class = Linux::IpRoute2::message::_base::_msg_type_to_class($msg_type)
+            // die "Cannot pick a type for code=$msg_code (".RTM_to_name($msg_code)."), msg_type=$msg_type (".RTM_type_to_name($msg_type).")";
+    }
 
     my $msg = bless {
         code        => $msg_code,

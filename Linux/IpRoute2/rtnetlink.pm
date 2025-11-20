@@ -8,6 +8,7 @@ use integer;
 package Linux::IpRoute2::rtnetlink v0.0.1;
 
 use Exporter 'import';
+use POSIX 'frexp';
 
 use Linux::Syscalls ();
 
@@ -19,7 +20,7 @@ sub _B($) { 1 << pop }
 use constant {
     RTNL_FAMILY_IPMR    =>   128,
     RTNL_FAMILY_IP6MR   =>   129,
-  # RTNL_FAMILY_MAX     =>   129 | 0,
+    RTNL_FAMILY_MAX     =>   130 - 1 | 0,
 };
 
 {
@@ -28,11 +29,59 @@ sub RTNL_FAMILY_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
 sub RTNL_FAMILY_to_name($) { return &RTNL_FAMILY_to_label // "code#$_[0]" }
 }
 
+################################################################################
+#
+# Note that NLMSG_* and RTM_* are both used to fill the 'code' field
+
+# NLMSG_ALIGNTO         4U      /* == sizeof(uint32_t) */
+# NLMSG_ALIGN(len)      ( ((len)+NLMSG_ALIGNTO-1) & ~(NLMSG_ALIGNTO-1) )
+# NLMSG_HDRLEN          ((int) NLMSG_ALIGN(sizeof(struct nlmsghdr)))
+# NLMSG_LENGTH(len)     ((len) + NLMSG_HDRLEN)
+# NLMSG_SPACE(len)      NLMSG_ALIGN(NLMSG_LENGTH(len))
+# NLMSG_DATA(nlh)       ((void *)(((char *)nlh) + NLMSG_HDRLEN))
+# NLMSG_NEXT(nlh,len)   ((len) -= NLMSG_ALIGN((nlh)->nlmsg_len), (struct nlmsghdr *)(((char *)(nlh)) + NLMSG_ALIGN((nlh)->nlmsg_len)))
+# NLMSG_OK(nlh,len)     ((len) >= (int)sizeof(struct nlmsghdr) && (nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && (nlh)->nlmsg_len <= (len))
+# NLMSG_PAYLOAD(nlh,len) ((nlh)->nlmsg_len - NLMSG_SPACE((len)))
+
 use constant {
-    RTM_TMIN            =>     4,
+    NLMSG_MIN           =>     1,
+    NLMSG_NOOP          =>     1,   # Nothing.
+    NLMSG_ERROR         =>     2,   # Error
+    NLMSG_DONE          =>     3,   # End of a dump
+    NLMSG_OVERRUN       =>     4,   # Data lost
+    NLMSG_MAX           =>  0x10 - 1 | 0,
+    NLMSG_MIN_TYPE      =>  0x10,   # (smaller values reserved for control messages)
 };
 
-# The 0~3 are skipped, possibly to avoid clashing with the op values
+{
+my @names = (undef, qw( noop error done overrun ));
+sub NLMSG_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub NLMSG_to_name($) { return &NLMSG_to_label // "code#$_[0]" }
+}
+
+################################################################################
+
+my @RTM_ops;
+BEGIN {
+@RTM_ops = qw(
+                    new
+                    del
+                    get
+                    set
+                );
+}
+
+use constant {
+    RTM_TSHIFT          => (frexp $#RTM_ops)[1],            # type shift == 2
+};
+
+use constant {
+    RTM_TMASK           =>    ~0 << RTM_TSHIFT,             # type mask
+    RTM_OMASK           =>  ~(~0 << RTM_TSHIFT),            # operation mask ≥ $#RTM_ops
+    RTM_BASE            =>  NLMSG_MIN_TYPE,
+    RTM_TMIN            =>  NLMSG_MIN_TYPE >> RTM_TSHIFT,
+};
+
 my @RTM_types;
 BEGIN {
 @RTM_types = ((undef) x RTM_TMIN, qw(
@@ -60,30 +109,9 @@ BEGIN {
 
 use constant {
     RTM_TMAX            =>  $#RTM_types,
-    RTM_TSHIFT          =>     2,       # type shift
 };
 use constant {
-    RTM_TMASK           =>  ~0 << RTM_TSHIFT,
-};
-
-my @RTM_ops;
-BEGIN {
-@RTM_ops = qw(
-                    new
-                    del
-                    get
-                    set
-                );
-}
-
-use constant {
-    RTM_OMASK           =>  ~RTM_TMASK, # operation mask
-    RTM_OSHIFT          =>     0,       # operation shift
-};
-
-use constant {
-    RTM_BASE            =>  RTM_TMIN      << RTM_TSHIFT,               # 16 == min, rounded down
-    RTM_MAX             =>  RTM_TMAX      << RTM_TSHIFT | RTM_OMASK,   # 91 == max, rounded up
+    RTM_MAX             =>  RTM_TMAX  << RTM_TSHIFT | RTM_OMASK,    # 91 == max, rounded up
 };
 
 # Define composite symbols like RTM_{NEW,DEL,GET,SET}{LINK,ADDR,ROUTE...NSID}
@@ -118,7 +146,7 @@ sub RTM_op_to_name($) { return &RTM_op_to_label // "op#$_[0]" }
 sub RTM_type_to_label($) { return $_[0] >= 0 ? $RTM_types[$_[0]] : () }
 sub RTM_type_to_name($) { return &RTM_type_to_label // "type#$_[0]" }
 
-sub RTM_to_name($) {
+sub RTM_to_label($) {
     my ($c) = @_;
     my $on = $RTM_ops[$c & RTM_OMASK];  # Cannot fail
     my $t = $c >> RTM_TSHIFT;
@@ -128,6 +156,7 @@ sub RTM_to_name($) {
     }
     return sprintf '%s#%u', lc $on, $t;
 }
+sub RTM_to_name($) { return &RTM_to_label // "code#$_[0]" }
 
 # Generic structure for encapsulation of optional route information.
 # It is reminiscent of sockaddr, but with sa_family replaced
@@ -182,7 +211,7 @@ use constant {
     RTN_NAT             =>    10,   # Translate this address
     RTN_XRESOLVE        =>    11,   # Use external resolver
 
-  # RTN_MAX             =>    11 | 1, # max, rounded up
+    RTN_MAX             =>    12 - 1 | 0, # max, rounded up
 };
 
 {
@@ -248,12 +277,14 @@ use constant {
 
     # Remainder are user-defined in the sense that the kernel doesn't care, but
     RT_SCOPE_GLOBAL     =>     0,   # == RT_SCOPE_UNIVERSE, not in rtnetlink.h
+    RT_SCOPE_min_label  =>   200,
     RT_SCOPE_SITE       =>   200,
     RT_SCOPE_LINK       =>   253,
     RT_SCOPE_HOST       =>   254,
 
     # nowhere is a custom scope
     RT_SCOPE_NOWHERE    =>   255,
+    RT_SCOPE_max_label  =>   256 - 1 | 0,
 };
 
 {
@@ -281,16 +312,20 @@ sub RTMF_to_desc($) {
 }
 }
 
+# Preferably these labels should be read from /etc/iproute2/rt_tables &
+# /etc/iproute2/rt_tables.d/*.conf
 use constant {
     # Reserved table identifiers
     RT_TABLE_UNSPEC     =>     0,
 
     # User defined values
+    RT_TABLE_min_label  =>   252,
     RT_TABLE_COMPAT     =>   252,
     RT_TABLE_DEFAULT    =>   253,
     RT_TABLE_MAIN       =>   254,
     RT_TABLE_LOCAL      =>   255,
-  # RT_TABLE_MAX        =>   0xFFFFFFFF
+    RT_TABLE_max_label  =>   255,
+  # RT_TABLE_MAX        =>   0xffffffff
 };
 
 {
@@ -328,7 +363,7 @@ use constant {
     RTA_PREF            =>    20,
     RTA_ENCAP_TYPE      =>    21,
     RTA_ENCAP           =>    22,
-  # RTA_MAX             =>    22 | 1,
+    RTA_MAX             =>    23 - 1 | 0,
 };
 
 {
@@ -365,7 +400,7 @@ use constant {
     RTNH_F_ONLINK       =>  _B 2,   #  4    Gateway is forced on link
     RTNH_F_OFFLOAD      =>  _B 3,   #  8    offloaded route
     RTNH_F_LINKDOWN     =>  _B 4,   # 16    carrier-down on nexthop
-    RTNH_COMPARE_MASK   =>    25,   # == RTNH_F_DEAD | RTNH_F_LINKDOWN | RTNH_F_OFFLOAD
+    RTNH_COMPARE_MASK   =>    25,   # == RTNH_F_DEAD | RTNH_F_OFFLOAD | RTNH_F_LINKDOWN
 };
 
 {
@@ -449,8 +484,7 @@ use constant {
     RTAX_INITRWND       =>    14,
     RTAX_QUICKACK       =>    15,
     RTAX_CC_ALGO        =>    16,
-
-  # RTAX_MAX            =>    16 | 0,
+    RTAX_MAX            =>    17 - 1 | 0,
 };
 
 
@@ -482,12 +516,12 @@ sub RTAXF_to_desc($) {
 use constant {
     struct_rta_session_pack         =>  'Cx7',
     struct_rta_session_narg         =>     1,
-    struct_rta_session_pack_ports   =>  'Cx3SS',
-    struct_rta_session_narg_ports   =>     3,
-    struct_rta_session_pack_icmpt   =>  'Cx3CCS',
-    struct_rta_session_narg_icmpt   =>     4,
-    struct_rta_session_pack_spi     =>  'Cx3L',
-    struct_rta_session_narg_spi     =>     2,
+    struct_rta_session_ports_pack   =>  'Cx3SS',
+    struct_rta_session_ports_narg   =>     3,
+    struct_rta_session_icmpt_pack   =>  'Cx3CCS',
+    struct_rta_session_icmpt_narg   =>     4,
+    struct_rta_session_spi_pack     =>  'Cx3L',
+    struct_rta_session_spi_narg     =>     2,
     struct_rta_session_len          =>     8,   # == 1+1+2+2+2 == 1+1+2+1+1+2 = 1+1+2+4
 };
 
@@ -588,8 +622,7 @@ use constant {
     PREFIX_UNSPEC       =>     0,
     PREFIX_ADDRESS      =>     1,
     PREFIX_CACHEINFO    =>     2,
-
-  # PREFIX_MAX          =>     2 | 0,
+    PREFIX_MAX          =>     3 - 1 | 0,
 };
 
 
@@ -638,8 +671,7 @@ use constant {
     TCA_FCNT        =>     6,
     TCA_STATS2      =>     7,
     TCA_STAB        =>     8,
-
-  # TCA_MAX         =>     8 | 0,
+    TCA_MAX         =>     9 - 1 | 0,
 };
 
 {
@@ -676,8 +708,7 @@ use constant {
 use constant {
     NDUSEROPT_UNSPEC    =>     0,
     NDUSEROPT_SRCADDR   =>     1,
-
-  # NDUSEROPT_MAX       =>     1 | 0,
+    NDUSEROPT_MAX       =>     2 - 1 | 0,
 };
 
 {
@@ -708,6 +739,20 @@ use constant {
 
     RTMGRP_IPV6_PREFIX          => _B 17,  # = 0x20000
 };
+{
+my @names = (qw(
+    link notify neigh tc ipv4_ifaddr ipv4_mroute ipv4_route ipv4_rule
+    ipv6_ifaddr ipv6_mroute ipv6_route ipv6_ifinfo decNET_ifaddr
+ ), (undef), qw(
+    decNET_route
+ ), (undef) x 2, qw(
+    ipv6_prefix
+));
+sub RTMGRP_to_desc($) {
+    splice @_, 1, 0, \@names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
+}
 
 # RTnetlink multicast groups (enum rtnetlink_groups)
 use constant {
@@ -740,9 +785,20 @@ use constant {
     RTNLGRP_MDB                 =>    26,
     RTNLGRP_MPLS_ROUTE          =>    27,
     RTNLGRP_NSID                =>    28,
-
-  # RTNLGRP_MAX                 =>    28 | 0,
+    RTNLGRP_MAX                 =>    29 - 1 | 0,
 };
+
+{
+my @names = qw(
+    none link notify neigh tc ipv4_ifaddr ipv4_mroute ipv4_route ipv4_rule
+    ipv6_ifaddr ipv6_mroute ipv6_route ipv6_ifinfo decNET_ifaddr nop2
+    decNET_route decNET_rule nop4 ipv6_prefix ipv6_rule nd_useropt
+    phonet_ifaddr phonet_route dcb ipv4_netconf ipv6_netconf mdb mpls_route
+    nsid
+);
+sub RTNLGRP_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub RTNLGRP_to_name($) { return &RTNLGRP_to_label // "code#$_[0]" }
+}
 
 # TC action piece
 use constant {
@@ -761,9 +817,14 @@ use constant {
 
 use constant {
     TCA_ACT_TAB                 =>     1, # attr type must be >=1
-
-  # TCAA_MAX                    =>     1 | 0,
+    TCA_ACT_MAX                 =>     2 - 1 | 0,
 };
+
+{
+my @names = (undef, qw( tab ));
+sub TCA_ACT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub TCA_ACT_to_name($) { return &TCA_ACT_to_label // "code#$_[0]" }
+}
 
 # New extended info filters for IFLA_EXT_MASK
 use constant {
@@ -807,6 +868,7 @@ use constant {
     NETLINK_RDMA                =>    20,
     NETLINK_CRYPTO              =>    21,   # Crypto layer
     NETLINK_SMC                 =>    22,   # SMC monitoring
+    NETLINK_MAX                 =>    23 - 1 | 0,
 };
 
 use constant {
@@ -878,6 +940,48 @@ use constant {
     NLM_F_ACK_TLVS              => _B  9,   # 0x200     Extended ACK TVLs were included
 };
 
+{
+my @base_names = (qw(
+    request multi ack echo dump_intr dump_filtered
+), undef, undef);
+
+# Modifiers to GET request
+my @get_names = (@base_names, qw(
+    get_root get_match get_atomic
+));
+sub NLM_F_get_to_desc($) {
+    splice @_, 1, 0, \@get_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
+
+# Modifiers to NEW request
+my @new_names = (@base_names, qw(
+    mod_replace mod_excl mod_create mod_append
+), undef, undef);
+sub NLM_F_new_to_desc($) {
+    splice @_, 1, 0, \@new_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
+
+# Modifiers to DELETE request
+my @del_names = (@base_names, qw(
+    del_nonrec
+), undef, undef);
+sub NLM_F_del_to_desc($) {
+    splice @_, 1, 0, \@del_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
+
+# Flags for ACK message
+my @ack_names = (@base_names, qw(
+    ack_capped ack_tlvs
+));
+sub NLM_F_ack_to_desc($) {
+    splice @_, 1, 0, \@ack_names;
+    goto &Linux::Syscalls::_bits_to_desc;
+}
+}
+
 use constant {
     NETLINK_ADD_MEMBERSHIP      =>     1,
     NETLINK_DROP_MEMBERSHIP     =>     2,
@@ -891,7 +995,16 @@ use constant {
     NETLINK_CAP_ACK             =>    10,
     NETLINK_EXT_ACK             =>    11,
     NETLINK_GET_STRICT_CHK      =>    12,
+    NETLINK_OPT_MAX             =>    13 - 1 | 0,
 };
+{
+my @names = ( undef, qw(
+    add_membership drop_membership pktinfo broadcast_error no_enobufs rx_ring
+    tx_ring listen_all_nsid list_memberships cap_ack ext_ack get_strict_chk
+));
+sub NETLINK_OPT_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub NETLINK_OPT_to_name($) { return &NETLINK_OPT_to_label // "code#$_[0]" }
+}
 
 use constant {
     struct_nl_pktinfo_pack      =>   'L',
@@ -939,26 +1052,16 @@ use constant {
     NL_MMAP_STATUS_VALID        =>     2,
     NL_MMAP_STATUS_COPY         =>     3,
     NL_MMAP_STATUS_SKIP         =>     4,
+    NL_MMAP_STATUS_MAX          =>     5 - 1 | 0,
 };
 
-# NLMSG_ALIGNTO         4U      /* == sizeof(uint32_t) */
-# NLMSG_ALIGN(len)      ( ((len)+NLMSG_ALIGNTO-1) & ~(NLMSG_ALIGNTO-1) )
-# NLMSG_HDRLEN          ((int) NLMSG_ALIGN(sizeof(struct nlmsghdr)))
-# NLMSG_LENGTH(len)     ((len) + NLMSG_HDRLEN)
-# NLMSG_SPACE(len)      NLMSG_ALIGN(NLMSG_LENGTH(len))
-# NLMSG_DATA(nlh)       ((void *)(((char *)nlh) + NLMSG_HDRLEN))
-# NLMSG_NEXT(nlh,len)   ((len) -= NLMSG_ALIGN((nlh)->nlmsg_len), (struct nlmsghdr *)(((char *)(nlh)) + NLMSG_ALIGN((nlh)->nlmsg_len)))
-# NLMSG_OK(nlh,len)     ((len) >= (int)sizeof(struct nlmsghdr) && (nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && (nlh)->nlmsg_len <= (len))
-# NLMSG_PAYLOAD(nlh,len) ((nlh)->nlmsg_len - NLMSG_SPACE((len)))
-
-use constant {
-    NLMSG_NOOP                  =>     1,    # Nothing.
-    NLMSG_ERROR                 =>     2,    # Error
-    NLMSG_DONE                  =>     3,    # End of a dump
-    NLMSG_OVERRUN               =>     4,    # Data lost
-
-  # NLMSG_MIN_TYPE              =>  0x10,   # < 0x10: reserved control messages
-};
+{
+my @names = qw(
+    unused reserved valid copy skip
+);
+sub NL_MMAP_STATUS_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub NL_MMAP_STATUS_to_name($) { &NL_MMAP_STATUS_to_label // "code#$_[0]" }
+}
 
 # NL_MMAP_MSG_ALIGNMENT       NLMSG_ALIGNTO
 # NL_MMAP_MSG_ALIGN(sz)       __ALIGN_KERNEL(sz, NL_MMAP_MSG_ALIGNMENT)
@@ -969,76 +1072,190 @@ use constant {
 };
 
 use constant {
-    NETLINK_UNCONNECTED => 0,
-    NETLINK_CONNECTED   => 1,
+    NETLINK_UNCONNECTED         => 0,
+    NETLINK_CONNECTED           => 1,
+    NETLINK_STATE_MAX           => 2 - 1 | 0,
 };
+
+{
+my @names = qw(
+    unconnected
+    connected
+);
+sub NETLINK_STATE_to_label($) { return $_[0] >= 0 ? $names[$_[0]] : () }
+sub NETLINK_STATE_to_name($) { &NL_MMAP_STATUS_to_label // "code#$_[0]" }
+}
 
 our %EXPORT_TAGS = (
 
+    bit_set_descriptions => [qw[
+        RTAXF_to_desc
+        RTEXT_FILTER_to_desc
+        RTMF_to_desc
+        RTMGRP_to_desc
+        RTNETLINKF_to_desc
+        RTNHF_to_desc
+    ]],
+
+    labels => [qw[
+        NDUSEROPT_to_label
+        NETLINK_OPT_to_label
+        NETLINK_STATE_to_label
+        NETLINK_to_label
+        NLMSG_to_label
+        NL_MMAP_STATUS_to_label
+        PREFIX_FAMILY_to_label
+        RTAX_to_label
+        RTA_to_label
+        RTM_op_to_label
+        RTM_to_label
+        RTM_type_to_label
+        RTNLGRP_to_label
+        RTNL_FAMILY_to_label
+        RTN_to_label
+        RTPROT_to_label
+        RT_SCOPE_to_label
+        RT_TABLE_to_label
+        TCA_ACT_to_label
+        TCA_to_label
+    ]],
+
+    limits => [qw[
+        NDUSEROPT_MAX
+        NETLINK_MAX
+        NETLINK_OPT_MAX
+        NETLINK_STATE_MAX
+        NLMSG_MAX
+        NLMSG_MIN
+        NL_MMAP_STATUS_MAX
+        PREFIX_MAX
+        RTAX_MAX
+        RTA_MAX
+        RTM_MAX
+        RTNLGRP_MAX
+        RTNL_FAMILY_MAX
+        RTN_MAX
+        RT_SCOPE_max_label
+        RT_SCOPE_min_label
+        RT_TABLE_max_label
+        RT_TABLE_min_label
+        TCA_ACT_MAX
+        TCA_MAX
+    ]],
+
+    names => [qw[
+        NDUSEROPT_to_name
+        NETLINK_OPT_to_name
+        NETLINK_STATE_to_name
+        NETLINK_to_name
+        NLMSG_to_name
+        NL_MMAP_STATUS_to_name
+        PREFIX_FAMILY_to_name
+        RTAX_to_name
+        RTA_to_name
+        RTM_op_to_name
+        RTM_to_name
+        RTM_type_to_name
+        RTNLGRP_to_name
+        RTNL_FAMILY_to_name
+        RTN_to_name
+        RTPROT_to_name
+        RT_SCOPE_to_name
+        RT_TABLE_to_name
+        TCA_ACT_to_name
+        TCA_to_name
+    ]],
+
     pack => [qw[
-
-        struct_ifinfomsg_pack
         struct_ifinfomsg_len
+        struct_ifinfomsg_narg
+        struct_ifinfomsg_pack
 
-        struct_nduseroptmsg_pack
         struct_nduseroptmsg_len
+        struct_nduseroptmsg_narg
+        struct_nduseroptmsg_pack
 
-        struct_nl_mmap_hdr_pack
         struct_nl_mmap_hdr_len
+        struct_nl_mmap_hdr_narg
+        struct_nl_mmap_hdr_pack
 
-        struct_nl_mmap_req_pack
         struct_nl_mmap_req_len
+        struct_nl_mmap_req_narg
+        struct_nl_mmap_req_pack
 
-        struct_nl_pktinfo_pack
         struct_nl_pktinfo_len
+        struct_nl_pktinfo_narg
+        struct_nl_pktinfo_pack
 
-        struct_nlmsghdr_pack
         struct_nlmsghdr_len
+        struct_nlmsghdr_narg
+        struct_nlmsghdr_pack
 
-        struct_prefix_cacheinfo_pack
         struct_prefix_cacheinfo_len
+        struct_prefix_cacheinfo_narg
+        struct_prefix_cacheinfo_pack
 
-        struct_prefixmsg_pack
         struct_prefixmsg_len
+        struct_prefixmsg_narg
+        struct_prefixmsg_pack
 
-        struct_rta_cacheinfo_pack
         struct_rta_cacheinfo_len
+        struct_rta_cacheinfo_narg
+        struct_rta_cacheinfo_pack
 
         struct_rta_mfc_stats_len
+        struct_rta_mfc_stats_narg
         struct_rta_mfc_stats_pack
 
-        struct_rta_session_pack_icmpt
-        struct_rta_session_pack_ports
-        struct_rta_session_pack_spi
         struct_rta_session_len
+        struct_rta_session_narg
+        struct_rta_session_pack
 
-        struct_rtgenmsg_pack
-        struct_rtgenmsg_len
+        struct_rta_session_icmpt_narg
+        struct_rta_session_icmpt_pack
+        struct_rta_session_ports_narg
+        struct_rta_session_ports_pack
+        struct_rta_session_spi_narg
+        struct_rta_session_spi_pack
 
-        struct_rtattr_pack
         struct_rtattr_len
+        struct_rtattr_narg
+        struct_rtattr_pack
 
-        struct_rtmsg_pack
+        struct_rtgenmsg_len
+        struct_rtgenmsg_narg
+        struct_rtgenmsg_pack
+
         struct_rtmsg_len
+        struct_rtmsg_narg
+        struct_rtmsg_pack
 
-        struct_rtnexthop_pack
         struct_rtnexthop_len
+        struct_rtnexthop_narg
+        struct_rtnexthop_pack
 
+        struct_rtvia_len
+        struct_rtvia_narg
         struct_rtvia_pack
 
-        struct_sockaddr_nl_pack
         struct_sockaddr_nl_len
+        struct_sockaddr_nl_narg
+        struct_sockaddr_nl_pack
 
-        struct_tcamsg_pack
         struct_tcamsg_len
+        struct_tcamsg_narg
+        struct_tcamsg_pack
 
-        struct_tcmsg_pack
         struct_tcmsg_len
+        struct_tcmsg_narg
+        struct_tcmsg_pack
     ]],
 
     nduseropt => [qw[
         NDUSEROPT_SRCADDR
         NDUSEROPT_UNSPEC
+        NDUSEROPT_MAX
+        NDUSEROPT_to_label
         NDUSEROPT_to_name
     ]],
 
@@ -1066,6 +1283,7 @@ our %EXPORT_TAGS = (
         NETLINK_SOCK_DIAG
         NETLINK_USERSOCK
         NETLINK_XFRM
+        NETLINK_to_label
         NETLINK_to_name
     ]],
 
@@ -1082,11 +1300,17 @@ our %EXPORT_TAGS = (
         NETLINK_PKTINFO
         NETLINK_RX_RING
         NETLINK_TX_RING
+        NETLINK_OPT_MAX
+        NETLINK_OPT_to_label
+        NETLINK_OPT_to_name
     ]],
 
     netlink_state => [qw[
         NETLINK_UNCONNECTED
         NETLINK_CONNECTED
+        NETLINK_STATE_MAX
+        NETLINK_STATE_to_label
+        NETLINK_STATE_to_name
     ]],
 
     nlm_status => [qw[
@@ -1095,13 +1319,21 @@ our %EXPORT_TAGS = (
         NL_MMAP_STATUS_SKIP
         NL_MMAP_STATUS_UNUSED
         NL_MMAP_STATUS_VALID
+        NL_MMAP_STATUS_MAX
+        NL_MMAP_STATUS_to_label
+        NL_MMAP_STATUS_to_name
     ]],
 
     nlm_types => [qw[
         NLMSG_DONE
         NLMSG_ERROR
+        NLMSG_MAX
+        NLMSG_MIN
+        NLMSG_MIN_TYPE
         NLMSG_NOOP
         NLMSG_OVERRUN
+        NLMSG_to_label
+        NLMSG_to_name
     ]],
 
     nlm_flags => [qw[
@@ -1116,27 +1348,31 @@ our %EXPORT_TAGS = (
         NLM_F_DUMP
         NLM_F_MATCH
         NLM_F_ROOT
+        NLM_F_get_to_desc
 
         NLM_F_APPEND
         NLM_F_CREATE
         NLM_F_EXCL
         NLM_F_REPLACE
+        NLM_F_new_to_desc
 
         NLM_F_NONREC
+        NLM_F_del_to_desc
 
         NLM_F_ACK_TLVS
         NLM_F_CAPPED
+        NLM_F_ack_to_desc
     ]],
 
     rtm => [sort qw[
         RTM_BASE
         RTM_MAX
         RTM_OMASK
-        RTM_OSHIFT
         RTM_TMASK
         RTM_TMAX
         RTM_TMIN
         RTM_TSHIFT
+        RTM_to_label
         RTM_to_name
         RTM_op_to_label
         RTM_op_to_name
@@ -1152,6 +1388,7 @@ our %EXPORT_TAGS = (
         RTM_F_LOOKUP_TABLE
         RTM_F_NOTIFY
         RTM_F_PREFIX
+        RTMF_to_desc
     ]],
 
     rtn => [qw[
@@ -1159,6 +1396,7 @@ our %EXPORT_TAGS = (
         RTN_BLACKHOLE
         RTN_BROADCAST
         RTN_LOCAL
+        RTN_MAX
         RTN_MULTICAST
         RTN_NAT
         RTN_PROHIBIT
@@ -1167,12 +1405,15 @@ our %EXPORT_TAGS = (
         RTN_UNREACHABLE
         RTN_UNSPEC
         RTN_XRESOLVE
+        RTN_to_label
         RTN_to_name
     ]],
 
     rtnl_family => [qw[
-        RTNL_FAMILY_IPMR
         RTNL_FAMILY_IP6MR
+        RTNL_FAMILY_IPMR
+        RTNL_FAMILY_MAX
+        RTNL_FAMILY_to_label
         RTNL_FAMILY_to_name
     ]],
 
@@ -1193,6 +1434,7 @@ our %EXPORT_TAGS = (
         RTPROT_UNSPEC
         RTPROT_XORP
         RTPROT_ZEBRA
+        RTPROT_to_label
         RTPROT_to_name
     ]],
 
@@ -1203,6 +1445,10 @@ our %EXPORT_TAGS = (
         RT_SCOPE_NOWHERE
         RT_SCOPE_SITE
         RT_SCOPE_UNIVERSE
+        RT_SCOPE_max_label
+        RT_SCOPE_min_label
+        RT_SCOPE_to_label
+        RT_SCOPE_to_name
     ]],
 
     rta => [qw[
@@ -1229,6 +1475,9 @@ our %EXPORT_TAGS = (
         RTA_TABLE
         RTA_UNSPEC
         RTA_VIA
+        RTA_MAX
+        RTA_to_label
+        RTA_to_name
     ]],
 
     rtt => [qw[
@@ -1237,6 +1486,10 @@ our %EXPORT_TAGS = (
         RT_TABLE_LOCAL
         RT_TABLE_MAIN
         RT_TABLE_UNSPEC
+        RT_TABLE_max_label
+        RT_TABLE_min_label
+        RT_TABLE_to_label
+        RT_TABLE_to_name
     ]],
 
     rtnh_flags => [qw[
@@ -1267,6 +1520,8 @@ our %EXPORT_TAGS = (
         RTAX_SSTHRESH
         RTAX_UNSPEC
         RTAX_WINDOW
+        RTAX_MAX
+        RTAX_to_label
         RTAX_to_name
     ]],
 
@@ -1290,6 +1545,7 @@ our %EXPORT_TAGS = (
     tca => [qw[
         TCA_FCNT
         TCA_KIND
+        TCA_MAX
         TCA_OPTIONS
         TCA_RATE
         TCA_STAB
@@ -1297,28 +1553,27 @@ our %EXPORT_TAGS = (
         TCA_STATS2
         TCA_UNSPEC
         TCA_XSTATS
+        TCA_to_label
         TCA_to_name
     ]],
 
     rtmgrp => [qw[
         RTMGRP_DECnet_IFADDR
         RTMGRP_DECnet_ROUTE
-
         RTMGRP_IPV4_IFADDR
         RTMGRP_IPV4_MROUTE
         RTMGRP_IPV4_ROUTE
         RTMGRP_IPV4_RULE
-
         RTMGRP_IPV6_IFADDR
         RTMGRP_IPV6_IFINFO
         RTMGRP_IPV6_MROUTE
         RTMGRP_IPV6_PREFIX
         RTMGRP_IPV6_ROUTE
-
         RTMGRP_LINK
         RTMGRP_NEIGH
         RTMGRP_NOTIFY
         RTMGRP_TC
+        RTMGRP_to_desc
     ]],
 
     rtnlgrp => [qw[
@@ -1339,6 +1594,7 @@ our %EXPORT_TAGS = (
         RTNLGRP_IPV6_ROUTE
         RTNLGRP_IPV6_RULE
         RTNLGRP_LINK
+        RTNLGRP_MAX
         RTNLGRP_MDB
         RTNLGRP_MPLS_ROUTE
         RTNLGRP_ND_USEROPT
@@ -1351,11 +1607,16 @@ our %EXPORT_TAGS = (
         RTNLGRP_PHONET_IFADDR
         RTNLGRP_PHONET_ROUTE
         RTNLGRP_TC
+        RTNLGRP_to_label
+        RTNLGRP_to_name
     ]],
 
-#   tca_act => [qw[
-#       TCA_ACT_TAB
-#   ]],
+    tca_act => [qw[
+        TCA_ACT_TAB
+        TCA_ACT_MAX
+        TCA_ACT_to_label
+        TCA_ACT_to_name
+    ]],
 
     rtext => [qw[
         RTEXT_FILTER_BRVLAN
@@ -1370,7 +1631,6 @@ our %EXPORT_TAGS = (
 my @export_allowed = qw(
     NET_MAJOR
     RTNETLINK_HAVE_PEERINFO
-    TCA_ACT_TAB
 );
 
 {
