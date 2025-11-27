@@ -67,6 +67,7 @@ package Linux::Syscalls::enum v0.1.0;
 
 use Carp qw{ croak confess };
 use List::Util qw( reduce );
+use POSIX qw( frexp );
 use Scalar::Util qw( looks_like_number );
 
 sub import {
@@ -75,22 +76,24 @@ sub import {
 
     my $c = caller;
 
+    my $nfmt;
+    my %opt = (
+        min    => 1,    MIN    => 0,
+        max    => 1,    MAX    => 0,
+                       'MAX+1' => 0,
+        next   => 1,
+    );
+
+    for (;$labels[0] && $labels[0] =~ /^:/; shift @labels) {
+        if (exists $opt{$'}) { ++$opt{$'}; next }
+        if ($labels[0] =~ /^:no:/i && exists $opt{$'}) { $opt{$'} = 0; next }
+        if ($labels[0] =~ /^:nfmt=(.*)/ ) { $nfmt  = $1; next }
+        croak "bad option $labels[0]\n\t";
+    }
+
     my $offset = 0;
     if (looks_like_number $labels[0]) {
         $offset = shift @labels;
-    }
-
-    my %with = (
-        min => 0,
-        MIN => 0,
-        max => 0,
-        MAX => 0,
-        'MAX+1' => 0,
-    );
-    for (;$labels[0] && $labels[0] =~ /^:/; shift @labels) {
-        if (exists $with{$'}) { ++$with{$'}; next }
-        if ($labels[0] =~ /^no/i && exists $with{$'}) { $with{$'} = 0; next }
-        croak "bad option $labels[0]\n\t";
     }
 
     # Zap any '-' labels
@@ -108,37 +111,48 @@ sub import {
 
     my $lprefix = lc $prefix;
 
-    printf STDERR "Importing enum into %s\n", $c;
+    $nfmt //= sprintf '%s#0x%%.%ux', $lprefix, 4 + frexp $max >> 2;
+    #            like "fubar#0x%.3x"
 
+#   printf STDERR "Importing enum into %s\n", $c if $^C;
+
+    my %Alias;
     my %Con;
+    my %Sub;
+
     for my $i (@indeces) {
-        $Con{ $prefix.'_'.$labels[$i] } = $i + $offset;
-    }
-    $Con{ $prefix.'_min' } = $min if $with{min};
-    $Con{ $prefix.'_max' } = $max if $with{max};
-    $Con{ $prefix.'_MIN' } = $min if $with{MIN};
-    $Con{ $prefix.'_MAX' } = $max if $with{MAX};
-    $Con{ $prefix.'_MAX' } = $max+1 if $with{'MAX+1'};
-
-    my $export_tags = eval qq{ \\  %${c}::EXPORT_TAGS };
-    my $export_ok   = eval qq{ \\ \@${c}::EXPORT_OK };
-
-    for my $k ( keys %Con ) {
-        my $v = $Con{$k};
-        eval qq{ package $c { use constant $k => $v } 1 }
-            or confess $@ || "failed to define constant ${c}::$k => $v\n\t";
-        push @{ $export_tags->{$lprefix} }, $k;
+        $Con{ $labels[$i] } = [ $i + $offset ];
     }
 
     # Make all the labels lowercase
     $_ = lc $_ for @labels[@indeces];
 
-    my %Sub = (
-        to_label=> [ '(\$)', qq{ my \$i = \$_[-1] - $offset; return \$i >= 0 ? \$labels[\$i] : ();  }, 'labels' ],
-        to_desc => [ '(\$)', qq{ return &${prefix}_to_label // "$lprefix#\${_[0]}"; },                 'descriptions' ],
-        range   => [ '()',   qq{ return \$min .. \$max; },                                             'limits' ],          # include gaps
-        indeces => [ '()',   qq{ return \@indeces; },                                                  'limits' ],          # exclude gaps
-    );
+    $Con{MIN}   = [ $min,   'limits' ] if $opt{MIN};
+    $Con{min}   = [ $min,   'limits' ] if $opt{min};
+    $Con{MAX}   = [ $max,   'limits' ] if $opt{MAX};
+    $Con{MAX}   = [ $max+1, 'limits' ] if $opt{'MAX+1'};
+    $Con{max}   = [ $max,   'limits' ] if $opt{max};
+    $Con{next}  = [ $max+1, 'limits' ] if $opt{next};
+
+    my $export_tags = eval qq{ \\  %${c}::EXPORT_TAGS };
+    my $export_ok   = eval qq{ \\ \@${c}::EXPORT_OK };
+
+    $Sub{indeces}  = [ '()',   qq{ return \@indeces; },      'limits' ];    # exclude gaps
+    $Sub{range}    = [ '()',   qq{ return \$min .. \$max; }, 'limits' ];    # include gaps
+    $Sub{to_desc}  = [ '($)', qq{
+                return &${prefix}_to_label // sprintf \$nfmt, \$_[0];
+            }, 'descriptions' ];
+    $Sub{to_label} = [ '($)', qq{ my \$i = \$_[-1] - $offset; return \$i >= 0 ? \$labels[\$i] : ();  }, 'labels' ];
+    $Alias{to_name} = 'to_desc' if ! $^W; # backwards compat unless hard checking
+
+
+    for my $k ( keys %Con ) {
+        my ($v, @tags) = @{ $Con{$k} };
+        my $name = $prefix.'_'.$k;
+        eval qq{ package $c { use constant $name => $v } 1 }
+            or confess $@ || "failed to define constant ${c}::$k => $v\n\t";
+        push @{ $export_tags->{$_} }, $name for $lprefix, @tags;
+    }
 
     for my $k (keys %Sub) {
         my ($name, $proto, $body, @tags) = ( $prefix.'_'.$k, @{ $Sub{$k} } );
@@ -148,14 +162,12 @@ sub import {
         push @{ $export_tags->{$_} }, $name for $lprefix, @tags;
     }
 
-    my %Alias;
-    $Alias{to_name} = 'to_desc' if ! $^W; # backwards compat unless hard checking
-
     for my $to (keys %Alias) {
-        my $from = $Alias{$to};
-        eval qq{ package $c { *$to = \\&$from } 1 }
-            or confess $@ || "failed to define alias ${c}::$to for ${c}::$from\n\t";
-        push @$export_ok, $to;
+        my $from = $prefix.'_'.$Alias{$to};
+        my $name = $prefix.'_'.$to;
+        eval qq{ package $c { *$name = \\&$from } 1 }
+            or confess $@ || "failed to define alias ${c}::$name for ${c}::$from\n\t";
+        push @$export_ok, $name;
     }
 
     return;

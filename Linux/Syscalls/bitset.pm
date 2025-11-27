@@ -31,7 +31,7 @@ use feature 'state';
 #       };
 #       sub OPTIMISE_to_desc {
 #           state $names = [qw( - quick cheap prompt - bugfree )];
-#           return _bits_to_desc( $_[0], $names, $_[1] //() );
+#           return Linux::Syscalls::bitset::_bits_to_desc( $names, @_ );
 #       }
 #       push @{$EXPORT_TAGS{speed}}, qw{
 #           OPTIMISE_shift
@@ -62,7 +62,7 @@ use parent 'Exporter';
 use List::Util qw( reduce );
 use Scalar::Util qw( looks_like_number );
 
-sub _bits_to_desc :prototype($\@;$);
+sub _bits_to_desc :prototype(\@$;$$$);
 
 push our @EXPORT_OK, qw( _bits_to_desc  );
 
@@ -74,6 +74,29 @@ sub import {
 
     if ($prefix eq ':import') {
         return $class->export_to_level(1, $c, @labels);
+    }
+
+    my $sep = '+';
+    my $empty;
+    my $nfmt;
+    my %opt = (
+        min    => 1,    MIN    => 0,
+        max    => 1,    MAX    => 0,
+                       'MAX+1' => 0,
+        next   => 1,
+
+        all    => 1,    ALL    => 0,
+        none   => 1,    NONE   => 0,
+        shift  => 1,
+    );
+
+    for (;$labels[0] && $labels[0] =~ /^:/; shift @labels) {
+        if (exists $opt{$'}) { ++$opt{$'}; next }
+        if ($labels[0] =~ /^:no:/i && exists $opt{$'}) { $opt{$'} = 0; next }
+        if ($labels[0] =~ /^:sep=(.*)/  ) { $sep   = $1; next }
+        if ($labels[0] =~ /^:empty=(.*)/) { $empty = $1; next }
+        if ($labels[0] =~ /^:nfmt=(.*)/ ) { $nfmt  = $1; next }
+        croak "bad option $labels[0]\n\t";
     }
 
     my $offset = 0;
@@ -98,66 +121,76 @@ sub import {
 
     my $lprefix = lc $prefix;
 
-    printf STDERR "Importing bitset into %s\n", $c;
+    $nfmt //= sprintf '0x%%.%ux', $max + 4 >> 2;
+    #            like "0x%.3x"
+    $empty //= $opt{none} || $opt{NONE} ? 'none' : '0';
+
+#   printf STDERR "Importing bitset into %s\n", $c if $^C;
+
+    my %Alias;
+    my %Con;
+    my %Sub;
 
     for my $i (@indeces) {
-        my $n = $labels[$i] // next;
-        my $j = 1 << $i + $offset;
-        my $fn = $prefix.'_'.$n;
-        eval qq{
-            package $c { use constant $fn => $j }
-            push \@{\$${c}::EXPORT_TAGS{$lprefix}}, qw{ $fn };
-            1
-        } or confess $@ || "failed to define constant ${c}::$fn => $j\n\t";
+        $Con{ $labels[$i] } = [ 1 << $i + $offset ];
     }
 
-    eval qq{
-        package $c { use constant ${prefix}_NONE => 0 }
-        push \@{\$${c}::EXPORT_TAGS{$lprefix}}, qw{ ${prefix}_NONE };
-        push \@{\$${c}::EXPORT_TAGS{limits}},   qw{ ${prefix}_NONE };
-        1
-    } or confess $@ || "failed to define constant ${c}::${prefix}_NONE = 0\n\t";
+    # Make all the labels lowercase
+    $_ = lc $_ for @labels[@indeces];
 
-    my $all_bits = reduce { $a | $b } map { 1 << $_+$offset } keys @labels;
-    eval qq{
-        package $c { use constant ${prefix}_ALL => $all_bits; }
-        push \@{\$${c}::EXPORT_TAGS{$lprefix}}, qw{ ${prefix}_ALL };
-        push \@{\$${c}::EXPORT_TAGS{limits}},   qw{ ${prefix}_ALL };
-        1
-    } or confess $@ || "failed to define constant ${c}::${prefix}_ALL} => $all_bits\n\t";
+    my $all = reduce { $a | $b } map { 1 << $_+$offset } @indeces if $opt{all}
+                                                                  || $opt{ALL};
 
-    # Use 'goto &func' so that errors will report correct caller
-    defined and $_ = lc $_ for @labels;
-    eval qq{
-        package $c {
-            sub ${prefix}_to_desc :prototype(\$;\$) {
-                \@_ = (\$_[0], \@labels, \$_[1] // ());
-                goto &_bits_to_desc;
-            }
-        }
-        push \@{\$${c}::EXPORT_TAGS{$lprefix}},     qw{ ${prefix}_to_desc };
-        push \@{\$${c}::EXPORT_TAGS{descriptions}}, qw{ ${prefix}_to_desc };
-        1
-    } or confess $@ || "failed to define sub ${c}::${prefix}_to_desc\n\t";
+    $Con{ALL}   = [ $all,    'limits' ] if $opt{ALL};
+    $Con{all}   = [ $all,    'limits' ] if $opt{all};
+    $Con{NONE}  = [ 0,       'limits' ] if $opt{NONE};
+    $Con{none}  = [ 0,       'limits' ] if $opt{none};
+    $Con{shift} = [ $offset, 'limits' ] if $opt{shift} >= ($offset == 0);
 
-    if ($offset != 0) {
-        eval qq{
-            package $c { use constant ${prefix}_shift => $offset }
-            push \@{\$${c}::EXPORT_TAGS{$lprefix}}, qw{ ${prefix}_shift };
-            1
-        } or confess "failed to define constant ${c}::${prefix}_shift = $offset\n\t";
+    $Con{MIN}   = [ $min,   'limits' ] if $opt{MIN};
+    $Con{min}   = [ $min,   'limits' ] if $opt{min};
+    $Con{MAX}   = [ $max,   'limits' ] if $opt{MAX};
+    $Con{MAX}   = [ $max+1, 'limits' ] if $opt{'MAX+1'};
+    $Con{max}   = [ $max,   'limits' ] if $opt{max};
+    $Con{next}  = [ $max+1, 'limits' ] if $opt{next};
+
+    my $export_tags = eval qq{ \\  %${c}::EXPORT_TAGS };
+    my $export_ok   = eval qq{ \\ \@${c}::EXPORT_OK };
+
+    $Sub{indeces}  = [ '()',   qq{ return \@indeces; },      'limits' ];    # exclude gaps
+    $Sub{range}    = [ '()',   qq{ return \$min .. \$max; }, 'limits' ];    # include gaps
+    $Sub{to_desc}  = [ '($)', qq{
+                \@_ = (\\ \@labels, \$_[0], \$sep, \$empty, \$nfmt);
+                # Use 'goto &FUNC' so that 'croak' will report correct caller
+                goto &Linux::Syscalls::bitset::_bits_to_desc;
+            }, 'descriptions' ];
+
+    for my $k ( keys %Con ) {
+        my ($v, @tags) = @{ $Con{$k} };
+        my $name = $prefix.'_'.$k;
+        eval qq{ package $c { use constant $name => $v } 1 }
+            or confess $@ || "failed to define constant ${c}::$k => $v\n\t";
+        push @{ $export_tags->{$_} }, $name for $lprefix, @tags;
     }
 
-    eval qq{
-        package $c {
-            sub ${prefix}_indeces :prototype() { return \@indeces; };           # exclude gaps
-            sub ${prefix}_range   :prototype() { return \$min .. \$max; };      # include gaps
-        }
-        1
-    } or confess $@ || "failed to define sub ${prefix}_indeces and/or ${prefix}_range\n\t";
+    for my $k (keys %Sub) {
+        my ($name, $proto, $body, @tags) = ( $prefix.'_'.$k, @{ $Sub{$k} } );
+        $proto = ' :prototype'.$proto if $proto;
+        eval qq{ package $c { sub $name $proto { $body } } 1 }
+            or confess $@ || "failed to define sub ${c}::$name\n\t";
+        push @{ $export_tags->{$_} }, $name for $lprefix, @tags;
+    }
 
-    return;
+    for my $to (keys %Alias) {
+        my $from = $prefix.'_'.$Alias{$to};
+        my $name = $prefix.'_'.$to;
+        eval qq{ package $c { *$name = \\&$from } 1 }
+            or confess $@ || "failed to define alias ${c}::$name for ${c}::$from\n\t";
+        push @$export_ok, $name;
+    }
 }
+
+################################################################################
 
 # _bits_to_desc should only be used by custom SOMETYPE_to_desc functions, each
 # of which should supply the list of names describing the bits in a SOMETYPE
@@ -183,13 +216,11 @@ sub import {
 #   }
 #
 
-sub _bits_to_desc :prototype($\@;$) {
-    my ($flags, $names, $sep) = @_;
-    $flags or return 'none';
-    my $max_bit = 0;
+sub _bits_to_desc :prototype(\@$;$$$) {
+    my ($names, $flags, $sep, $empty, $nfmt) = @_;
+    $flags or return $empty if $empty ne '';
     my @knowns;
     if ($names && @$names) {
-        $max_bit = $#$names;
         push @knowns,
             map {
                     my $n = $names->[$_];
@@ -197,10 +228,10 @@ sub _bits_to_desc :prototype($\@;$) {
                     $n && 0+$flags != ($flags &=~ $bb)
                         ? $n
                         : ()
-                } 0 .. $max_bit;
+                } 0 .. $#$names;
     }
-    push @knowns, sprintf '%#.*x', ($max_bit>>2)+1, $flags
-        if $flags;
+    push @knowns, sprintf $nfmt // '%#x', $flags
+        if $flags || !@knowns;
     return join $sep // '+', @knowns;
 }
 
