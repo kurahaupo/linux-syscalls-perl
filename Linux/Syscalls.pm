@@ -93,7 +93,7 @@ use feature 'state';
 
 package Linux::Syscalls v0.8.0;
 
-use base 'Exporter';
+use Exporter 'import';
 
 use Config;
 # Avoid «use Errno qw( E... );» as it results in dup import warnings with perl -Wc
