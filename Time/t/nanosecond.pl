@@ -28,6 +28,6 @@ for my $t (
 
 }
 
-exit $num_errors == 0 ? 0 : 1;
+exit !!$num_errors;
 
 __END__

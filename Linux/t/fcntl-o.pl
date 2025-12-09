@@ -92,6 +92,6 @@ for my $t (@list) {
     printf "\e[31;1mBAD\e[39;22m  %28s = %s BUT %-19s = %s\n", $lf, $lv, $ff, $fv, ;
 }
 
-exit $num_errors == 0 ? 0 : 1;
+exit !!$num_errors;
 
 __END__
