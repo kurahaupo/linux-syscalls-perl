@@ -629,7 +629,7 @@ package Time::Nanosecond::base {
 
 }
 
-package Time::Nanosecond v0.2.0 {
+package Time::Nanosecond v0.2.1 {
 
     use Scalar::Util qw( blessed );
 
