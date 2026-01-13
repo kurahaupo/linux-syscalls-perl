@@ -93,7 +93,7 @@ use feature 'state';
 
 package Linux::Syscalls v0.8.1;
 
-use base 'Exporter';
+use Exporter 'import';
 
 use Config;
 # Avoid «use Errno qw( E... );» as it results in dup import warnings with perl -Wc
@@ -1756,6 +1756,8 @@ use constant {
 #
 # _bits_to_desc should only be used by custom SOMETYPE_to_desc functions, which
 # should each supply the list of names describing the bits in a SOMETYPE value.
+#
+# (This is also used by Linux::IpRoute2)
 #
 sub _bits_to_desc($\@;$) {
     my ($flags, $names, $sep) = @_;

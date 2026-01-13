@@ -294,18 +294,19 @@ SCOPE  inline void EndStruct(TK *tr) {
         sxprintf(tr->packfmt, "%s", pfmt);
     }
     printf("%6zu }\n", tr->struct_size);
-    printf("BEGIN PERL:\n"
+    printf("\n"
+           "# BEGIN PERL:\n\n"
            "my $buf = '\x55' x %u;  # %s\n"
            "# ... syscall NR_xxx, ... \\$buf ...\n"
            "my (%s) = unpack\n"
            "            '%s',\n"
            "            $buf;\n"
            "%s\n",
-            (size_t) tr->struct_size,
-            tr->struct_name,
-            sxpeek(tr->fieldnames),
-            sxpeek(tr->packfmt),
-            sxpeek(tr->extra_perl));
+           tr->struct_size,
+           tr->struct_name,
+           sxpeek(tr->fieldnames),
+           sxpeek(tr->packfmt),
+           sxpeek(tr->extra_perl));
     char const * env = Pbuildenv("\n#   ");
     if (env) {
         printf("# Build Env:%s\n", env);
@@ -348,7 +349,6 @@ SCOPE  inline void EndStruct(TK *tr) {
 # define Fptr(X,E)      Field(Fcommon(X), 0, FM_pointer, #X, E)
 
 /* If all else fails */
-# define Fdefault(X,E)  Fblob2(X,E)
 # define Fblob2(X,E)    Field(Fcommon(X), 1, FM_blob, #X, E)
 # define Fblob(X)       Fblob2(X, "")
 

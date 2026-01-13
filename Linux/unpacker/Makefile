@@ -4,6 +4,9 @@ CFLAGS += -I../../../iproute2/include/uapi -I../../../../iproute2/include/uapi -
 
 all::	linux-exit-status-test-c
 all::	show_dirent_struct
+all::	show_if_link
+all::	show_ifinfomsg_struct
+all::	show_msghdr_struct
 all::	show_stat_struct
 all::	show_statvfs_struct
 all::	show_timex_struct
@@ -26,6 +29,21 @@ show_blkdiscard:        show_blkdiscard.o
 
 show_dirent_struct:     show_dirent_struct.o
 	$(CC) $(CFLAGS) show_dirent_struct.o $(LDFLAGS) -o $@
+
+show_if_link:           show_if_link.o die.o
+	$(CC) $(CFLAGS) show_if_link.o die.o $(LDFLAGS) -o $@
+
+show_ifinfomsg_struct:  show_ifinfomsg_struct.o die.o
+	$(CC) $(CFLAGS) show_ifinfomsg_struct.o die.o $(LDFLAGS) -o $@
+
+show_ip:  show_ip.o die.o
+	$(CC) $(CFLAGS) show_ip.o die.o $(LDFLAGS) -o $@
+
+show_ipv6:  show_ipv6.o die.o
+	$(CC) $(CFLAGS) show_ipv6.o die.o $(LDFLAGS) -o $@
+
+show_msghdr_struct:     show_msghdr_struct.o show_struct.o sxbuf.o die.o
+	$(CC) $(CFLAGS) show_msghdr_struct.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
 
 show_oldkstat_struct:   show_oldkstat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o
 	$(CC) $(CFLAGS) show_oldkstat_struct.o getlink.o log2ceil.o show_struct.o sxbuf.o die.o $(LDFLAGS) -o $@
@@ -55,6 +73,31 @@ log2ceil.o: log2ceil.c
 log2ceil.o: log2ceil.h
 show_blkdiscard.o: show_blkdiscard.c
 show_dirent_struct.o: show_dirent_struct.c
+show_if_link.o: die.h
+show_if_link.o: log2ceil.h
+show_if_link.o: show_if_link.c
+show_if_link.o: show_struct.h
+show_if_link.o: sxbuf.h
+show_ifinfomsg_struct.o: die.h
+show_ifinfomsg_struct.o: log2ceil.h
+show_ifinfomsg_struct.o: show_ifinfomsg_struct.c
+show_ifinfomsg_struct.o: show_struct.h
+show_ifinfomsg_struct.o: sxbuf.h
+show_ip.o: die.h
+show_ip.o: log2ceil.h
+show_ip.o: show_ip.c
+show_ip.o: show_struct.h
+show_ip.o: sxbuf.h
+show_ipv6.o: die.h
+show_ipv6.o: log2ceil.h
+show_ipv6.o: show_ipv6.c
+show_ipv6.o: show_struct.h
+show_ipv6.o: sxbuf.h
+show_msghdr_struct.o: die.h
+show_msghdr_struct.o: log2ceil.h
+show_msghdr_struct.o: show_msghdr_struct.c
+show_msghdr_struct.o: show_struct.h
+show_msghdr_struct.o: sxbuf.h
 show_oldkstat_struct.o: die.h
 show_oldkstat_struct.o: getlink.h
 show_oldkstat_struct.o: log2ceil.h
